@@ -1,0 +1,99 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable Corepack and install pnpm
+        run: corepack enable && corepack prepare --activate
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify version consistency
+        run: ./scripts/check-versions.sh
+
+      - name: Build all packages
+        run: pnpm -r run build
+
+      - name: Run tests
+        run: pnpm -r run test
+
+      - name: Publish packages
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          for dir in packages/agent/*/; do
+            dir="${dir%/}"
+            [ -f "$dir/package.json" ] || continue
+            PRIVATE=$(node -p "require('./$dir/package.json').private || false")
+            [ "$PRIVATE" = "true" ] && continue
+            NAME=$(node -p "require('./$dir/package.json').name")
+            if npm view "${NAME}@${VERSION}" version &>/dev/null; then
+              echo "Skipping $NAME@$VERSION (already published)"
+              continue
+            fi
+            echo "Publishing $NAME@$VERSION..."
+            cd "$dir"
+            pnpm publish --access public
+            cd "$GITHUB_WORKSPACE"
+          done
+
+      - name: Create git tags
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          VERSION=$(node -p "require('./package.json').version")
+
+          # Main release tag
+          if git tag -l "v${VERSION}" | grep -q "v${VERSION}"; then
+            echo "Tag v${VERSION} already exists, skipping"
+          else
+            git tag -a "v${VERSION}" -m "Release v${VERSION}"
+          fi
+
+          # Per-package tags
+          for dir in packages/agent/*/; do
+            dir="${dir%/}"
+            [ -f "$dir/package.json" ] || continue
+            PRIVATE=$(node -p "require('./$dir/package.json').private || false")
+            [ "$PRIVATE" = "true" ] && continue
+            NAME=$(node -p "require('./$dir/package.json').name")
+            TAG="${NAME}@${VERSION}"
+            if git tag -l "$TAG" | grep -q "$TAG"; then
+              echo "Tag $TAG already exists, skipping"
+            else
+              git tag -a "$TAG" -m "Release $TAG"
+            fi
+          done
+
+          git push --tags
+
+          echo "RELEASE_VERSION=${VERSION}" >> "$GITHUB_ENV"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "v${RELEASE_VERSION}" &>/dev/null; then
+            echo "Release v${RELEASE_VERSION} already exists, skipping"
+          else
+            gh release create "v${RELEASE_VERSION}" \
+              --title "v${RELEASE_VERSION}" \
+              --generate-notes
+          fi

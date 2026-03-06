@@ -1,0 +1,18 @@
+{
+  "name": "rill-demo-feedback-analyzer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "rill-agent-bundle build agent.json",
+    "check": "rill-agent-bundle check --platform node dist/",
+    "start": "rill-agent-run dist/ feedback-analyzer --config config.json --log-level info --param feedback='The onboarding was confusing'"
+  },
+  "dependencies": {
+    "@rcrsr/rill": "^0.8.6",
+    "@rcrsr/rill-agent-harness": "workspace:^",
+    "@rcrsr/rill-ext-openai": "^0.8.6",
+    "@rcrsr/rill-agent-bundle": "workspace:^",
+    "@rcrsr/rill-agent-run": "workspace:^"
+  }
+}
