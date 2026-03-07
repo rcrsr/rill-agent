@@ -36,12 +36,12 @@ Agent framework for [rill](https://github.com/rcrsr/rill). Production HTTP serve
 npx @rcrsr/rill-agent-bundle init my-agent --extensions anthropic
 cd my-agent
 pnpm install
-pnpm start
+pnpm run build
 ```
 
 ## Versioning
 
-All 8 agent packages share a synchronized version. Every release bumps all packages to the same version number.
+All agent packages share a synchronized version. Every release bumps all packages to the same version number.
 
 ## Development
 

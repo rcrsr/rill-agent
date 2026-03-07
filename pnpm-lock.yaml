@@ -44,25 +44,25 @@ importers:
 
   demo/content-pipeline:
     dependencies:
-      '@rcrsr/rill-agent-bundle':
-        specifier: workspace:^
-        version: link:../../packages/agent/bundle
       '@rcrsr/rill-agent-ext-ahi':
         specifier: workspace:^
         version: link:../../packages/agent/ahi
       '@rcrsr/rill-agent-harness':
         specifier: workspace:^
         version: link:../../packages/agent/harness
-      '@rcrsr/rill-agent-run':
-        specifier: workspace:^
-        version: link:../../packages/agent/run
       '@rcrsr/rill-agent-shared':
         specifier: workspace:^
         version: link:../../packages/agent/shared
       '@rcrsr/rill-ext-openai':
-        specifier: ^0.8.6
-        version: 0.8.6(@rcrsr/rill@0.9.0)(zod@4.3.6)
+        specifier: ^0.9.0
+        version: 0.9.0(@rcrsr/rill@0.9.0)(zod@4.3.6)
     devDependencies:
+      '@rcrsr/rill-agent-bundle':
+        specifier: workspace:^
+        version: link:../../packages/agent/bundle
+      '@rcrsr/rill-agent-run':
+        specifier: workspace:^
+        version: link:../../packages/agent/run
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
@@ -70,14 +70,15 @@ importers:
   demo/data-cruncher:
     dependencies:
       '@rcrsr/rill':
-        specifier: ^0.8.6
-        version: 0.8.6
-      '@rcrsr/rill-agent-bundle':
-        specifier: workspace:^
-        version: link:../../packages/agent/bundle
+        specifier: ^0.9.0
+        version: 0.9.0
       '@rcrsr/rill-agent-harness':
         specifier: workspace:^
         version: link:../../packages/agent/harness
+    devDependencies:
+      '@rcrsr/rill-agent-bundle':
+        specifier: workspace:^
+        version: link:../../packages/agent/bundle
       '@rcrsr/rill-agent-run':
         specifier: workspace:^
         version: link:../../packages/agent/run
@@ -85,38 +86,40 @@ importers:
   demo/feedback-analyzer:
     dependencies:
       '@rcrsr/rill':
-        specifier: ^0.8.6
-        version: 0.8.6
-      '@rcrsr/rill-agent-bundle':
-        specifier: workspace:^
-        version: link:../../packages/agent/bundle
+        specifier: ^0.9.0
+        version: 0.9.0
       '@rcrsr/rill-agent-harness':
         specifier: workspace:^
         version: link:../../packages/agent/harness
+      '@rcrsr/rill-ext-openai':
+        specifier: ^0.9.0
+        version: 0.9.0(@rcrsr/rill@0.9.0)(zod@4.3.6)
+    devDependencies:
+      '@rcrsr/rill-agent-bundle':
+        specifier: workspace:^
+        version: link:../../packages/agent/bundle
       '@rcrsr/rill-agent-run':
         specifier: workspace:^
         version: link:../../packages/agent/run
-      '@rcrsr/rill-ext-openai':
-        specifier: ^0.8.6
-        version: 0.8.6(@rcrsr/rill@0.8.6)(zod@4.3.6)
 
   demo/tool-calling:
     dependencies:
       '@rcrsr/rill':
-        specifier: ^0.8.6
-        version: 0.8.6
-      '@rcrsr/rill-agent-bundle':
-        specifier: workspace:^
-        version: link:../../packages/agent/bundle
+        specifier: ^0.9.0
+        version: 0.9.0
       '@rcrsr/rill-agent-harness':
         specifier: workspace:^
         version: link:../../packages/agent/harness
+      '@rcrsr/rill-ext-openai':
+        specifier: ^0.9.0
+        version: 0.9.0(@rcrsr/rill@0.9.0)(zod@4.3.6)
+    devDependencies:
+      '@rcrsr/rill-agent-bundle':
+        specifier: workspace:^
+        version: link:../../packages/agent/bundle
       '@rcrsr/rill-agent-run':
         specifier: workspace:^
         version: link:../../packages/agent/run
-      '@rcrsr/rill-ext-openai':
-        specifier: ^0.8.6
-        version: 0.8.6(@rcrsr/rill@0.8.6)(zod@4.3.6)
 
   packages/agent/ahi:
     dependencies:
@@ -462,13 +465,10 @@ packages:
     resolution: {integrity: sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg==}
     engines: {node: '>=8.0.0'}
 
-  '@rcrsr/rill-ext-openai@0.8.6':
-    resolution: {integrity: sha512-UmKfz46RmaqOcSSdobYiiQrvWucfcH17XNzTBerPR5mOWlXDiMiI2L57+9LYwtc20E02Y1757L0nVQvYkJ01+g==}
+  '@rcrsr/rill-ext-openai@0.9.0':
+    resolution: {integrity: sha512-X0hrMdHWYzAgaphlHAcA5uvc8V+9Ged2YX5JTT6guIrMFT574QQ9ABx+WNqNWIAP884PiaE5PFwB9bG6JvE3KA==}
     peerDependencies:
-      '@rcrsr/rill': ^0.8.6
-
-  '@rcrsr/rill@0.8.6':
-    resolution: {integrity: sha512-W5ArTKxxCVgZPKAsJTZQxpAiPuX2HA3uodhafOmEZt7W+ixlgph3roMvh2l63d0rxyrM2iYJFuQL3odnWMlfcA==}
+      '@rcrsr/rill': ^0.9.0
 
   '@rcrsr/rill@0.9.0':
     resolution: {integrity: sha512-PMwvTKZQkgrQUnoV7SGhtRacVGrOyqpi2wLzHRBP0fLvxQibdrCSkiwTwt+nYyr/WlW/a7W5ePvV/uDAaN2Adg==}
@@ -1321,23 +1321,13 @@ snapshots:
 
   '@opentelemetry/api@1.9.0': {}
 
-  '@rcrsr/rill-ext-openai@0.8.6(@rcrsr/rill@0.8.6)(zod@4.3.6)':
-    dependencies:
-      '@rcrsr/rill': 0.8.6
-      openai: 6.27.0(zod@4.3.6)
-    transitivePeerDependencies:
-      - ws
-      - zod
-
-  '@rcrsr/rill-ext-openai@0.8.6(@rcrsr/rill@0.9.0)(zod@4.3.6)':
+  '@rcrsr/rill-ext-openai@0.9.0(@rcrsr/rill@0.9.0)(zod@4.3.6)':
     dependencies:
       '@rcrsr/rill': 0.9.0
       openai: 6.27.0(zod@4.3.6)
     transitivePeerDependencies:
       - ws
       - zod
-
-  '@rcrsr/rill@0.8.6': {}
 
   '@rcrsr/rill@0.9.0': {}
 

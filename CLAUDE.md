@@ -102,7 +102,7 @@ The proxy process-manages multiple agent bundles, routes requests via catalog lo
 
 All packages share an identical version number and use semver with two rules:
 
-1. **Minor version compatibility**: the dependency on `@rcrsr/rill` matches by minor version (e.g., `rill@0.9.x` works with any agent package at `0.9.y`). A rill minor bump requires a corresponding agent minor bump.
+1. **Minor version compatibility**: `@rcrsr/rill` and `@rcrsr/rill-ext-*` dependencies match by minor version. When rill bumps to `0.10.0`, agent packages bump to `0.10.0` and update rill and rill-ext deps to `^0.10.0`. Demo apps follow the same rule.
 2. **Patch version per change**: bump the patch version for each publish, regardless of change size.
 
 ```bash
