@@ -27,6 +27,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify version consistency
+        run: ./scripts/check-versions.sh
+
       - name: Build all packages
         run: pnpm -r run build
 
