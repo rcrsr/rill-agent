@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -57,6 +57,7 @@ function makeManifest(name: string): Record<string, unknown> {
 const tmpDirs: string[] = [];
 
 async function makeTmpDir(base: string): Promise<string> {
+  await mkdir(base, { recursive: true });
   const dir = await mkdtemp(path.join(base, 'run-test-'));
   tmpDirs.push(dir);
   return dir;

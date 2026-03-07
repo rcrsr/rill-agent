@@ -1,6 +1,6 @@
 {
   "name": "@rcrsr/rill-agent-bundle",
-  "version": "0.8.6",
+  "version": "0.9.0",
   "type": "module",
   "bin": {
     "rill-agent-bundle": "./dist/cli.js"
@@ -19,7 +19,7 @@
     "check": "pnpm run build && pnpm run test && pnpm run lint"
   },
   "dependencies": {
-    "@rcrsr/rill": "^0.8.6",
+    "@rcrsr/rill": "^0.9.0",
     "@rcrsr/rill-agent-harness": "workspace:^",
     "@rcrsr/rill-agent-shared": "workspace:^",
     "esbuild": "^0.27.3"

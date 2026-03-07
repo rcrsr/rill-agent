@@ -1,16 +1,8 @@
-# rill Agent Proxy
+# Agent Proxy
 
 *Multi-agent routing proxy that spawns agent bundles as child processes*
 
-## Overview
-
 `@rcrsr/rill-agent-proxy` routes HTTP requests to rill agent bundles by spawning each agent as a child process per request. It enforces concurrency limits, mediates agent-to-agent (AHI) calls, and exposes Prometheus metrics. For running a single agent with an in-process HTTP server, see [Agent Harness](agent-harness.md).
-
-## Installation
-
-```bash
-npm install @rcrsr/rill-agent-proxy
-```
 
 ## Quick Start
 
@@ -404,10 +396,8 @@ export class ProxyError extends Error {
 
 ## See Also
 
-| Document | Description |
-|----------|-------------|
-| [Agent Harness](agent-harness.md) | In-process HTTP server for single or multi-agent deployments |
-| [Bundle CLI](agent-bundle.md) | Build agent bundles from manifests for use with the proxy |
-| [Run CLI](agent-run.md) | Execute a single bundled agent from the command line |
-| [Shared Types](agent-shared.md) | RunRequest, RunResponse, and AgentCard type definitions |
-| [Developing Extensions](integration-extensions.md) | Write extensions including the AHI extension for agent-to-agent calls |
+- [Agent Harness](agent-harness.md) — In-process HTTP server for single or multi-agent deployments
+- [Agent Bundle](agent-bundle.md) — Build agent bundles from manifests for use with the proxy
+- [Agent Run](agent-run.md) — Execute a single bundled agent from the command line
+- [Agent Shared](agent-shared.md) — RunRequest, RunResponse, and AgentCard type definitions
+- [Developing Extensions](integration-extensions.md) — Write extensions including the AHI extension for agent-to-agent calls

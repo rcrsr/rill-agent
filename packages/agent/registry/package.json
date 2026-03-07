@@ -1,6 +1,6 @@
 {
   "name": "@rcrsr/rill-agent-registry",
-  "version": "0.8.6",
+  "version": "0.9.0",
   "description": "rill registry client for publishing and resolving packages",
   "license": "MIT",
   "author": "Andre Bremer",

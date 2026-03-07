@@ -1,16 +1,8 @@
-# rill-agent-run
+# Agent Run
 
 *Execute bundled rill agents from the command line*
 
-## Overview
-
 `@rcrsr/rill-agent-run` executes bundled rill agents produced by `rill-agent-bundle build`. It accepts parameters via CLI flags or piped JSON on stdin, writes the result to stdout, and exits with code 0 on success or 1 on failure.
-
-## Installation
-
-```bash
-npm install @rcrsr/rill-agent-run
-```
 
 ## CLI
 
@@ -158,7 +150,5 @@ When `--config` is omitted, config defaults to `{}`.
 
 ## See Also
 
-| Document | Description |
-|----------|-------------|
-| [Agent Bundle](agent-bundle.md) | Build bundle directories from agent.json manifests |
-| [Agent Harness](agent-harness.md) | Production HTTP server for long-running rill agents |
+- [Agent Bundle](agent-bundle.md) — Build bundle directories from agent.json manifests
+- [Agent Harness](agent-harness.md) — Production HTTP server for long-running rill agents

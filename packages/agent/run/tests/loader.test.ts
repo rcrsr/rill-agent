@@ -38,6 +38,7 @@ function makeManifest(name: string): Record<string, unknown> {
 const tmpDirs: string[] = [];
 
 async function makeTmpDir(base: string = PKG_ROOT): Promise<string> {
+  await mkdir(base, { recursive: true });
   const dir = await mkdtemp(path.join(base, 'loader-test-'));
   tmpDirs.push(dir);
   return dir;

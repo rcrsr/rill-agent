@@ -22,5 +22,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build libraries
+        run: pnpm -r --filter='./packages/**' run build
+
+      - name: Relink workspace bins
+        run: pnpm install --frozen-lockfile
+
+      - name: Build demos
+        run: pnpm -r --filter='./demo/**' run build
+
       - name: Run checks
         run: pnpm -r run check
