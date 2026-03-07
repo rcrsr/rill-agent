@@ -35,6 +35,7 @@
     "eslint": "^10.0.2",
     "globals": "^17.3.0",
     "prettier": "^3.8.1",
+    "tsc-files": "^1.1.4",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"

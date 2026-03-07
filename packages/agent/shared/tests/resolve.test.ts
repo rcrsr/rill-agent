@@ -370,26 +370,23 @@ describe('resolveExtensions', () => {
     });
 
     it('passes name validation for all 5 known built-in names', async () => {
-      // The vitest alias for @rcrsr/rill → src/index.ts prevents dynamic
-      // sub-path imports (import('@rcrsr/rill/ext/fs')) from completing —
-      // Vite cannot resolve the sub-path through a file alias.
-      // We verify that EC-17 is NOT thrown (name is accepted), but the
-      // subsequent import step throws a non-ComposeError environment error.
-      // AC-9 (builtin loads via sub-path export) is verified in integration
-      // tests outside the Vite test environment — see Implementation Notes.
+      // Verify that EC-17 is NOT thrown (name is accepted). The import may
+      // succeed (resolved from npm) or fail with a non-EC-17 error depending
+      // on the test environment.
       const knownNames = ['fs', 'fetch', 'exec', 'kv', 'crypto'] as const;
 
       for (const name of knownNames) {
-        const error = await resolveExtensions(
+        const result = await resolveExtensions(
           { ext: makeExt(`@rcrsr/rill/ext/${name}`) },
           makeOptions(testDir)
         ).catch((e: unknown) => e);
 
-        // An error is thrown (import fails in Vite), but it must NOT be EC-17
-        expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).not.toContain(
-          'Unknown built-in extension'
-        );
+        // If it failed, it must NOT be EC-17 (unknown built-in)
+        if (result instanceof Error) {
+          expect(result.message).not.toContain(
+            'Unknown built-in extension'
+          );
+        }
       }
     });
   });

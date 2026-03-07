@@ -29,6 +29,9 @@ importers:
       prettier:
         specifier: ^3.8.1
         version: 3.8.1
+      tsc-files:
+        specifier: ^1.1.4
+        version: 1.1.4(typescript@5.9.3)
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
@@ -58,7 +61,7 @@ importers:
         version: link:../../packages/agent/shared
       '@rcrsr/rill-ext-openai':
         specifier: ^0.8.6
-        version: 0.8.6(@rcrsr/rill@0.8.6)(zod@4.3.6)
+        version: 0.8.6(@rcrsr/rill@0.9.0)(zod@4.3.6)
     devDependencies:
       tsx:
         specifier: ^4.21.0
@@ -125,8 +128,8 @@ importers:
         version: link:../shared
     devDependencies:
       '@rcrsr/rill':
-        specifier: ^0.8.6
-        version: 0.8.6
+        specifier: ^0.9.0
+        version: 0.9.0
 
   packages/agent/build:
     dependencies:
@@ -137,8 +140,8 @@ importers:
   packages/agent/bundle:
     dependencies:
       '@rcrsr/rill':
-        specifier: ^0.8.6
-        version: 0.8.6
+        specifier: ^0.9.0
+        version: 0.9.0
       '@rcrsr/rill-agent-harness':
         specifier: workspace:^
         version: link:../harness
@@ -155,8 +158,8 @@ importers:
         specifier: ^1.19.9
         version: 1.19.11(hono@4.12.5)
       '@rcrsr/rill':
-        specifier: ^0.8.6
-        version: 0.8.6
+        specifier: ^0.9.0
+        version: 0.9.0
       '@rcrsr/rill-agent-shared':
         specifier: workspace:^
         version: link:../shared
@@ -208,8 +211,8 @@ importers:
   packages/agent/run:
     dependencies:
       '@rcrsr/rill':
-        specifier: ^0.8.6
-        version: 0.8.6
+        specifier: ^0.9.0
+        version: 0.9.0
       '@rcrsr/rill-agent-bundle':
         specifier: workspace:^
         version: link:../bundle
@@ -224,8 +227,8 @@ importers:
   packages/agent/shared:
     dependencies:
       '@rcrsr/rill':
-        specifier: ^0.8.6
-        version: 0.8.6
+        specifier: ^0.9.0
+        version: 0.9.0
       esbuild:
         specifier: ^0.27.3
         version: 0.27.3
@@ -466,6 +469,9 @@ packages:
 
   '@rcrsr/rill@0.8.6':
     resolution: {integrity: sha512-W5ArTKxxCVgZPKAsJTZQxpAiPuX2HA3uodhafOmEZt7W+ixlgph3roMvh2l63d0rxyrM2iYJFuQL3odnWMlfcA==}
+
+  '@rcrsr/rill@0.9.0':
+    resolution: {integrity: sha512-PMwvTKZQkgrQUnoV7SGhtRacVGrOyqpi2wLzHRBP0fLvxQibdrCSkiwTwt+nYyr/WlW/a7W5ePvV/uDAaN2Adg==}
 
   '@rollup/rollup-android-arm-eabi@4.59.0':
     resolution: {integrity: sha512-upnNBkA6ZH2VKGcBj9Fyl9IGNPULcjXRlg0LLeaioQWueH30p6IXtJEbKAgvyv+mJaMxSm1l6xwDXYjpEMiLMg==}
@@ -1061,6 +1067,12 @@ packages:
     peerDependencies:
       typescript: '>=4.8.4'
 
+  tsc-files@1.1.4:
+    resolution: {integrity: sha512-RePsRsOLru3BPpnf237y1Xe1oCGta8rmSYzM76kYo5tLGsv5R2r3s64yapYorGTPuuLyfS9NVbh9ydzmvNie2w==}
+    hasBin: true
+    peerDependencies:
+      typescript: '>=3'
+
   tsx@4.21.0:
     resolution: {integrity: sha512-5C1sg4USs1lfG0GFb2RLXsdpXqBSEhAaA/0kPL01wxzpMqLILNxIxIOKiILz+cdg/pLnOUxFYOR5yhHU666wbw==}
     engines: {node: '>=18.0.0'}
@@ -1317,7 +1329,17 @@ snapshots:
       - ws
       - zod
 
+  '@rcrsr/rill-ext-openai@0.8.6(@rcrsr/rill@0.9.0)(zod@4.3.6)':
+    dependencies:
+      '@rcrsr/rill': 0.9.0
+      openai: 6.27.0(zod@4.3.6)
+    transitivePeerDependencies:
+      - ws
+      - zod
+
   '@rcrsr/rill@0.8.6': {}
+
+  '@rcrsr/rill@0.9.0': {}
 
   '@rollup/rollup-android-arm-eabi@4.59.0':
     optional: true
@@ -1886,6 +1908,10 @@ snapshots:
   tinyrainbow@3.0.3: {}
 
   ts-api-utils@2.4.0(typescript@5.9.3):
+    dependencies:
+      typescript: 5.9.3
+
+  tsc-files@1.1.4(typescript@5.9.3):
     dependencies:
       typescript: 5.9.3
 

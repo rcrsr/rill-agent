@@ -1,16 +1,8 @@
-# rill Agent Bundle
+# Agent Bundle
 
 *Assemble rill agents from agent.json manifests into deployable bundles*
 
-## Overview
-
 `@rcrsr/rill-agent-bundle` assembles rill agents from `agent.json` manifests. It resolves extensions, compiles custom functions, loads modules, and parses the entry script. The package ships as both a Node.js API and the `rill-agent-bundle` CLI.
-
-## Installation
-
-```bash
-npm install @rcrsr/rill-agent-bundle
-```
 
 ## Quick Start
 
@@ -629,11 +621,9 @@ rill-agent-bundle check --platform cloud dist/
 
 ## See Also
 
-| Document | Description |
-|----------|-------------|
-| [Agent Harness](agent-harness.md) | Production HTTP server for rill agents |
-| [Agent Run](agent-run.md) | Execute bundled rill agents from the command line |
-| [Agent Shared](agent-shared.md) | Shared types, validation, and card generation |
-| [Host Integration](integration-host.md) | Embedding rill without the HTTP layer |
-| [Bundled Extensions](bundled-extensions.md) | Pre-built extensions shipped with rill |
-| [Creating rill Apps](guide-make.md) | Workflow guide for building rill agent projects |
+- [Agent Harness](agent-harness.md) — Production HTTP server for rill agents
+- [Agent Run](agent-run.md) — Execute bundled rill agents from the command line
+- [Agent Shared](agent-shared.md) — Shared types, validation, and card generation
+- [Host Integration](integration-host.md) — Embedding rill without the HTTP layer
+- [Bundled Extensions](bundled-extensions.md) — Pre-built extensions shipped with rill
+- [Creating rill Apps](guide-make.md) — Workflow guide for building rill agent projects

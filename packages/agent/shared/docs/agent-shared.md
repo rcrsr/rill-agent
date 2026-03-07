@@ -1,16 +1,8 @@
-# rill-agent-shared
+# Agent Shared
 
 *Shared types, validation, and card generation for rill agent packages*
 
-## Overview
-
 `@rcrsr/rill-agent-shared` exports the types, validation functions, and error classes shared across `@rcrsr/rill-agent-harness`, `@rcrsr/rill-agent-bundle`, and `@rcrsr/rill-agent-run`. Import directly from this package when you need types or utilities without taking a dependency on a full runtime package.
-
-## Installation
-
-```bash
-npm install @rcrsr/rill-agent-shared
-```
 
 ## Exports
 
@@ -184,8 +176,8 @@ interface ManifestIssue {
 
 ## See Also
 
-| Document | Description |
-|----------|-------------|
-| [Agent Harness](agent-harness.md) | Production HTTP server that uses these types at runtime |
-| [Agent Bundle](agent-bundle.md) | CLI and API for building agent bundles from manifests |
-| [Agent Run](agent-run.md) | Execute bundled agents using the `RunRequest`/`RunResult` types |
+- [Agent Harness](agent-harness.md) — Production HTTP server that uses these types at runtime
+- [Agent Bundle](agent-bundle.md) — CLI and API for building agent bundles from manifests
+- [Agent Run](agent-run.md) — Execute bundled agents using the `RunRequest`/`RunResult` types
+- [Agent Registry](agent-registry.md) — Service registry client for agent discovery
+- [Agent AHI](agent-ahi.md) — Agent-to-agent invocation extension

@@ -1,16 +1,8 @@
-# rill Agent Harness
+# Agent Harness
 
 *Production HTTP server harness for rill agents*
 
-## Overview
-
 `@rcrsr/rill-agent-harness` provides a lifecycle-managed HTTP server for running rill agents as persistent services. It handles session management, SSE streaming, Prometheus metrics, and graceful shutdown. For embedding rill directly in application code without the HTTP layer, see [Host Integration](integration-host.md).
-
-## Installation
-
-```bash
-npm install @rcrsr/rill-agent-harness
-```
 
 ## Quick Start
 
@@ -497,10 +489,8 @@ Every request propagates the `X-Correlation-ID` header value into the session re
 
 ## See Also
 
-| Document | Description |
-|----------|-------------|
-| [Host Integration](integration-host.md) | Embedding rill directly in applications without an HTTP layer |
-| [Host API Reference](ref-host-api.md) | Complete TypeScript API exports for `@rcrsr/rill` |
-| [Developing Extensions](integration-extensions.md) | Writing reusable host function packages |
-| [Bundle](agent-bundle.md) | Manifest format, validateManifest, and composeAgent API |
-| [Creating Rill Apps](guide-make.md) | Bootstrap new rill projects with `rill-agent-bundle init` |
+- [Host Integration](integration-host.md) — Embedding rill directly in applications without an HTTP layer
+- [Host API Reference](ref-host-api.md) — Complete TypeScript API exports for `@rcrsr/rill`
+- [Developing Extensions](integration-extensions.md) — Writing reusable host function packages
+- [Agent Bundle](agent-bundle.md) — Manifest format, validateManifest, and composeAgent API
+- [Creating Rill Apps](guide-make.md) — Bootstrap new rill projects with `rill-agent-bundle init`

@@ -1,16 +1,8 @@
-# rill Agent Build CLI
+# Agent Build
 
 *Generate harness entry points for rill agent bundles*
 
-## Overview
-
 `@rcrsr/rill-agent-build` generates a `harness.js` entry point from a built agent bundle. It reads the bundle's `handlers.js` and `bundle.json`, then writes a typed ESM module wired to the target runtime. The package ships as both a Node.js API and the `rill-agent-build` CLI.
-
-## Installation
-
-```bash
-npm install @rcrsr/rill-agent-build
-```
 
 ## Quick Start
 
@@ -203,9 +195,7 @@ export interface GenerateHarnessResult {
 
 ## See Also
 
-| Document | Description |
-|----------|-------------|
-| [Agent Bundle](agent-bundle.md) | Build bundle directories from `agent.json` manifests |
-| [Agent Run](agent-run.md) | Execute bundled rill agents from the command line |
-| [Agent Harness](agent-harness.md) | Production HTTP server for long-running rill agents |
-| [Agent Shared](agent-shared.md) | Shared agent types, validation, and card generation |
+- [Agent Bundle](agent-bundle.md) — Build bundle directories from `agent.json` manifests
+- [Agent Run](agent-run.md) — Execute bundled rill agents from the command line
+- [Agent Harness](agent-harness.md) — Production HTTP server for long-running rill agents
+- [Agent Shared](agent-shared.md) — Shared agent types, validation, and card generation
