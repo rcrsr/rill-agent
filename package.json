@@ -1,6 +1,6 @@
 {
   "name": "rill-agent",
-  "version": "0.9.0",
+  "version": "0.11.0",
   "description": "rill agent framework — harness, bundle, proxy, and tooling",
   "private": true,
   "packageManager": "pnpm@10.29.2",
@@ -25,7 +25,7 @@
   "author": "Andre Bremer",
   "license": "MIT",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
