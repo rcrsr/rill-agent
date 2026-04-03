@@ -5,7 +5,7 @@
  *   AC-33  listen() with RILL_REGISTRY_URL set calls register() after port bind
  *   AC-34  Heartbeat fires every 30 s while listen() active
  *   AC-35  stop() calls deregister() before drain begins
- *   AC-37  ahiDependencies extracted from manifest.extensions.ahi.config.agents (string[])
+ *   AC-37  ahiDependencies extracted from config.ahi.agents (string[])
  */
 
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
@@ -39,7 +39,6 @@ vi.mock('@rcrsr/rill-agent-registry', () => ({
 // Import AFTER vi.mock so the hoisted mock is in place.
 import type { AgentHost } from '../src/index.js';
 import { createTestHost } from './helpers/host.js';
-import type { AgentManifest } from '../src/index.js';
 
 // ============================================================
 // TEARDOWN STATE
@@ -325,30 +324,14 @@ describe('AC-35: deregister() called before stop() resolves', () => {
 });
 
 // ============================================================
-// AC-37: ahiDependencies from manifest.extensions.ahi.config.agents string[]
+// AC-37: ahiDependencies from config.ahi.agents string[]
 // ============================================================
 
-describe('AC-37: ahiDependencies extracted from manifest ahi config agents', () => {
-  it('register() dependencies equals agents string[] from manifest ahi config', async () => {
+describe('AC-37: ahiDependencies extracted from config.ahi.agents', () => {
+  it('register() dependencies equals agents string[] from config.ahi.agents', async () => {
     process.env['RILL_REGISTRY_URL'] = 'http://registry:8080';
 
-    const manifest: AgentManifest = {
-      name: 'test-agent',
-      version: '0.0.1',
-      runtime: '@rcrsr/rill@*',
-      entry: 'minimal.rill',
-      modules: {},
-      extensions: {
-        ahi: {
-          package: '@rcrsr/rill-agent-ext-ahi',
-        },
-      },
-      functions: {},
-      assets: [],
-    };
-
     const host = await createTestHost({
-      manifest,
       config: { ahi: { agents: ['parser', 'formatter'] } },
     });
     hostsToClean.push(host);
@@ -361,7 +344,7 @@ describe('AC-37: ahiDependencies extracted from manifest ahi config agents', () 
     await host.close();
   });
 
-  it('dependencies defaults to [] when manifest is absent', async () => {
+  it('dependencies defaults to [] when config is absent', async () => {
     process.env['RILL_REGISTRY_URL'] = 'http://registry:8080';
     const host = await createTestHost();
     hostsToClean.push(host);
@@ -374,21 +357,10 @@ describe('AC-37: ahiDependencies extracted from manifest ahi config agents', () 
     await host.close();
   });
 
-  it('dependencies defaults to [] when manifest has no ahi extension', async () => {
+  it('dependencies defaults to [] when config has no ahi key', async () => {
     process.env['RILL_REGISTRY_URL'] = 'http://registry:8080';
 
-    const manifest: AgentManifest = {
-      name: 'test-agent',
-      version: '0.0.1',
-      runtime: '@rcrsr/rill@*',
-      entry: 'minimal.rill',
-      modules: {},
-      extensions: {},
-      functions: {},
-      assets: [],
-    };
-
-    const host = await createTestHost({ manifest });
+    const host = await createTestHost({ config: {} });
     hostsToClean.push(host);
 
     await host.listen(0);
@@ -399,28 +371,12 @@ describe('AC-37: ahiDependencies extracted from manifest ahi config agents', () 
     await host.close();
   });
 
-  it('dependencies defaults to [] when ahi config.agents is not an array', async () => {
+  it('dependencies defaults to [] when config.ahi.agents is not an array', async () => {
     process.env['RILL_REGISTRY_URL'] = 'http://registry:8080';
 
-    const manifest: AgentManifest = {
-      name: 'test-agent',
-      version: '0.0.1',
-      runtime: '@rcrsr/rill@*',
-      entry: 'minimal.rill',
-      modules: {},
-      extensions: {
-        ahi: {
-          package: '@rcrsr/rill-agent-ext-ahi',
-          config: {
-            agents: { parser: { url: 'http://parser:8080' } },
-          },
-        },
-      },
-      functions: {},
-      assets: [],
-    };
-
-    const host = await createTestHost({ manifest });
+    const host = await createTestHost({
+      config: { ahi: { agents: { parser: { url: 'http://parser:8080' } } } },
+    });
     hostsToClean.push(host);
 
     await host.listen(0);
@@ -434,23 +390,7 @@ describe('AC-37: ahiDependencies extracted from manifest ahi config agents', () 
   it('dependencies matches exactly when single agent in string[]', async () => {
     process.env['RILL_REGISTRY_URL'] = 'http://registry:8080';
 
-    const manifest: AgentManifest = {
-      name: 'test-agent',
-      version: '0.0.1',
-      runtime: '@rcrsr/rill@*',
-      entry: 'minimal.rill',
-      modules: {},
-      extensions: {
-        ahi: {
-          package: '@rcrsr/rill-agent-ext-ahi',
-        },
-      },
-      functions: {},
-      assets: [],
-    };
-
     const host = await createTestHost({
-      manifest,
       config: { ahi: { agents: ['parser'] } },
     });
     hostsToClean.push(host);

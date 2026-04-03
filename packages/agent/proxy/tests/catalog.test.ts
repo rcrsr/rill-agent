@@ -19,6 +19,22 @@ import { createCatalog } from '../src/catalog.js';
 // HELPERS
 // ============================================================
 
+function makeRillConfig(
+  agentName: string,
+  version: string,
+  mounts: Record<string, string> = {}
+): string {
+  const config: Record<string, unknown> = {
+    name: agentName,
+    version,
+    main: 'entry.rill:run',
+  };
+  if (Object.keys(mounts).length > 0) {
+    config['extensions'] = { mounts };
+  }
+  return JSON.stringify(config);
+}
+
 function makeBundleManifest(
   name: string,
   version: string,
@@ -27,23 +43,7 @@ function makeBundleManifest(
   const agents: Record<string, unknown> = {};
   for (const agentName of agentNames) {
     agents[agentName] = {
-      entry: 'agent.js',
-      modules: {},
-      extensions: {},
-      card: {
-        name: agentName,
-        description: `${agentName} agent`,
-        version,
-        url: 'http://localhost',
-        capabilities: {
-          streaming: false,
-          pushNotifications: false,
-          stateTransitionHistory: false,
-        },
-        skills: [],
-        defaultInputModes: ['application/json'],
-        defaultOutputModes: ['application/json'],
-      },
+      configPath: `agents/${agentName}/rill-config.json`,
     };
   }
   return JSON.stringify({
@@ -51,7 +51,8 @@ function makeBundleManifest(
     version,
     built: new Date().toISOString(),
     checksum: 'sha256:abc123',
-    rillVersion: '0.8.0',
+    rillVersion: '0.18.0',
+    configVersion: '2',
     agents,
   });
 }
@@ -69,6 +70,14 @@ function writeBundle(
     makeBundleManifest(bundleDirName, version, agentNames)
   );
   fs.writeFileSync(path.join(bundleDir, 'harness.js'), '// harness');
+  for (const agentName of agentNames) {
+    const agentDir = path.join(bundleDir, 'agents', agentName);
+    fs.mkdirSync(agentDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(agentDir, 'rill-config.json'),
+      makeRillConfig(agentName, version)
+    );
+  }
   return bundleDir;
 }
 

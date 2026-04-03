@@ -1,15 +1,15 @@
 # Agent Bundle
 
-*Assemble rill agents from agent.json manifests into deployable bundles*
+*Assemble rill agents from rill-config.json projects into deployable bundles*
 
-`@rcrsr/rill-agent-bundle` assembles rill agents from `agent.json` manifests. It resolves extensions, compiles custom functions, loads modules, and parses the entry script. The package ships as both a Node.js API and the `rill-agent-bundle` CLI.
+`@rcrsr/rill-agent-bundle` assembles rill agents from `rill-config.json` project directories. It resolves extensions, compiles custom functions, loads modules, and parses the entry script. The package ships as both a Node.js API and the `rill-agent-bundle` CLI.
 
 ## Quick Start
 
-Build a bundle from an `agent.json` manifest using the CLI:
+Build a bundle from a project directory using the CLI:
 
 ```bash
-rill-agent-bundle build agent.json --output dist/
+rill-agent-bundle build my-agent/ --output dist/
 ```
 
 To build programmatically, import `buildBundle` from `@rcrsr/rill-agent-bundle`:
@@ -17,16 +17,16 @@ To build programmatically, import `buildBundle` from `@rcrsr/rill-agent-bundle`:
 ```typescript
 import { buildBundle } from '@rcrsr/rill-agent-bundle';
 
-await buildBundle('./agent.json', { outputDir: './dist' });
+await buildBundle('./my-agent', { outputDir: './dist' });
 ```
 
 To validate a manifest and compose an agent for programmatic use, import from `@rcrsr/rill-agent-shared` (for validation) and `@rcrsr/rill-agent-harness` (for composition). See [Agent Harness](agent-harness.md) for full details.
 
 ---
 
-## Manifest Format
+## Config Format
 
-`agent.json` defines all composition inputs. Every field listed as required must be present.
+`rill-config.json` defines all composition inputs. Every field listed as required must be present.
 
 ### Top-Level Fields
 
@@ -34,10 +34,10 @@ To validate a manifest and compose an agent for programmatic use, import from `@
 |-------|------|----------|---------|-------------|
 | `name` | string | yes | — | Package name for the agent |
 | `version` | string | yes | — | Semver version string (e.g., `"1.0.0"`) |
-| `runtime` | string | yes | — | rill runtime constraint: `"@rcrsr/rill@^0.8.0"` |
-| `entry` | string | yes | — | Path to entry `.rill` file, relative to manifest |
+| `runtime` | string | yes | — | rill runtime version constraint (e.g., `">=0.18.0"`) |
+| `main` | string | yes | — | Path to entry `.rill` file, relative to config |
 | `modules` | Record\<string, string\> | no | `{}` | Module alias → `.rill` file path |
-| `extensions` | Record\<string, ManifestExtension\> | no | `{}` | Extension alias → config |
+| `extensions` | ExtensionsConfig | no | — | Extension mounts and config |
 | `functions` | Record\<string, string\> | no | `{}` | `"app::name"` → `.ts` source path |
 | `assets` | string[] | no | `[]` | Additional asset paths to include |
 | `description` | string | no | — | Agent description for A2A discovery |
@@ -46,6 +46,12 @@ To validate a manifest and compose an agent for programmatic use, import from `@
 | `output` | OutputSchema | no | — | Expected output type descriptor for discovery and tooling |
 | `host` | ManifestHostOptions | no | — | Runtime configuration |
 | `deploy` | ManifestDeployOptions | no | — | Deployment configuration |
+
+### ExtensionsConfig Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `mounts` | Record\<string, ManifestExtension\> | yes | Extension alias → mount config |
 
 ### ManifestExtension Fields
 
@@ -115,14 +121,14 @@ The `type` field uses rill type names. This table shows how each name maps to a 
 | `list` | `Array.isArray(v)` | `[1, 2]` |
 | `dict` | plain object (`typeof v === 'object' && !Array.isArray(v)`) | `{"k": "v"}` |
 
-### Example agent.json
+### Example rill-config.json
 
 ```json
 {
   "name": "my-agent",
   "version": "0.1.0",
-  "runtime": "@rcrsr/rill@^0.8.0",
-  "entry": "main.rill",
+  "runtime": ">=0.18.0",
+  "main": "main.rill",
   "description": "An agent that answers questions using a knowledge base",
   "input": {
     "question": {
@@ -156,11 +162,13 @@ The `type` field uses rill type names. This table shows how each name maps to a 
     }
   ],
   "extensions": {
-    "llm": {
-      "package": "@rcrsr/rill-ext-anthropic"
-    },
-    "kv": {
-      "package": "@rcrsr/rill/ext/kv"
+    "mounts": {
+      "llm": {
+        "package": "@rcrsr/rill-ext-anthropic"
+      },
+      "kv": {
+        "package": "@rcrsr/rill/ext/kv"
+      }
     }
   },
   "host": {
@@ -171,9 +179,9 @@ The `type` field uses rill type names. This table shows how each name maps to a 
 
 ---
 
-## AHI Extension in Manifests
+## AHI Extension in Configs
 
-The Agent-to-Host Interface (AHI) extension (`@rcrsr/rill-agent-ext-ahi`) lets a rill agent call other agents by name. Configure it in the `extensions` block of `agent.json`.
+The Agent-to-Host Interface (AHI) extension (`@rcrsr/rill-agent-ext-ahi`) lets a rill agent call other agents by name. Configure it in the `extensions.mounts` block of `rill-config.json`.
 
 ### Static URL Mode
 
@@ -182,14 +190,16 @@ Use static URL mode when agent endpoints are fixed at deploy time.
 ```json
 {
   "extensions": {
-    "ahi": {
-      "package": "@rcrsr/rill-agent-ext-ahi"
+    "mounts": {
+      "ahi": {
+        "package": "@rcrsr/rill-agent-ext-ahi"
+      }
     }
   }
 }
 ```
 
-The AHI config (`agents` map, `timeout`) is no longer embedded in the manifest. Pass it at runtime via `--config ahi=...` or the `config` option to `composeAgent`. See [Agent Run](agent-run.md) for config flag usage.
+The AHI config (`agents` map, `timeout`) is no longer embedded in the config file. Pass it at runtime via `--config ahi=...` or the `config` option to `composeAgent`. See [Agent Run](agent-run.md) for config flag usage.
 
 ### Registry Mode
 
@@ -198,8 +208,10 @@ Use registry mode when agent endpoints are resolved at runtime from a service re
 ```json
 {
   "extensions": {
-    "ahi": {
-      "package": "@rcrsr/rill-agent-ext-ahi"
+    "mounts": {
+      "ahi": {
+        "package": "@rcrsr/rill-agent-ext-ahi"
+      }
     }
   }
 }
@@ -222,14 +234,16 @@ When `RILL_REGISTRY_URL` is set, the host self-registers after binding its port.
 ```json
 {
   "extensions": {
-    "ahi": {
-      "package": "@rcrsr/rill-agent-ext-ahi"
+    "mounts": {
+      "ahi": {
+        "package": "@rcrsr/rill-agent-ext-ahi"
+      }
     }
   }
 }
 ```
 
-With the manifest above and `RILL_REGISTRY_URL` set, the host registers with `dependencies: ["parser", "classifier"]` when the runtime config provides `agents` as a string array.
+With the config above and `RILL_REGISTRY_URL` set, the host registers with `dependencies: ["parser", "classifier"]` when the runtime config provides `agents` as a string array.
 
 If `agents` is a dict (static mode), `dependencies` is an empty array — static-mode agents declare their endpoints directly and do not require registry resolution.
 
@@ -239,7 +253,7 @@ See [Agent Harness](agent-harness.md) for full self-registration behavior.
 
 ## Harness Manifests
 
-A harness manifest runs multiple rill agents in one process. Use it instead of `agent.json` when agents share infrastructure (LLM client, database, key-value store) and you want a single deployment unit.
+A harness manifest runs multiple rill agents in one process. Use it instead of a single-agent `rill-config.json` when agents share infrastructure (LLM client, database, key-value store) and you want a single deployment unit.
 
 The `agents` key distinguishes a harness manifest from a single-agent manifest. `detectManifestType()` reads this key to select the correct validation path.
 
@@ -338,13 +352,31 @@ The `resolver` agent adds its own `vectors` extension on top of the shared `llm`
 
 `rill-agent-bundle build` produces a bundle directory containing all agent files, resolved dependencies, and manifests. The bundle directory is self-contained and can be passed directly to `rill-agent-run` for execution.
 
-| Output File | Description |
-|-------------|-------------|
-| `agent.json` | Validated manifest (normalized) |
-| `*.rill` | Entry and module scripts |
-| `functions/` | Compiled custom host function sources |
-| `extensions.json` | Resolved extension dependency map |
-| `assets/` | Additional asset files declared in `assets[]` |
+### Output Directory Structure
+
+```
+{outputDir}/
+  bundle.json          # bundle manifest with configVersion field
+  handlers.js          # thin loader importing from @rcrsr/rill-config
+  agents/{name}/
+    rill-config.json   # rewritten with resolved paths
+    entry.rill         # copied from main field
+    modules/           # copied .rill module directories
+    extensions/        # compiled local extension JS
+```
+
+### bundle.json Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `configVersion` | string | Bundle format version (e.g., `"2"`). Required by `loadBundle`. |
+| `agents` | Record\<string, BundleAgentEntry\> | Per-agent entries keyed by agent name |
+
+### BundleAgentEntry Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `configPath` | string | Path to the agent's `rill-config.json` within the bundle |
 
 The bundle does not include Dockerfile, zip archive, or Worker artifacts. Platform-specific packaging is the responsibility of the deployment tooling that consumes the bundle.
 
@@ -505,13 +537,47 @@ Loads extension factories from package references. Auto-detects resolution strat
 
 Throws `ComposeError` (phase: `'resolution'`) if a package is not found or a namespace collision occurs.
 
+### buildBundle(projectDir, options?)
+
+```typescript
+async function buildBundle(
+  projectDir: string,
+  options?: BundleBuildOptions
+): Promise<BundleResult>
+```
+
+Reads `rill-config.json` from `projectDir`, resolves all extensions, compiles local extension JS, and writes a bundle directory. Returns a `BundleResult` describing the output.
+
+`projectDir` must contain a valid `rill-config.json`. Passing a path to a manifest file directly throws `ComposeError` (phase: `'validation'`).
+
+**BundleBuildOptions:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `outputDir` | string | `dist/` | Directory to write the bundle into |
+
+**BundleResult:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `outputDir` | string | Resolved path to the output directory |
+| `agentNames` | string[] | Names of agents included in the bundle |
+
+### generateHandlersJs(agentNames)
+
+```typescript
+function generateHandlersJs(agentNames: string[]): string
+```
+
+Generates the `handlers.js` thin loader string. The output imports each agent by name from `@rcrsr/rill-config` and re-exports them as a named map. Write the returned string to `handlers.js` in the bundle output directory.
+
 ### initProject(name, options?)
 
 ```typescript
 async function initProject(name: string, options?: InitOptions): Promise<void>
 ```
 
-Creates a new project directory with `agent.json`, `main.rill`, and `package.json`. Creates `.env.example` when the selected extensions require environment variables.
+Creates a new project directory with `rill-config.json`, `main.rill`, and `package.json`. The generated `rill-config.json` uses the `extensions.mounts` format and sets `runtime: ">=0.18.0"`. Creates `.env.example` when the selected extensions require environment variables.
 
 **InitOptions:**
 
@@ -527,7 +593,7 @@ Throws `ComposeError` (phase: `'init'`) if the directory exists, the name is inv
 
 ## Environment Interpolation
 
-Extension config is no longer embedded in manifests. Pass config at runtime via the `--config` flag (CLI) or the `config` option to `composeAgent`.
+Extension config is no longer embedded in `rill-config.json`. Pass config at runtime via the `--config` flag (CLI) or the `config` option to `composeAgent`.
 
 Config values support `${VAR_NAME}` interpolation when loaded from a file or inline JSON string. The CLI applies interpolation against `process.env` before passing config to `composeAgent`. Only uppercase identifiers matching `[A-Z_][A-Z0-9_]*` are substituted. Unresolved variables remain as-is.
 
@@ -579,7 +645,7 @@ try {
 ### Commands
 
 ```bash
-rill-agent-bundle build <manifest-path> [--output <dir>]
+rill-agent-bundle build [project-dir] [--output <dir>]
 rill-agent-bundle init <project-name> [--extensions <ext1,ext2>]
 rill-agent-bundle check --platform <name> [<bundle-path>]
 ```
@@ -588,10 +654,10 @@ rill-agent-bundle check --platform <name> [<bundle-path>]
 
 | Argument | Description |
 |----------|-------------|
-| `manifest-path` | Path to `agent.json` or `harness.json` |
+| `project-dir` | Path to project directory containing `rill-config.json` (default: current directory) |
 | `--output` | Output directory (default: `dist/`) |
 
-`build` validates the manifest, resolves all extensions, and writes a bundle directory to `--output`. The bundle directory is self-contained and ready for `rill-agent-run`.
+`build` reads `rill-config.json` from `project-dir`, resolves all extensions, and writes a bundle directory to `--output`. The bundle directory is self-contained and ready for `rill-agent-run`.
 
 ### init subcommand
 
@@ -613,7 +679,7 @@ rill-agent-bundle check --platform <name> [<bundle-path>]
 
 ```bash
 rill-agent-bundle init my-agent --extensions anthropic,kv
-rill-agent-bundle build agent.json --output dist/
+rill-agent-bundle build my-agent/ --output dist/
 rill-agent-bundle check --platform cloud dist/
 ```
 

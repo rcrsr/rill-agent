@@ -1,10 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createAhiExtension } from '../src/index.js';
-import type {
-  ExtensionResult,
-  RillValue,
-  HostFunctionDefinition,
-} from '@rcrsr/rill';
+import type { ExtensionResult } from '../src/index.js';
+import type { RillValue, ApplicationCallable } from '@rcrsr/rill';
 
 // ============================================================
 // HELPERS
@@ -69,8 +66,8 @@ async function callAhi(
   args: RillValue[],
   metadata?: Record<string, string>
 ): Promise<RillValue> {
-  const fnDef = (ext as Record<string, HostFunctionDefinition>)[agentName];
-  return fnDef.fn(args, { metadata: metadata ?? makeCtx().metadata });
+  const fnDef = (ext as Record<string, ApplicationCallable>)[agentName]!;
+  return fnDef.fn(args as unknown as Record<string, RillValue>, { metadata: metadata ?? makeCtx().metadata });
 }
 
 // ============================================================

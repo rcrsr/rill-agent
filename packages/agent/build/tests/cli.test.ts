@@ -75,13 +75,17 @@ async function makeBundleFixture(
  * Invokes dist/cli.js via spawnSync.
  * Returns { status, stdout, stderr }.
  */
-function runCli(args: string[]): {
+function runCli(
+  args: string[],
+  options?: { cwd?: string | undefined }
+): {
   status: number;
   stdout: string;
   stderr: string;
 } {
   const result = spawnSync('node', [CLI_PATH, ...args], {
     encoding: 'utf-8',
+    cwd: options?.cwd,
   });
   return {
     status: result.status ?? 1,
@@ -129,6 +133,21 @@ describe('CLI integration: success cases', () => {
     const harnessPath = path.join(bundleDir, 'harness.js');
     const content = await readFile(harnessPath, 'utf-8');
     expect(content).toContain('createStdioHarness');
+  });
+
+  // AC-22: no positional path arg defaults to cwd and succeeds when cwd contains a valid bundle
+  it('AC-22: no positional path arg defaults to cwd and exits 0', async () => {
+    const bundleDir = await makeBundleFixture();
+
+    const result = runCli(['--harness', 'http'], { cwd: bundleDir });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Generated http harness');
+    expect(result.stdout).toContain('harness.js');
+
+    const harnessPath = path.join(bundleDir, 'harness.js');
+    const content = await readFile(harnessPath, 'utf-8');
+    expect(content).toContain('createHttpHarness');
   });
 
   // AC-10: --output custom/path.js writes to specified path
@@ -180,12 +199,12 @@ describe('CLI integration: error cases', () => {
     expect(result.stderr).toContain('worker');
   });
 
-  // AC-6: missing bundle dir -> exit 1
-  it('AC-6: missing bundle-dir argument exits 1', () => {
+  // AC-6: missing bundle-dir argument defaults to cwd; fails when cwd has no bundle.json
+  it('AC-6: missing bundle-dir argument defaults to cwd and fails with bundle.json not found', () => {
     const result = runCli(['--harness', 'http']);
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain('bundle-dir is required');
+    expect(result.stderr).toContain('bundle.json not found');
   });
 
   // EC-1 via CLI: bundle dir does not exist -> exit 1, stderr contains path

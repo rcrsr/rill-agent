@@ -44,8 +44,18 @@ export { createAgentHandler } from './handler.js';
 // ============================================================
 // COMPOSE
 // ============================================================
-export type { ComposeOptions, ComposedHarness } from './compose.js';
-export { composeAgent, composeHarness } from './compose.js';
+export type {
+  ComposeOptions,
+  ComposedHarness,
+  ResolvedDeferredResult,
+} from './compose.js';
+export type { ExtensionResult } from '@rcrsr/rill-agent-shared';
+export {
+  composeAgent,
+  composeHarness,
+  resolveDeferredExtensions,
+  resolveDeferredContext,
+} from './compose.js';
 
 // ============================================================
 // DISPATCH (stdio transport entry point)

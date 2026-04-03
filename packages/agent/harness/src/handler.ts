@@ -9,8 +9,13 @@ import { execute, createRuntimeContext } from '@rcrsr/rill';
 import type { ObservabilityCallbacks } from '@rcrsr/rill';
 import { SessionManager } from './core/session.js';
 import { createMetrics } from './core/metrics.js';
+import { AgentHostError } from './core/errors.js';
 import type { ComposedAgent } from './host.js';
 import type { RunRequest } from './core/types.js';
+import {
+  resolveDeferredExtensions,
+  resolveDeferredContext,
+} from './compose.js';
 
 // ============================================================
 // SERVERLESS INTERFACES
@@ -82,6 +87,23 @@ export function createAgentHandler(agent: ComposedAgent): AgentHandler {
 
     const correlationId = randomUUID();
 
+    // EC-7: Validate runtimeConfig has all required @{VAR} keys
+    const runtimeConfig = input.runtimeConfig ?? {};
+    const runtimeVariables = agent.runtimeVariables ?? [];
+    if (runtimeVariables.length > 0) {
+      const missing = runtimeVariables.filter((v) => !(v in runtimeConfig));
+      if (missing.length > 0) {
+        return {
+          statusCode: 400,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            error: 'missing runtime variables',
+            required: missing,
+          }),
+        };
+      }
+    }
+
     try {
       const record = sessionManager.create(
         input,
@@ -89,6 +111,73 @@ export function createAgentHandler(agent: ComposedAgent): AgentHandler {
         agent.card.name
       );
       const sessionId = record.id;
+
+      // AC-6, AC-7: Resolve deferred extensions and context per request
+      let deferredDispose: (() => Promise<void>) | undefined;
+      let deferredFunctions: Record<string, import('@rcrsr/rill').ApplicationCallable> = {};
+      let deferredContextValues: Record<string, unknown> = {};
+
+      const deferredExtensions = agent.deferredExtensions ?? [];
+      const deferredContext = agent.deferredContext ?? [];
+
+      if (deferredExtensions.length > 0 || deferredContext.length > 0) {
+        if (deferredContext.length > 0) {
+          deferredContextValues = resolveDeferredContext(
+            deferredContext,
+            runtimeConfig
+          );
+        }
+
+        if (deferredExtensions.length > 0) {
+          let resolvedDeferred;
+          try {
+            resolvedDeferred = await resolveDeferredExtensions(
+              deferredExtensions,
+              runtimeConfig
+            );
+          } catch (err) {
+            // EC-8: Deferred extension factory threw — return 500 with extension name
+            if (err instanceof AgentHostError) {
+              const match =
+                /^Deferred extension (\S+) failed to initialize:/.exec(
+                  err.message
+                );
+              const alias = match?.[1] ?? 'unknown';
+              const causeMsg =
+                err.cause instanceof Error
+                  ? err.cause.message
+                  : String(err.cause ?? err.message);
+              return {
+                statusCode: 500,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  error: 'deferred extension failed',
+                  extension: alias,
+                  cause: causeMsg,
+                }),
+              };
+            }
+            throw err;
+          }
+          deferredDispose = resolvedDeferred.dispose;
+
+          for (const [mountAlias, instance] of Object.entries(
+            resolvedDeferred.extensions
+          )) {
+            for (const [fnName, fn] of Object.entries(instance)) {
+              if (
+                fnName === 'dispose' ||
+                fnName === 'suspend' ||
+                fnName === 'restore'
+              ) {
+                continue;
+              }
+              deferredFunctions[`${mountAlias}::${fnName}`] =
+                fn as import('@rcrsr/rill').ApplicationCallable;
+            }
+          }
+        }
+      }
 
       metrics.sessionsActive.labels({ agent: agent.card.name }).inc();
 
@@ -126,6 +215,8 @@ export function createAgentHandler(agent: ComposedAgent): AgentHandler {
           ...(input.timeout !== undefined && {
             timeoutDeadline: String(Date.now() + input.timeout),
           }),
+          // AC-7: Merge resolved deferred context values into metadata
+          ...deferredContextValues,
         },
       });
 
@@ -133,8 +224,14 @@ export function createAgentHandler(agent: ComposedAgent): AgentHandler {
         sessionContext.functions.set(name, fn);
       }
 
+      // AC-6: Merge resolved deferred extension functions into session context
+      for (const [name, fn] of Object.entries(deferredFunctions)) {
+        sessionContext.functions.set(name, fn);
+      }
+
       const executionStart = Date.now();
 
+      // AC-6: Dispose deferred extensions after execution completes (try/finally)
       try {
         const result = await execute(agent.ast, sessionContext);
         const durationMs = Date.now() - executionStart;
@@ -212,6 +309,11 @@ export function createAgentHandler(agent: ComposedAgent): AgentHandler {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ error: errorMessage, code: errorCode }),
         };
+      } finally {
+        // AC-6: Dispose deferred extensions after execution completes
+        if (deferredDispose !== undefined) {
+          await deferredDispose();
+        }
       }
     } catch (err: unknown) {
       // Errors from sessionManager.create() (capacity) or other setup errors
@@ -270,6 +372,22 @@ function buildRunRequest(event: APIGatewayEvent): RunRequest {
       }
       if (typeof body['callback'] === 'string') {
         (request as { callback?: string }).callback = body['callback'];
+      }
+      if (
+        body['runtimeConfig'] !== undefined &&
+        body['runtimeConfig'] !== null &&
+        typeof body['runtimeConfig'] === 'object' &&
+        !Array.isArray(body['runtimeConfig'])
+      ) {
+        const rc = body['runtimeConfig'] as Record<string, unknown>;
+        const stringRecord: Record<string, string> = {};
+        for (const [k, v] of Object.entries(rc)) {
+          if (typeof v === 'string') {
+            stringRecord[k] = v;
+          }
+        }
+        (request as { runtimeConfig?: Record<string, string> }).runtimeConfig =
+          stringRecord;
       }
       return request;
     }

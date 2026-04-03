@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "rill-agent-bundle build agent.json",
+    "build": "rill-agent-bundle build",
     "check": "rill-agent-bundle check --platform node dist/",
-    "start": "rill-agent-run dist/ feedback-analyzer --config config.json --log-level info --param feedback='The onboarding was confusing'"
+    "start": "rill-agent-run dist/ feedback-analyzer --log-level info --param feedback='The onboarding was confusing'"
   },
   "dependencies": {
     "@rcrsr/rill": "^0.9.0",

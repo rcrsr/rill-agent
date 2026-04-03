@@ -55,7 +55,7 @@ importers:
         version: link:../../packages/agent/shared
       '@rcrsr/rill-ext-openai':
         specifier: ^0.9.0
-        version: 0.9.0(@rcrsr/rill@0.9.0)(zod@4.3.6)
+        version: 0.9.0(@rcrsr/rill@0.18.0)(zod@4.3.6)
     devDependencies:
       '@rcrsr/rill-agent-bundle':
         specifier: workspace:^
@@ -131,8 +131,8 @@ importers:
         version: link:../shared
     devDependencies:
       '@rcrsr/rill':
-        specifier: ^0.9.0
-        version: 0.9.0
+        specifier: ^0.18.0
+        version: 0.18.0
 
   packages/agent/build:
     dependencies:
@@ -143,14 +143,17 @@ importers:
   packages/agent/bundle:
     dependencies:
       '@rcrsr/rill':
-        specifier: ^0.9.0
-        version: 0.9.0
+        specifier: ^0.18.0
+        version: 0.18.0
       '@rcrsr/rill-agent-harness':
         specifier: workspace:^
         version: link:../harness
       '@rcrsr/rill-agent-shared':
         specifier: workspace:^
         version: link:../shared
+      '@rcrsr/rill-config':
+        specifier: ^0.18.0
+        version: 0.18.0(@rcrsr/rill@0.18.0)
       esbuild:
         specifier: ^0.27.3
         version: 0.27.3
@@ -161,11 +164,14 @@ importers:
         specifier: ^1.19.9
         version: 1.19.11(hono@4.12.5)
       '@rcrsr/rill':
-        specifier: ^0.9.0
-        version: 0.9.0
+        specifier: ^0.18.0
+        version: 0.18.0
       '@rcrsr/rill-agent-shared':
         specifier: workspace:^
         version: link:../shared
+      '@rcrsr/rill-config':
+        specifier: ^0.18.0
+        version: 0.18.0(@rcrsr/rill@0.18.0)
       esbuild:
         specifier: ^0.27.3
         version: 0.27.3
@@ -198,6 +204,9 @@ importers:
       '@rcrsr/rill-agent-shared':
         specifier: workspace:^
         version: link:../shared
+      '@rcrsr/rill-config':
+        specifier: ^0.18.0
+        version: 0.18.0(@rcrsr/rill@0.18.0)
       hono:
         specifier: ^4.12.2
         version: 4.12.5
@@ -214,14 +223,17 @@ importers:
   packages/agent/run:
     dependencies:
       '@rcrsr/rill':
-        specifier: ^0.9.0
-        version: 0.9.0
+        specifier: ^0.18.0
+        version: 0.18.0
       '@rcrsr/rill-agent-bundle':
         specifier: workspace:^
         version: link:../bundle
       '@rcrsr/rill-agent-shared':
         specifier: workspace:^
         version: link:../shared
+      '@rcrsr/rill-config':
+        specifier: ^0.18.0
+        version: 0.18.0(@rcrsr/rill@0.18.0)
     devDependencies:
       '@rcrsr/rill-agent-harness':
         specifier: workspace:^
@@ -230,8 +242,8 @@ importers:
   packages/agent/shared:
     dependencies:
       '@rcrsr/rill':
-        specifier: ^0.9.0
-        version: 0.9.0
+        specifier: ^0.18.0
+        version: 0.18.0
       esbuild:
         specifier: ^0.27.3
         version: 0.27.3
@@ -465,10 +477,20 @@ packages:
     resolution: {integrity: sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg==}
     engines: {node: '>=8.0.0'}
 
+  '@rcrsr/rill-config@0.18.0':
+    resolution: {integrity: sha512-zbVJCAw0nT1u+KUCoVPteS+ogEM5yb2VaJXtVcP98BOr5lPbDhlIgQSwfff1n/brnNbYNKY5BGX4ssT/c5Shmg==}
+    engines: {node: '>=20.0.0'}
+    peerDependencies:
+      '@rcrsr/rill': ^0.18.0
+
   '@rcrsr/rill-ext-openai@0.9.0':
     resolution: {integrity: sha512-X0hrMdHWYzAgaphlHAcA5uvc8V+9Ged2YX5JTT6guIrMFT574QQ9ABx+WNqNWIAP884PiaE5PFwB9bG6JvE3KA==}
     peerDependencies:
       '@rcrsr/rill': ^0.9.0
+
+  '@rcrsr/rill@0.18.0':
+    resolution: {integrity: sha512-+OwMFHJgIX+EelqwoGSSz/VlulxLt81Xx3bVmQUBKKdpqVGtBqAUwda1kioBmjmY+l+vzxxzOVvGNorMcglh9g==}
+    engines: {node: '>=20.0.0'}
 
   '@rcrsr/rill@0.9.0':
     resolution: {integrity: sha512-PMwvTKZQkgrQUnoV7SGhtRacVGrOyqpi2wLzHRBP0fLvxQibdrCSkiwTwt+nYyr/WlW/a7W5ePvV/uDAaN2Adg==}
@@ -1321,6 +1343,19 @@ snapshots:
 
   '@opentelemetry/api@1.9.0': {}
 
+  '@rcrsr/rill-config@0.18.0(@rcrsr/rill@0.18.0)':
+    dependencies:
+      '@rcrsr/rill': 0.18.0
+      semver: 7.7.4
+
+  '@rcrsr/rill-ext-openai@0.9.0(@rcrsr/rill@0.18.0)(zod@4.3.6)':
+    dependencies:
+      '@rcrsr/rill': 0.18.0
+      openai: 6.27.0(zod@4.3.6)
+    transitivePeerDependencies:
+      - ws
+      - zod
+
   '@rcrsr/rill-ext-openai@0.9.0(@rcrsr/rill@0.9.0)(zod@4.3.6)':
     dependencies:
       '@rcrsr/rill': 0.9.0
@@ -1328,6 +1363,8 @@ snapshots:
     transitivePeerDependencies:
       - ws
       - zod
+
+  '@rcrsr/rill@0.18.0': {}
 
   '@rcrsr/rill@0.9.0': {}
 

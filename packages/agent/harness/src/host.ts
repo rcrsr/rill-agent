@@ -21,6 +21,10 @@ import { createMetrics } from './core/metrics.js';
 import { registerSignalHandlers } from './core/signals.js';
 import { registerRoutes } from './routes.js';
 import type { RouteHost, SseEvent, SseStore } from './routes.js';
+import {
+  resolveDeferredExtensions,
+  resolveDeferredContext,
+} from './compose.js';
 import type {
   AgentHostOptions,
   LifecyclePhase,
@@ -147,7 +151,6 @@ export function createAgentHost(
       options?.maxConcurrentSessions ?? DEFAULTS.maxConcurrentSessions,
     responseTimeout: options?.responseTimeout ?? DEFAULTS.responseTimeout,
     logLevel: options?.logLevel ?? DEFAULTS.logLevel,
-    manifest: options?.manifest,
     registryEndpoint: options?.registryEndpoint,
     config: options?.config,
   };
@@ -170,6 +173,7 @@ export function createAgentHost(
 
   let phase: LifecyclePhase = 'ready';
   let httpServer: ServerType | undefined;
+  let cleanupSignals: (() => void) | undefined;
 
   // Registry lifecycle state
   let registryClient:
@@ -184,7 +188,15 @@ export function createAgentHost(
   };
 
   function pushSseEvent(sessionId: string, event: string, data: unknown): void {
-    const payload: SseEvent = { event, data: JSON.stringify(data) };
+    let serialized: string;
+    try {
+      serialized = JSON.stringify(data);
+    } catch {
+      // Non-serializable values (e.g. closures with circular definingScope)
+      // are silently dropped from SSE event data.
+      serialized = JSON.stringify({ _unserializable: true });
+    }
+    const payload: SseEvent = { event, data: serialized };
     const buf = sseStore.eventBuffers.get(sessionId) ?? [];
     buf.push(payload);
     sseStore.eventBuffers.set(sessionId, buf);
@@ -208,6 +220,23 @@ export function createAgentHost(
       throw new AgentHostError('host stopped', 'lifecycle');
     }
 
+    // ----------------------------------------------------------
+    // EC-7: Validate runtimeConfig has all required @{VAR} keys
+    // ----------------------------------------------------------
+    const runtimeConfig = input.runtimeConfig ?? {};
+    const runtimeVariables = composedAgent.runtimeVariables ?? [];
+    if (runtimeVariables.length > 0) {
+      const missing = runtimeVariables.filter((v) => !(v in runtimeConfig));
+      if (missing.length > 0) {
+        throw new AgentHostError(
+          `Missing required runtime variables: ${missing.join(', ')}`,
+          'init',
+          undefined,
+          { requiredVars: missing }
+        );
+      }
+    }
+
     sessionManager.prune();
 
     const correlationId = input.correlationId ?? randomUUID();
@@ -215,6 +244,73 @@ export function createAgentHost(
     // SessionManager.create() throws AgentHostError('session limit reached', 'capacity')
     const record = sessionManager.create(input, correlationId, agentName);
     const sessionId = record.id;
+
+    // ----------------------------------------------------------
+    // AC-6, AC-7: Resolve deferred extensions and context per request
+    // EC-8: Factory throw → AgentHostError with extensionAlias
+    // ----------------------------------------------------------
+    let deferredDispose: (() => Promise<void>) | undefined;
+    let deferredFunctions: Record<string, import('@rcrsr/rill').ApplicationCallable> = {};
+    let deferredContextValues: Record<string, unknown> = {};
+
+    const deferredExtensions = composedAgent.deferredExtensions ?? [];
+    const deferredContext = composedAgent.deferredContext ?? [];
+
+    if (deferredExtensions.length > 0 || deferredContext.length > 0) {
+      // Resolve deferred context values (no factories, just substitution)
+      if (deferredContext.length > 0) {
+        deferredContextValues = resolveDeferredContext(
+          deferredContext,
+          runtimeConfig
+        );
+      }
+
+      // Resolve deferred extension instances
+      if (deferredExtensions.length > 0) {
+        let resolved;
+        try {
+          resolved = await resolveDeferredExtensions(
+            deferredExtensions,
+            runtimeConfig
+          );
+        } catch (err) {
+          // EC-8: Wrap with extensionAlias if we can identify it
+          if (err instanceof AgentHostError) {
+            // Extract the mount alias from the message if present
+            const match =
+              /^Deferred extension (\S+) failed to initialize:/.exec(
+                err.message
+              );
+            const alias = match?.[1];
+            if (alias !== undefined) {
+              const cause = err.cause ?? err;
+              throw new AgentHostError(err.message, 'init', cause, {
+                extensionAlias: alias,
+              });
+            }
+          }
+          throw err;
+        }
+        deferredDispose = resolved.dispose;
+
+        // Hoist resolved extension functions into the session context
+        for (const [mountAlias, instance] of Object.entries(
+          resolved.extensions
+        )) {
+          for (const [fnName, fn] of Object.entries(instance)) {
+            if (
+              fnName === 'dispose' ||
+              fnName === 'suspend' ||
+              fnName === 'restore'
+            ) {
+              continue;
+            }
+            deferredFunctions[`${mountAlias}::${fnName}`] =
+              fn as import('@rcrsr/rill').ApplicationCallable;
+          }
+        }
+      }
+    }
 
     // Transition on first run
     if (phase === 'ready') {
@@ -293,12 +389,19 @@ export function createAgentHost(
         ...(input.timeout !== undefined && {
           timeoutDeadline: String(Date.now() + input.timeout),
         }),
+        // AC-7: Merge resolved deferred context values into metadata
+        ...deferredContextValues,
       },
     });
 
     // Override the builtin-only functions map with the full composedAgent
     // functions map (host extensions included).
     for (const [name, fn] of baseContext.functions) {
+      sessionContext.functions.set(name, fn);
+    }
+
+    // AC-6: Merge resolved deferred extension functions into session context
+    for (const [name, fn] of Object.entries(deferredFunctions)) {
       sessionContext.functions.set(name, fn);
     }
 
@@ -309,107 +412,116 @@ export function createAgentHost(
     let resolved = false;
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
-    const executePromise = execute(composedAgent.ast, sessionContext).then(
-      (result) => {
-        const durationMs = Date.now() - executionStart;
-        metrics.executionDurationSeconds
-          .labels({ agent: agentName })
-          .observe(durationMs / 1000);
+    // AC-6: Dispose deferred extensions after execution completes (try/finally).
+    // This covers both immediate completion and background execution after timeout.
+    const executePromise = execute(composedAgent.ast, sessionContext)
+      .then(
+        (result) => {
+          const durationMs = Date.now() - executionStart;
+          metrics.executionDurationSeconds
+            .labels({ agent: agentName })
+            .observe(durationMs / 1000);
 
-        record.state = 'completed';
-        record.durationMs = durationMs;
-        record.result = result.result;
-        record.variables = Object.fromEntries(sessionContext.variables);
+          record.state = 'completed';
+          record.durationMs = durationMs;
+          record.result = result.result;
+          record.variables = Object.fromEntries(sessionContext.variables);
 
-        metrics.sessionsActive.labels({ agent: agentName }).dec();
-        metrics.sessionsTotal
-          .labels({
-            state: 'completed',
-            trigger:
-              typeof input.trigger === 'object'
-                ? input.trigger.type
-                : (input.trigger ?? 'api'),
-            agent: agentName,
-          })
-          .inc();
+          metrics.sessionsActive.labels({ agent: agentName }).dec();
+          metrics.sessionsTotal
+            .labels({
+              state: 'completed',
+              trigger:
+                typeof input.trigger === 'object'
+                  ? input.trigger.type
+                  : (input.trigger ?? 'api'),
+              agent: agentName,
+            })
+            .inc();
 
-        pushSseEvent(sessionId, 'done', {
-          sessionId,
-          state: 'completed',
-          result: result.result,
-          durationMs,
-        });
-
-        // Deliver callback if specified
-        if (input.callback !== undefined) {
-          const response: RunResponse = {
+          pushSseEvent(sessionId, 'done', {
             sessionId,
-            correlationId,
             state: 'completed',
             result: result.result,
             durationMs,
-          };
-          void deliverCallback(input.callback, response, record);
-        }
+          });
 
-        return {
-          sessionId,
-          correlationId,
-          state: 'completed' as const,
-          result: result.result,
-          durationMs,
-        };
-      },
-      (err: unknown) => {
-        const durationMs = Date.now() - executionStart;
-        metrics.executionDurationSeconds
-          .labels({ agent: agentName })
-          .observe(durationMs / 1000);
+          // Deliver callback if specified
+          if (input.callback !== undefined) {
+            const response: RunResponse = {
+              sessionId,
+              correlationId,
+              state: 'completed',
+              result: result.result,
+              durationMs,
+            };
+            void deliverCallback(input.callback, response, record);
+          }
 
-        record.state = 'failed';
-        record.durationMs = durationMs;
-        record.error = err instanceof Error ? err.message : String(err);
-
-        console.error(`[host] session ${sessionId} failed: ${record.error}`);
-
-        metrics.sessionsActive.labels({ agent: agentName }).dec();
-        metrics.sessionsTotal
-          .labels({
-            state: 'failed',
-            trigger:
-              typeof input.trigger === 'object'
-                ? input.trigger.type
-                : (input.trigger ?? 'api'),
-            agent: agentName,
-          })
-          .inc();
-
-        pushSseEvent(sessionId, 'done', {
-          sessionId,
-          state: 'failed',
-          error: record.error,
-          durationMs,
-        });
-
-        // Deliver callback if specified
-        if (input.callback !== undefined) {
-          const response: RunResponse = {
+          return {
             sessionId,
             correlationId,
-            state: 'failed',
+            state: 'completed' as const,
+            result: result.result,
             durationMs,
           };
-          void deliverCallback(input.callback, response, record);
-        }
+        },
+        (err: unknown) => {
+          const durationMs = Date.now() - executionStart;
+          metrics.executionDurationSeconds
+            .labels({ agent: agentName })
+            .observe(durationMs / 1000);
 
-        return {
-          sessionId,
-          correlationId,
-          state: 'failed' as const,
-          durationMs,
-        };
-      }
-    );
+          record.state = 'failed';
+          record.durationMs = durationMs;
+          record.error = err instanceof Error ? err.message : String(err);
+
+          console.error(`[host] session ${sessionId} failed: ${record.error}`);
+
+          metrics.sessionsActive.labels({ agent: agentName }).dec();
+          metrics.sessionsTotal
+            .labels({
+              state: 'failed',
+              trigger:
+                typeof input.trigger === 'object'
+                  ? input.trigger.type
+                  : (input.trigger ?? 'api'),
+              agent: agentName,
+            })
+            .inc();
+
+          pushSseEvent(sessionId, 'done', {
+            sessionId,
+            state: 'failed',
+            error: record.error,
+            durationMs,
+          });
+
+          // Deliver callback if specified
+          if (input.callback !== undefined) {
+            const response: RunResponse = {
+              sessionId,
+              correlationId,
+              state: 'failed',
+              durationMs,
+            };
+            void deliverCallback(input.callback, response, record);
+          }
+
+          return {
+            sessionId,
+            correlationId,
+            state: 'failed' as const,
+            durationMs,
+          };
+        }
+      )
+      .finally(() => {
+        // AC-6: Dispose deferred extensions after execution completes
+        if (deferredDispose !== undefined) {
+          void deferredDispose();
+        }
+      });
 
     const timeoutPromise = new Promise<RunResponse>((resolve) => {
       timeoutHandle = setTimeout(() => {
@@ -486,6 +598,13 @@ export function createAgentHost(
       if (phase === 'stopped') {
         // Idempotent — no-op
         return;
+      }
+
+      // Remove SIGTERM/SIGINT listeners to prevent listener leak across tests
+      // and repeated stop() calls.
+      if (cleanupSignals !== undefined) {
+        cleanupSignals();
+        cleanupSignals = undefined;
       }
 
       const agentNames = Array.from(agentsMap.keys()).join(', ');
@@ -677,7 +796,7 @@ export function createAgentHost(
       // ----------------------------------------------------------
       app.all('/:agentName/*', (c) => c.json({ error: 'not_found' }, 404));
 
-      registerSignalHandlers(host, cfg.drainTimeout);
+      cleanupSignals = registerSignalHandlers(host, cfg.drainTimeout);
 
       await new Promise<void>((resolve, reject) => {
         httpServer = serve({ fetch: app.fetch, port: listenPort }, () => {

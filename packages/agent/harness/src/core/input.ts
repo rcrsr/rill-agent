@@ -5,7 +5,7 @@
  * can reuse the same parameter validation and default-injection logic.
  */
 
-import type { RillStructuralType, CallableParam } from '@rcrsr/rill';
+import type { TypeStructure, RillParam } from '@rcrsr/rill';
 import {
   type InputSchema,
   structuralTypeToInputSchema,
@@ -146,13 +146,13 @@ export function injectDefaults(
 }
 
 /**
- * Validates params against a RillStructuralType by converting to InputSchema first.
+ * Validates params against a TypeStructure by converting to InputSchema first.
  * Delegates to structuralTypeToInputSchema() then validateInputParams().
  */
 export function validateInputParamsFromShape(
   params: Record<string, unknown> | undefined,
-  type: RillStructuralType,
-  callableParams: CallableParam[]
+  type: TypeStructure,
+  callableParams: RillParam[]
 ): InputValidationIssue[] {
   const inputSchema = structuralTypeToInputSchema(type, callableParams);
   return validateInputParams(params, inputSchema);

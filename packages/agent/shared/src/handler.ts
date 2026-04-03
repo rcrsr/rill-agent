@@ -19,6 +19,8 @@ export interface RunRequest {
         readonly agentName: string;
         readonly sessionId: string;
       };
+  /** Per-run values for @{VAR} declarations; absent when agent has no @{VAR} declarations. */
+  readonly runtimeConfig?: Record<string, string> | undefined;
 }
 
 /**

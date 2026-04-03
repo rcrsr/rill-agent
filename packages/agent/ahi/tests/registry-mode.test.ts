@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import type { RillValue, HostFunctionDefinition } from '@rcrsr/rill';
+import type { RillValue, ApplicationCallable } from '@rcrsr/rill';
 import type { ResolvedAgent } from '@rcrsr/rill-agent-registry';
 
 // ============================================================
@@ -128,8 +128,8 @@ async function callAhi(
   args: RillValue[] = [],
   metadata?: Record<string, string>
 ): Promise<RillValue> {
-  const fnDef = (ext as Record<string, HostFunctionDefinition>)[agentName];
-  return fnDef.fn(args, { metadata: metadata ?? makeCtx().metadata });
+  const fnDef = (ext as Record<string, ApplicationCallable>)[agentName]!;
+  return fnDef.fn(args as unknown as Record<string, RillValue>, { metadata: metadata ?? makeCtx().metadata });
 }
 
 // ============================================================
@@ -313,7 +313,7 @@ describe('AHI registry mode', () => {
 
       expect('parser' in ext).toBe(true);
       expect(
-        typeof (ext as Record<string, HostFunctionDefinition>)['parser']!.fn
+        typeof (ext as Record<string, ApplicationCallable>)['parser']!.fn
       ).toBe('function');
     });
   });

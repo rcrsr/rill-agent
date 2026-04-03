@@ -94,7 +94,7 @@ describe('loadConfig — inline JSON', () => {
     expect(result).toEqual({});
   });
 
-  it('retains literal ${VAR} in inline JSON when env var is unset [AC-20]', () => {
+  it('throws when inline JSON references an unset env var [AC-20]', () => {
     // Ensure the variable is not set
     const varName = 'RILL_TEST_UNSET_VAR_XYZ';
     delete process.env[varName];
@@ -103,9 +103,8 @@ describe('loadConfig — inline JSON', () => {
     const placeholder = '${' + varName + '}';
     const inlineJson = '{"app":{"name":"' + placeholder + '"}}';
 
-    const result = loadConfig(inlineJson);
-
-    expect(result).toEqual({ app: { name: placeholder } });
+    // parseConfig throws ConfigEnvError when referenced env vars are absent
+    expect(() => loadConfig(inlineJson, {})).toThrow();
   });
 
   it('passes through non-string values unchanged in inline JSON [IR-7]', () => {
@@ -116,6 +115,17 @@ describe('loadConfig — inline JSON', () => {
     expect(result['server']?.['port']).toBe(8080);
     expect(result['server']?.['debug']).toBe(true);
     expect(result['server']?.['meta']).toBeNull();
+  });
+
+  // AC-39: explicit env parameter overrides process.env for interpolation
+  it('uses explicit env parameter for interpolation instead of process.env [AC-39]', () => {
+    const placeholder = '${' + 'MY_EXPLICIT_VAR' + '}';
+    const inlineJson = '{"svc":{"url":"' + placeholder + '"}}';
+
+    // Pass env explicitly — process.env is not consulted
+    const result = loadConfig(inlineJson, { MY_EXPLICIT_VAR: 'http://example.com' });
+
+    expect(result).toEqual({ svc: { url: 'http://example.com' } });
   });
 });
 

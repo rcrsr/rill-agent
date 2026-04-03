@@ -13,6 +13,7 @@
     "check": "pnpm run build && pnpm run test && pnpm run lint"
   },
   "dependencies": {
+    "@rcrsr/rill-config": "^0.18.0",
     "@rcrsr/rill-agent-shared": "workspace:^",
     "@rcrsr/rill-agent-harness": "workspace:^",
     "@rcrsr/rill-agent-bundle": "workspace:^",

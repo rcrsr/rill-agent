@@ -1,5 +1,4 @@
 import type {
-  AgentManifest,
   AgentSkill,
   InputSchema,
   OutputSchema,
@@ -31,6 +30,22 @@ export interface AgentCard {
   readonly defaultOutputModes: readonly string[];
   readonly input?: InputSchema | undefined;
   readonly output?: OutputSchema | undefined;
+  readonly runtimeVariables: readonly string[];
+}
+
+/**
+ * Input structure for card generation from handler introspection data.
+ * Replaces AgentManifest as the parameter type after migration.
+ */
+export interface AgentCardInput {
+  readonly name: string;
+  readonly version: string;
+  readonly description?: string | undefined;
+  readonly skills?: AgentSkill[] | undefined;
+  readonly deploy?: { port?: number | undefined; healthPath?: string | undefined } | undefined;
+  readonly input?: InputSchema | undefined;
+  readonly output?: OutputSchema | undefined;
+  readonly runtimeVariables: readonly string[];
 }
 
 // ============================================================
@@ -38,30 +53,30 @@ export interface AgentCard {
 // ============================================================
 
 /**
- * Produces an A2A-compliant AgentCard from a validated manifest.
+ * Produces an A2A-compliant AgentCard from handler introspection data.
  *
- * Pure function — no I/O, no side effects, does not throw for any valid
- * AgentManifest. Call validateManifest() before calling this function.
+ * Pure function — no I/O, no side effects.
  *
- * @param manifest - Validated agent manifest
+ * @param input - Handler introspection data
  * @returns A2A-compliant AgentCard
  */
-export function generateAgentCard(manifest: AgentManifest): AgentCard {
+export function generateAgentCard(input: AgentCardInput): AgentCard {
   const url =
-    manifest.deploy?.port !== undefined
-      ? `http://localhost:${manifest.deploy.port}`
+    input.deploy?.port !== undefined
+      ? `http://localhost:${input.deploy.port}`
       : '';
 
   return {
-    name: manifest.name,
-    description: manifest.description ?? '',
-    version: manifest.version,
+    name: input.name,
+    description: input.description ?? '',
+    version: input.version,
     url,
     capabilities: { streaming: false, pushNotifications: false },
-    skills: manifest.skills ?? [],
+    skills: input.skills ?? [],
     defaultInputModes: ['application/json'],
     defaultOutputModes: ['application/json'],
-    ...(manifest.input !== undefined ? { input: manifest.input } : {}),
-    ...(manifest.output !== undefined ? { output: manifest.output } : {}),
+    runtimeVariables: input.runtimeVariables,
+    ...(input.input !== undefined ? { input: input.input } : {}),
+    ...(input.output !== undefined ? { output: input.output } : {}),
   };
 }

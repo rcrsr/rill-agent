@@ -491,15 +491,15 @@ describe('validateInputParamsFromShape', () => {
           {
             kind: 'closure',
             params: [
-              ['fn', { kind: 'closure', params: [], ret: { kind: 'any' } }],
+              { name: 'fn', type: { kind: 'closure', params: [], ret: { kind: 'any' } } },
             ],
             ret: { kind: 'any' },
           },
           [
             {
               name: 'fn',
-              typeName: 'closure',
-              defaultValue: null,
+              type: { kind: 'closure', params: [], ret: { kind: 'any' } },
+              defaultValue: undefined,
               annotations: {},
             },
           ]
@@ -518,14 +518,14 @@ describe('validateInputParamsFromShape', () => {
           { t: 'value' },
           {
             kind: 'closure',
-            params: [['t', { kind: 'tuple', elements: [] }]],
+            params: [{ name: 't', type: { kind: 'tuple', elements: [] } }],
             ret: { kind: 'any' },
           },
           [
             {
               name: 't',
-              typeName: 'tuple',
-              defaultValue: null,
+              type: { kind: 'tuple', elements: [] },
+              defaultValue: undefined,
               annotations: {},
             },
           ]
@@ -542,14 +542,14 @@ describe('validateInputParamsFromShape', () => {
         { name: 'Alice' },
         {
           kind: 'closure',
-          params: [['name', { kind: 'primitive', name: 'string' }]],
+          params: [{ name: 'name', type: { kind: 'string' } }],
           ret: { kind: 'any' },
         },
         [
           {
             name: 'name',
-            typeName: 'string',
-            defaultValue: null,
+            type: { kind: 'string' },
+            defaultValue: undefined,
             annotations: {},
           },
         ]

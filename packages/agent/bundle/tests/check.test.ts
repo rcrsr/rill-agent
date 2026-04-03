@@ -15,21 +15,10 @@ const MINIMAL_BUNDLE_MANIFEST = {
   built: '2026-01-01T00:00:00.000Z',
   checksum: 'sha256:abc123',
   rillVersion: '0.8.6',
+  configVersion: '2',
   agents: {
     'test-agent': {
-      entry: 'entry.rill',
-      modules: {},
-      extensions: {},
-      card: {
-        name: 'test-agent',
-        description: '',
-        version: '0.1.0',
-        url: '',
-        capabilities: { streaming: false, pushNotifications: false },
-        skills: [],
-        defaultInputModes: ['application/json'],
-        defaultOutputModes: ['application/json'],
-      },
+      configPath: 'agents/test-agent/rill-config.json',
     },
   },
 };
@@ -47,11 +36,13 @@ async function makeTmpDir(): Promise<string> {
 }
 
 /**
- * Creates a temp dir with a valid bundle.json and returns the dir path.
+ * Creates a temp dir with a valid bundle.json and stub agent rill-config.json.
+ * Returns the dir path.
  */
 async function makeBundleDir(
   overrides: Partial<typeof MINIMAL_BUNDLE_MANIFEST> = {}
 ): Promise<string> {
+  const { mkdir } = await import('node:fs/promises');
   const dir = await makeTmpDir();
   const manifest = { ...MINIMAL_BUNDLE_MANIFEST, ...overrides };
   await writeFile(
@@ -59,6 +50,16 @@ async function makeBundleDir(
     JSON.stringify(manifest, null, 2),
     'utf-8'
   );
+  // Create stub rill-config.json for each agent at its configPath
+  for (const agentEntry of Object.values(manifest.agents)) {
+    const configAbsPath = path.join(dir, agentEntry.configPath);
+    await mkdir(path.dirname(configAbsPath), { recursive: true });
+    await writeFile(
+      configAbsPath,
+      JSON.stringify({ name: 'test-agent', version: '0.1.0', main: 'entry.rill:run' }, null, 2),
+      'utf-8'
+    );
+  }
   return dir;
 }
 

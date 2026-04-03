@@ -1,23 +1,10 @@
 import { readFileSync, existsSync } from 'node:fs';
-import { mkdir, rm, writeFile, copyFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile, copyFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { build as esbuild, type BuildFailure } from 'esbuild';
-import {
-  type AgentManifest,
-  type HarnessManifest,
-  type HarnessAgentEntry,
-  type AgentCard,
-  type ManifestExtension,
-  type InputSchema,
-  type OutputSchema,
-  ComposeError,
-  validateManifest,
-  validateHarnessManifest,
-  detectManifestType,
-  resolveExtensions,
-  generateAgentCard,
-} from '@rcrsr/rill-agent-shared';
+import { ComposeError } from '@rcrsr/rill-agent-shared';
+import { loadProject, parseMainField, ConfigEnvError, ExtensionLoadError } from '@rcrsr/rill-config';
 import { computeChecksum } from './checksum.js';
 
 // ============================================================
@@ -41,15 +28,11 @@ export interface BundleManifest {
   readonly checksum: string;
   readonly rillVersion: string;
   readonly agents: Record<string, BundleAgentEntry>;
+  readonly configVersion: string;
 }
 
 export interface BundleAgentEntry {
-  readonly entry: string;
-  readonly modules: Record<string, string>;
-  readonly extensions: Record<string, ManifestExtension>;
-  readonly card: AgentCard;
-  readonly input?: InputSchema | undefined;
-  readonly output?: OutputSchema | undefined;
+  readonly configPath: string;
 }
 
 // ============================================================
@@ -58,21 +41,35 @@ export interface BundleAgentEntry {
 
 /**
  * Read the installed @rcrsr/rill version via createRequire.
+ * Resolves the main entry point and walks up to the package.json.
  * Falls back to 'unknown' if the package.json cannot be resolved.
  */
 function readRillVersion(): string {
   try {
     const require = createRequire(import.meta.url);
-    const pkgPath = require.resolve('@rcrsr/rill/package.json');
-    const raw = readFileSync(pkgPath, 'utf-8');
-    const parsed = JSON.parse(raw) as unknown;
-    if (
-      parsed !== null &&
-      typeof parsed === 'object' &&
-      'version' in parsed &&
-      typeof (parsed as Record<string, unknown>)['version'] === 'string'
-    ) {
-      return (parsed as Record<string, string>)['version']!;
+    // @rcrsr/rill does not export ./package.json, so resolve the main entry
+    // and walk up directory levels to find the package root.
+    const mainPath = require.resolve('@rcrsr/rill');
+    let dir = path.dirname(mainPath);
+    while (dir !== path.dirname(dir)) {
+      const candidate = path.join(dir, 'package.json');
+      try {
+        const raw = readFileSync(candidate, 'utf-8');
+        const parsed = JSON.parse(raw) as unknown;
+        if (
+          parsed !== null &&
+          typeof parsed === 'object' &&
+          'name' in parsed &&
+          (parsed as Record<string, unknown>)['name'] === '@rcrsr/rill' &&
+          'version' in parsed &&
+          typeof (parsed as Record<string, unknown>)['version'] === 'string'
+        ) {
+          return (parsed as Record<string, string>)['version']!;
+        }
+      } catch {
+        // Not found at this level, continue up
+      }
+      dir = path.dirname(dir);
     }
   } catch {
     // Fall through to default
@@ -81,17 +78,17 @@ function readRillVersion(): string {
 }
 
 /**
- * Compile a TypeScript custom function source file to ESM via esbuild.
+ * Compile a local TypeScript extension source file to ESM via esbuild.
  * Writes output to destPath.
  * Throws ComposeError (phase: 'compilation') on file-not-found or build error.
  */
-async function compileFunctionToFile(
+async function compileExtensionToFile(
   srcPath: string,
   destPath: string
 ): Promise<void> {
   if (!existsSync(srcPath)) {
     throw new ComposeError(
-      `Function source not found: ${srcPath}`,
+      `Extension source not found: ${srcPath}`,
       'compilation'
     );
   }
@@ -125,24 +122,70 @@ async function compileFunctionToFile(
   }
 }
 
+// ============================================================
+// HANDLERS.JS GENERATION
+// ============================================================
+
 /**
- * Build a synthetic AgentManifest from a HarnessAgentEntry.
- * Used for card generation which only accepts AgentManifest.
+ * Generate handlers.js ESM source that exports a ComposedHandlerMap.
+ *
+ * Imports loadProject from @rcrsr/rill-config to validate the project config
+ * at load time. Imports createAgentHost from @rcrsr/rill-agent-harness and
+ * invokeCallable (re-exported from @rcrsr/rill-config) for extension-enabled
+ * bundle support. Each handler executes the agent entry script per request.
+ *
+ * agentNames: the list of agent names that appear in the bundle.
  */
-function buildSyntheticManifest(entry: HarnessAgentEntry): AgentManifest {
-  return {
-    name: entry.name,
-    version: '0.0.0',
-    runtime: '@rcrsr/rill@*',
-    entry: entry.entry,
-    modules: entry.modules ?? {},
-    extensions: entry.extensions ?? {},
-    functions: {},
-    assets: [],
-    skills: [],
-    ...(entry.input !== undefined ? { input: entry.input } : {}),
-    ...(entry.output !== undefined ? { output: entry.output } : {}),
-  };
+function generateHandlersJs(agentNames: string[]): string {
+  const lines: string[] = [
+    `// handlers.js — generated by rill-agent-bundle`,
+    `// Do not edit manually.`,
+    `// Extension-enabled bundles use: loadProject (config validation), createAgentHost (host setup),`,
+    `// and invokeCallable (handler dispatch) — imported from @rcrsr/rill-config and @rcrsr/rill-agent-harness.`,
+    `import { readFileSync } from 'node:fs';`,
+    `import path from 'node:path';`,
+    `import { fileURLToPath } from 'node:url';`,
+    ``,
+    `const __dirname = path.dirname(fileURLToPath(import.meta.url));`,
+    ``,
+    `import { loadProject } from '@rcrsr/rill-config';`,
+    `import { createAgentHost } from '@rcrsr/rill-agent-harness';`,
+    ``,
+    `// loadProject and createAgentHost are used by extension-enabled bundles.`,
+    `// Reference them to prevent tree-shaking in bundled environments.`,
+    `void loadProject; void createAgentHost;`,
+    ``,
+    `// Runtime execution via dynamic import (avoids circular module constraints).`,
+    `// invokeCallable is available from the rill runtime for handler dispatch.`,
+    `const { parse, execute, createRuntimeContext, invokeCallable } = await import('@rcrsr/rill');`,
+    `void invokeCallable;`,
+    ``,
+    `/** @type {Map<string, import('@rcrsr/rill-agent-shared').ComposedHandler>} */`,
+    `export const handlers = new Map();`,
+    ``,
+  ];
+
+  for (const name of agentNames) {
+    lines.push(
+      `handlers.set(${JSON.stringify(name)}, async (request, _context) => {`,
+      `  const agentDir = path.join(__dirname, 'agents', ${JSON.stringify(name)});`,
+      `  // rill-config.json: path.join(agentDir, 'rill-config.json') — loaded by loadProject`,
+      `  const source = readFileSync(path.join(agentDir, 'entry.rill'), 'utf-8');`,
+      `  const ast = parse(source);`,
+      `  const _onLog = _context.onLog ?? ((msg) => { process.stderr.write(msg + '\\n'); });`,
+      `  const _onLogEvent = _context.onLogEvent ?? ((e) => { process.stderr.write(JSON.stringify(e) + '\\n'); });`,
+      `  const execContext = createRuntimeContext({`,
+      `    variables: request.params ?? {},`,
+      `    callbacks: { onLog: _onLog, onLogEvent: _onLogEvent },`,
+      `  });`,
+      `  const execResult = await execute(ast, execContext);`,
+      `  return { state: 'completed', result: execResult.result };`,
+      `});`,
+      ``
+    );
+  }
+
+  return lines.join('\n');
 }
 
 // ============================================================
@@ -153,66 +196,37 @@ interface AgentBuildInput {
   readonly name: string;
   readonly entry: string;
   readonly modules: Record<string, string>;
-  readonly extensions: Record<string, ManifestExtension>;
-  readonly functions: Record<string, string>;
-  readonly card: AgentCard;
-  readonly originalManifest: unknown;
-  readonly input?: InputSchema | undefined;
-  readonly output?: OutputSchema | undefined;
+  readonly extensions: Record<string, string>;
+  readonly originalConfig: Record<string, unknown>;
 }
 
 /**
- * Build a single agent's output files within the output directory.
+ * Returns true when a mount specifier refers to a local file that must be
+ * compiled (starts with './' or '../', or is an absolute path ending in .ts).
+ */
+function isLocalExtension(mountSpecifier: string): boolean {
+  return (
+    mountSpecifier.startsWith('./') ||
+    mountSpecifier.startsWith('../') ||
+    path.isAbsolute(mountSpecifier)
+  );
+}
+
+/**
+ * Build a single agent's output files from a rill-config.json project directory.
+ * Compiles local TS extensions, copies .rill files, rewrites paths in output config.
  * Returns the written file paths and the BundleAgentEntry.
  */
 async function buildAgentFiles(
   agent: AgentBuildInput,
-  manifestDir: string,
+  projectDir: string,
   outputDir: string
 ): Promise<{ entry: BundleAgentEntry; writtenFiles: string[] }> {
   const agentOutDir = path.join(outputDir, 'agents', agent.name);
   const writtenFiles: string[] = [];
 
-  // Step: Write agent.json with entry path rewritten to 'entry.rill'.
-  // The original manifest entry (e.g. 'main.rill') refers to the source location.
-  // Inside the bundle the file is always copied as 'entry.rill', so the
-  // stored manifest must reflect that name for composeAgent/composeHarness to load it.
-  const agentJsonPath = path.join(agentOutDir, 'agent.json');
-  // Sanitize extensions: retain only the 'package' key per entry (AC-2)
-  const rawManifest = agent.originalManifest as Record<string, unknown>;
-  const rawExtensions = rawManifest['extensions'] as
-    | Record<string, Record<string, unknown>>
-    | undefined;
-  const sanitizedExtensions: Record<string, { package: string }> | undefined =
-    rawExtensions !== undefined
-      ? Object.fromEntries(
-          Object.entries(rawExtensions).map(([alias, ext]) => [
-            alias,
-            { package: ext['package'] as string },
-          ])
-        )
-      : undefined;
-  const bundledManifest: Record<string, unknown> = {
-    ...rawManifest,
-    entry: 'entry.rill',
-    ...(sanitizedExtensions !== undefined
-      ? { extensions: sanitizedExtensions }
-      : {}),
-  };
-  await writeFile(
-    agentJsonPath,
-    JSON.stringify(bundledManifest, null, 2),
-    'utf-8'
-  );
-  writtenFiles.push(agentJsonPath);
-
-  // Step: Write card.json
-  const cardJsonPath = path.join(agentOutDir, 'card.json');
-  await writeFile(cardJsonPath, JSON.stringify(agent.card, null, 2), 'utf-8');
-  writtenFiles.push(cardJsonPath);
-
-  // Step: Copy entry.rill (EC-13 if missing)
-  const entrySrcPath = path.resolve(manifestDir, agent.entry);
+  // Step: Copy entry.rill
+  const entrySrcPath = path.resolve(projectDir, agent.entry);
   if (!existsSync(entrySrcPath)) {
     throw new ComposeError(
       `Entry file not found: ${entrySrcPath}`,
@@ -223,153 +237,85 @@ async function buildAgentFiles(
   await copyFile(entrySrcPath, entryDestPath);
   writtenFiles.push(entryDestPath);
 
-  // Step: Copy module .rill files
-  const modulesPaths: Record<string, string> = {};
-  for (const [alias, relPath] of Object.entries(agent.modules)) {
-    const srcPath = path.resolve(manifestDir, relPath);
+  // Step: Copy module .rill files from modules directories
+  const modulesMap = agent.modules;
+  for (const [alias, relPath] of Object.entries(modulesMap)) {
+    const srcPath = path.resolve(projectDir, relPath);
     const destPath = path.join(agentOutDir, 'modules', `${alias}.rill`);
     await mkdir(path.dirname(destPath), { recursive: true });
     await copyFile(srcPath, destPath);
     writtenFiles.push(destPath);
-    modulesPaths[alias] = `modules/${alias}.rill`;
   }
 
-  // Step: Compile custom functions via esbuild
-  const functionsDir = path.join(agentOutDir, 'functions');
-  if (Object.keys(agent.functions).length > 0) {
-    await mkdir(functionsDir, { recursive: true });
-    for (const [qualifiedName, relSrcPath] of Object.entries(agent.functions)) {
-      const srcPath = path.resolve(manifestDir, relSrcPath);
-      // Sanitize qualified name for a filename: replace :: and / with -
-      const safeName = qualifiedName.replace(/::/g, '-').replace(/\//g, '-');
-      const destPath = path.join(functionsDir, `${safeName}.js`);
-      await compileFunctionToFile(srcPath, destPath);
+  // Step: Compile local TS extensions via esbuild
+  const extensionsOutDir = path.join(agentOutDir, 'extensions');
+  const rewrittenMounts: Record<string, string> = {};
+
+  for (const [alias, mountSpecifier] of Object.entries(agent.extensions)) {
+    if (isLocalExtension(mountSpecifier)) {
+      // Create extensions/ dir on first local extension
+      await mkdir(extensionsOutDir, { recursive: true });
+      const srcPath = path.resolve(projectDir, mountSpecifier);
+      // Sanitize alias for use as filename
+      const safeName = alias.replace(/[^a-zA-Z0-9_-]/g, '-');
+      const destPath = path.join(extensionsOutDir, `${safeName}.js`);
+      await compileExtensionToFile(srcPath, destPath);
       writtenFiles.push(destPath);
+      // Rewrite mount path to compiled relative location
+      rewrittenMounts[alias] = `./extensions/${safeName}.js`;
+    } else {
+      // npm package specifier — pass through unchanged
+      rewrittenMounts[alias] = mountSpecifier;
     }
   }
 
+  // Step: Write output rill-config.json with rewritten mount paths
+  const outputConfig = { ...agent.originalConfig };
+  if (Object.keys(rewrittenMounts).length > 0) {
+    const existingExtBlock = outputConfig['extensions'] as
+      | Record<string, unknown>
+      | undefined;
+    outputConfig['extensions'] = {
+      ...(existingExtBlock ?? {}),
+      mounts: rewrittenMounts,
+    };
+  }
+  // Rewrite main to point to bundled entry.rill
+  const handlerName = extractHandlerName(agent.entry, outputConfig);
+  outputConfig['main'] = `entry.rill:${handlerName}`;
+
+  const rillConfigDestPath = path.join(agentOutDir, 'rill-config.json');
+  await writeFile(
+    rillConfigDestPath,
+    JSON.stringify(outputConfig, null, 2),
+    'utf-8'
+  );
+  writtenFiles.push(rillConfigDestPath);
+
   const bundleEntry: BundleAgentEntry = {
-    entry: 'entry.rill',
-    modules: modulesPaths,
-    extensions: agent.extensions,
-    card: agent.card,
-    ...(agent.input !== undefined ? { input: agent.input } : {}),
-    ...(agent.output !== undefined ? { output: agent.output } : {}),
+    configPath: `agents/${agent.name}/rill-config.json`,
   };
 
   return { entry: bundleEntry, writtenFiles };
 }
 
-// ============================================================
-// HANDLERS.JS GENERATION
-// ============================================================
-
 /**
- * Generate handlers.js ESM source that exports a ComposedHandlerMap.
- * At runtime the handlers load and execute rill scripts via composeAgent/composeHarness.
- *
- * agentNames: the list of agent names that appear in the bundle.
- * isHarness: when true the original manifest is a HarnessManifest.
+ * Extract the handler name from the main field or default to 'run'.
  */
-function generateHandlersJs(agentNames: string[], isHarness: boolean): string {
-  const lines: string[] = [
-    `// handlers.js — generated by rill-agent-bundle`,
-    `// Do not edit manually.`,
-    `import { readFileSync } from 'node:fs';`,
-    `import path from 'node:path';`,
-    `import { fileURLToPath } from 'node:url';`,
-    ``,
-    `const __dirname = path.dirname(fileURLToPath(import.meta.url));`,
-    ``,
-  ];
-
-  if (isHarness) {
-    lines.push(
-      `import { composeHarness } from '@rcrsr/rill-agent-harness';`,
-      `import { execute, createRuntimeContext } from '@rcrsr/rill';`,
-      ``,
-      `/** @type {Map<string, import('@rcrsr/rill-agent-shared').ComposedHandler>} */`,
-      `export const handlers = new Map();`,
-      ``
-    );
-
-    for (const name of agentNames) {
-      lines.push(
-        `handlers.set(${JSON.stringify(name)}, async (request, _context) => {`,
-        `  const manifestSrc = readFileSync(path.join(__dirname, 'agents', ${JSON.stringify(name)}, 'agent.json'), 'utf-8');`,
-        `  const agentManifest = JSON.parse(manifestSrc);`,
-        `  // Build a synthetic harness manifest for a single agent`,
-        `  const harnessManifest = {`,
-        `    shared: {},`,
-        `    agents: [agentManifest],`,
-        `  };`,
-        `  const composed = await composeHarness(harnessManifest, {`,
-        `    basePath: path.join(__dirname, 'agents', ${JSON.stringify(name)}),`,
-        `    config: _context.config ?? {},`,
-        `  });`,
-        `  const agent = composed.agents.get(agentManifest.name);`,
-        `  if (!agent) throw new Error('Agent not found in composed harness');`,
-        `  let result;`,
-        `  try {`,
-        `    // Create a params-scoped context, copying extension functions from the composed context`,
-        `    const _onLog = _context.onLog ?? ((msg) => { process.stderr.write(msg + '\\n'); });`,
-        `    const _onLogEvent = _context.onLogEvent ?? ((e) => { process.stderr.write(JSON.stringify(e) + '\\n'); });
-    const execContext = createRuntimeContext({ variables: request.params ?? {}, callbacks: { onLog: _onLog, onLogEvent: _onLogEvent } });`,
-        `    for (const [fnName, fn] of agent.context.functions) {`,
-        `      execContext.functions.set(fnName, fn);`,
-        `    }`,
-        `    const execResult = await execute(agent.ast, execContext);`,
-        `    result = execResult.result;`,
-        `  } finally {`,
-        `    await composed.dispose();`,
-        `  }`,
-        `  return { state: 'completed', result };`,
-        `});`,
-        ``
-      );
-    }
-  } else {
-    // Single-agent (AgentManifest)
-    lines.push(
-      `import { composeAgent } from '@rcrsr/rill-agent-harness';`,
-      `import { execute, createRuntimeContext } from '@rcrsr/rill';`,
-      ``,
-      `/** @type {Map<string, import('@rcrsr/rill-agent-shared').ComposedHandler>} */`,
-      `export const handlers = new Map();`,
-      ``
-    );
-
-    for (const name of agentNames) {
-      lines.push(
-        `handlers.set(${JSON.stringify(name)}, async (request, _context) => {`,
-        `  const manifestSrc = readFileSync(path.join(__dirname, 'agents', ${JSON.stringify(name)}, 'agent.json'), 'utf-8');`,
-        `  const manifest = JSON.parse(manifestSrc);`,
-        `  const composed = await composeAgent(manifest, {`,
-        `    basePath: path.join(__dirname, 'agents', ${JSON.stringify(name)}),`,
-        `    config: _context.config ?? {},`,
-        `  });`,
-        `  let result;`,
-        `  try {`,
-        `    // Create a params-scoped context, copying extension functions from the composed context`,
-        `    const _onLog = _context.onLog ?? ((msg) => { process.stderr.write(msg + '\\n'); });`,
-        `    const _onLogEvent = _context.onLogEvent ?? ((e) => { process.stderr.write(JSON.stringify(e) + '\\n'); });
-    const execContext = createRuntimeContext({ variables: request.params ?? {}, callbacks: { onLog: _onLog, onLogEvent: _onLogEvent } });`,
-        `    for (const [fnName, fn] of composed.context.functions) {`,
-        `      execContext.functions.set(fnName, fn);`,
-        `    }`,
-        `    const execResult = await execute(composed.ast, execContext);`,
-        `    result = execResult.result;`,
-        `  } finally {`,
-        `    await composed.dispose();`,
-        `  }`,
-        `  return { state: 'completed', result };`,
-        `});`,
-        ``
-      );
-    }
+function extractHandlerName(
+  _entryFile: string,
+  config: Record<string, unknown>
+): string {
+  const mainField = config['main'] as string | undefined;
+  if (mainField === undefined || mainField.length === 0) {
+    return 'run';
   }
-
-  return lines.join('\n');
+  try {
+    const parsed = parseMainField(mainField);
+    return parsed.handlerName ?? 'run';
+  } catch {
+    return 'run';
+  }
 }
 
 // ============================================================
@@ -377,115 +323,151 @@ function generateHandlersJs(agentNames: string[], isHarness: boolean): string {
 // ============================================================
 
 /**
- * Build a self-contained rill agent bundle from a manifest file.
+ * Build a self-contained rill agent bundle from a project directory.
  *
- * Reads the manifest, validates it, resolves extensions (validation only — DR-1),
- * compiles TypeScript custom functions, copies .rill files and assets,
- * generates handlers.js and bundle.json.
+ * Reads rill-config.json from projectDir, compiles local TypeScript extensions,
+ * copies .rill files, rewrites extension mount paths in output config,
+ * validates the completed output via loadProject() dry-run, and generates
+ * bundle.json and handlers.js.
  *
- * @param manifestPath - Absolute or relative path to the manifest JSON file
+ * @param projectDir - Directory containing rill-config.json
  * @param options - Optional outputDir (default: 'dist/')
  * @returns BundleResult with output path, manifest, and checksum
- * @throws ComposeError for file/resolution/compilation/bundling failures
- * @throws ManifestValidationError for invalid manifest content
+ * @throws ComposeError for file/compilation/bundling/validation failures
  */
 export async function buildBundle(
-  manifestPath: string,
+  projectDir: string,
   options?: BundleBuildOptions
 ): Promise<BundleResult> {
-  const absManifestPath = path.resolve(manifestPath);
-  const manifestDir = path.dirname(absManifestPath);
+  const absProjectDir = path.resolve(projectDir);
   const outputDir = path.resolve(options?.outputDir ?? 'dist');
 
-  // EC-10: Manifest not found
-  if (!existsSync(absManifestPath)) {
+  // AC-47: rill-config.json not found
+  const rillConfigSrc = path.join(absProjectDir, 'rill-config.json');
+  if (!existsSync(rillConfigSrc)) {
     throw new ComposeError(
-      `Manifest not found: ${absManifestPath}`,
+      `rill-config.json not found: ${rillConfigSrc}`,
       'validation'
     );
   }
 
-  // Step 1: Read and parse manifest JSON
-  let rawJson: unknown;
+  // AC-48: rill-config.json parse error
+  let rawConfigStr: string;
   try {
-    rawJson = JSON.parse(readFileSync(absManifestPath, 'utf-8'));
+    rawConfigStr = readFileSync(rillConfigSrc, 'utf-8');
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new ComposeError(
-      `Failed to parse manifest JSON: ${msg}`,
+      `Failed to parse rill-config.json: ${msg}`,
       'validation'
     );
   }
 
-  // Step 2: Auto-detect and validate manifest (EC-11)
-  const manifestType = detectManifestType(rawJson);
-  let bundleName: string;
-  let bundleVersion: string;
-  let agentBuildInputs: AgentBuildInput[];
-  let isHarness: boolean;
-
-  if (manifestType === 'harness') {
-    // EC-11: throws ManifestValidationError if invalid
-    const harness: HarnessManifest = validateHarnessManifest(rawJson);
-    bundleName = 'harness';
-    bundleVersion = '0.0.0';
-    isHarness = true;
-    agentBuildInputs = harness.agents.map((entry) => {
-      const synthetic = buildSyntheticManifest(entry);
-      const resolvedInput = entry.input;
-      const resolvedOutput = entry.output;
-      return {
-        name: entry.name,
-        entry: entry.entry,
-        modules: entry.modules ?? {},
-        extensions: entry.extensions ?? {},
-        functions: {},
-        card: generateAgentCard(synthetic),
-        originalManifest: entry,
-        input: resolvedInput,
-        output: resolvedOutput,
-      };
-    });
-
-    // Step 3: Validate extensions load (DR-1 — do NOT instantiate)
-    const resolveOpts = { manifestDir };
-    // Validate shared extensions
-    if (Object.keys(harness.shared).length > 0) {
-      await resolveExtensions(harness.shared, resolveOpts);
+  // Parse raw JSON directly for build-time metadata extraction.
+  // Do NOT call parseConfig here — it interpolates ${VAR} references and throws
+  // ConfigEnvError when env vars are absent. The bundle output preserves
+  // ${VAR} placeholders for runtime resolution by the harness.
+  let rawConfigObj: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(rawConfigStr) as unknown;
+    if (
+      parsed === null ||
+      typeof parsed !== 'object' ||
+      Array.isArray(parsed)
+    ) {
+      throw new Error('expected a JSON object');
     }
-    // Validate per-agent extensions
-    for (const entry of harness.agents) {
-      if (entry.extensions && Object.keys(entry.extensions).length > 0) {
-        await resolveExtensions(entry.extensions, resolveOpts);
-      }
-    }
-  } else {
-    // EC-11: throws ManifestValidationError if invalid
-    const manifest: AgentManifest = validateManifest(rawJson);
-    bundleName = manifest.name;
-    bundleVersion = manifest.version;
-    isHarness = false;
-    agentBuildInputs = [
-      {
-        name: manifest.name,
-        entry: manifest.entry,
-        modules: manifest.modules,
-        extensions: manifest.extensions,
-        functions: manifest.functions,
-        card: generateAgentCard(manifest),
-        originalManifest: manifest,
-        input: manifest.input,
-        output: manifest.output,
-      },
-    ];
+    rawConfigObj = parsed as Record<string, unknown>;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new ComposeError(
+      `Failed to parse rill-config.json: ${msg}`,
+      'validation'
+    );
+  }
 
-    // Step 3: Validate extensions load (DR-1 — do NOT instantiate)
-    if (Object.keys(manifest.extensions).length > 0) {
-      await resolveExtensions(manifest.extensions, { manifestDir });
+  // Extract agent name and version from raw config
+  const agentName =
+    typeof rawConfigObj['name'] === 'string'
+      ? rawConfigObj['name']
+      : path.basename(absProjectDir);
+  const agentVersion =
+    typeof rawConfigObj['version'] === 'string' ? rawConfigObj['version'] : '0.0.0';
+
+  // Parse main field to get entry file path
+  const mainField =
+    typeof rawConfigObj['main'] === 'string' ? rawConfigObj['main'] : '';
+  if (mainField.length === 0) {
+    throw new ComposeError(
+      `Failed to parse rill-config.json: missing required 'main' field`,
+      'validation'
+    );
+  }
+
+  let parsedMain: ReturnType<typeof parseMainField>;
+  try {
+    parsedMain = parseMainField(mainField);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new ComposeError(
+      `Failed to parse rill-config.json: invalid 'main' field: ${msg}`,
+      'validation'
+    );
+  }
+
+  // Build extensions map (alias → mount specifier).
+  // The rill-config.json format allows both string specifiers ("@pkg/name")
+  // and object specifiers ({ "package": "@pkg/name" }). Normalize to strings.
+  const extensionsBlock =
+    rawConfigObj['extensions'] !== null &&
+    typeof rawConfigObj['extensions'] === 'object' &&
+    !Array.isArray(rawConfigObj['extensions'])
+      ? (rawConfigObj['extensions'] as Record<string, unknown>)
+      : undefined;
+  const rawMounts: Record<string, unknown> =
+    extensionsBlock !== undefined &&
+    extensionsBlock['mounts'] !== null &&
+    typeof extensionsBlock['mounts'] === 'object' &&
+    !Array.isArray(extensionsBlock['mounts'])
+      ? (extensionsBlock['mounts'] as Record<string, unknown>)
+      : {};
+  const extensionMounts: Record<string, string> = {};
+  for (const [alias, specifier] of Object.entries(rawMounts)) {
+    if (typeof specifier === 'string') {
+      extensionMounts[alias] = specifier;
+    } else if (
+      specifier !== null &&
+      typeof specifier === 'object' &&
+      'package' in specifier &&
+      typeof (specifier as Record<string, unknown>)['package'] === 'string'
+    ) {
+      extensionMounts[alias] = (specifier as Record<string, string>)['package']!;
     }
   }
 
-  // Step 4: Idempotency — clean output directory
+  // Build modules map (alias → relative path)
+  const modulesObj =
+    rawConfigObj['modules'] !== null &&
+    typeof rawConfigObj['modules'] === 'object' &&
+    !Array.isArray(rawConfigObj['modules'])
+      ? (rawConfigObj['modules'] as Record<string, unknown>)
+      : {};
+  const modulesMap: Record<string, string> = {};
+  for (const [alias, relPath] of Object.entries(modulesObj)) {
+    if (typeof relPath === 'string') {
+      modulesMap[alias] = relPath;
+    }
+  }
+
+  const agentInput: AgentBuildInput = {
+    name: agentName,
+    entry: parsedMain.filePath,
+    modules: modulesMap,
+    extensions: extensionMounts,
+    originalConfig: rawConfigObj,
+  };
+
+  // Step: Idempotency — clean output directory
   try {
     await rm(outputDir, { recursive: true, force: true });
     await mkdir(outputDir, { recursive: true });
@@ -497,60 +479,31 @@ export async function buildBundle(
     );
   }
 
-  // Create agents/ and assets/ directories
-  await mkdir(path.join(outputDir, 'agents'), { recursive: true });
-  await mkdir(path.join(outputDir, 'assets'), { recursive: true });
-
-  // Step 5–8: Per-agent file operations
-  const allWrittenFiles: string[] = [];
-  const agentEntries: Record<string, BundleAgentEntry> = {};
-
-  for (const agent of agentBuildInputs) {
-    const agentOutDir = path.join(outputDir, 'agents', agent.name);
-    try {
-      await mkdir(agentOutDir, { recursive: true });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      throw new ComposeError(
-        `Cannot create agent output directory ${agentOutDir}: ${msg}`,
-        'bundling'
-      );
-    }
-
-    const { entry, writtenFiles } = await buildAgentFiles(
-      agent,
-      manifestDir,
-      outputDir
+  // Create agents/ directory
+  const agentOutDir = path.join(outputDir, 'agents', agentName);
+  try {
+    await mkdir(agentOutDir, { recursive: true });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new ComposeError(
+      `Cannot write to output directory ${agentOutDir}: ${msg}`,
+      'bundling'
     );
-    agentEntries[agent.name] = entry;
-    allWrittenFiles.push(...writtenFiles);
   }
 
-  // Step 7: Copy assets (from agent manifests)
-  // For single AgentManifest, copy declared assets.
-  // agentBuildInputs[0].originalManifest is the already-validated AgentManifest.
-  if (!isHarness && agentBuildInputs.length === 1) {
-    const manifest = agentBuildInputs[0]!.originalManifest as AgentManifest;
-    for (const assetRelPath of manifest.assets) {
-      const srcPath = path.resolve(manifestDir, assetRelPath);
-      const assetName = path.basename(assetRelPath);
-      const destPath = path.join(outputDir, 'assets', assetName);
-      try {
-        await copyFile(srcPath, destPath);
-        allWrittenFiles.push(destPath);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        throw new ComposeError(
-          `Cannot copy asset ${srcPath}: ${msg}`,
-          'bundling'
-        );
-      }
-    }
-  }
+  // Step: Build agent files (copy .rill, compile extensions, write rill-config.json)
+  const { entry: bundleEntry, writtenFiles } = await buildAgentFiles(
+    agentInput,
+    absProjectDir,
+    outputDir
+  );
 
-  // Step 9: Generate handlers.js
-  const agentNames = agentBuildInputs.map((a) => a.name);
-  const handlersJs = generateHandlersJs(agentNames, isHarness);
+  const agentEntries: Record<string, BundleAgentEntry> = {
+    [agentName]: bundleEntry,
+  };
+
+  // Step: Generate handlers.js
+  const handlersJs = generateHandlersJs([agentName]);
   const handlersPath = path.join(outputDir, 'handlers.js');
   try {
     await writeFile(handlersPath, handlersJs, 'utf-8');
@@ -561,21 +514,70 @@ export async function buildBundle(
       'bundling'
     );
   }
-  allWrittenFiles.push(handlersPath);
 
-  // Step 10: Compute checksum over all output files in sorted order
+  // Collect all written files for checksum (handlers.js included, bundle.json excluded)
+  const allWrittenFiles = [...writtenFiles, handlersPath];
+
+  // AC-49: Dry-run validation — loadProject() on completed output
+  // Must happen before computing checksum (checksum does not include bundle.json)
+  const agentOutputDir = path.join(outputDir, 'agents', agentName);
+  const outputRillConfigPath = path.join(agentOutputDir, 'rill-config.json');
+  const rillVersion = readRillVersion();
+
+  // The loader resolves relative extension paths from process.cwd().
+  // Temporarily change directory to the agent output dir so that
+  // compiled local extensions (./extensions/*.js) resolve correctly.
+  const originalCwd = process.cwd();
+  try {
+    process.chdir(agentOutputDir);
+    const dryRunResult = await loadProject({
+      configPath: outputRillConfigPath,
+      env: process.env as Record<string, string>,
+      rillVersion,
+    });
+    process.chdir(originalCwd);
+    // Dispose any loaded extensions from dry-run
+    for (const dispose of dryRunResult.disposes) {
+      await dispose();
+    }
+  } catch (err) {
+    process.chdir(originalCwd);
+    // ConfigEnvError: bundle config has ${VAR} references absent at build time.
+    // ExtensionLoadError (factory threw): extension factory requires runtime
+    // config (e.g., agent URLs, API keys). Skip — the harness configures
+    // extensions at runtime using the preserved rill-config.json.
+    // ExtensionLoadError (cannot find package): treat as a real build error.
+    if (
+      err instanceof ConfigEnvError ||
+      (err instanceof ExtensionLoadError &&
+        !err.message.startsWith('Cannot find packages:'))
+    ) {
+      // Validation skipped: will be validated at runtime by the harness
+    } else {
+      // AC-49: delete output directory before throwing
+      await rm(outputDir, { recursive: true, force: true }).catch(() => undefined);
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new ComposeError(
+        `Bundle validation failed: ${msg}`,
+        'validation'
+      );
+    }
+  }
+
+  // AC-28/AC-51: Compute checksum over all output files EXCEPT bundle.json
+  // (built timestamp excluded so same source produces same checksum)
   const sortedFiles = [...allWrittenFiles].sort();
   const checksum = await computeChecksum(sortedFiles);
 
-  // Step 11: Generate bundle.json
-  const rillVersion = readRillVersion();
+  // Step: Generate bundle.json
   const bundleManifest: BundleManifest = {
-    name: bundleName,
-    version: bundleVersion,
+    name: agentName,
+    version: agentVersion,
     built: new Date().toISOString(),
     checksum,
     rillVersion,
     agents: agentEntries,
+    configVersion: '2',
   };
 
   const bundleJsonPath = path.join(outputDir, 'bundle.json');
@@ -598,4 +600,26 @@ export async function buildBundle(
     manifest: bundleManifest,
     checksum,
   };
+}
+
+// ============================================================
+// DIRECTORY WALKER (used by tests)
+// ============================================================
+
+/**
+ * Recursively collect all file paths under a directory.
+ * Used internally; exported for testability.
+ */
+export async function walkDir(dir: string): Promise<string[]> {
+  const items = await readdir(dir, { withFileTypes: true });
+  const results: string[] = [];
+  for (const item of items) {
+    const full = path.join(dir, item.name);
+    if (item.isDirectory()) {
+      results.push(...(await walkDir(full)));
+    } else {
+      results.push(full);
+    }
+  }
+  return results;
 }

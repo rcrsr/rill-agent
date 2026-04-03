@@ -92,15 +92,15 @@ describe('createAhiExtension', () => {
       expect('parser' in result).toBe(true);
     });
 
-    it('registered function has valid HostFunctionDefinition shape', () => {
+    it('registered function is a callable with a fn property', () => {
       const result = createAhiExtension({
         agents: { parser: { url: 'http://localhost:4001' } },
       });
 
       const fn = result['parser'];
       expect(fn).toBeDefined();
-      expect(typeof fn.fn).toBe('function');
-      expect(Array.isArray(fn.params)).toBe(true);
+      expect(typeof fn!.fn).toBe('function');
+      expect(fn!.__type).toBe('callable');
     });
 
     it('registers multiple agents', () => {
@@ -122,7 +122,7 @@ describe('createAhiExtension', () => {
 
       const fn = result['parser']!;
       // fn returns a Promise (async function)
-      const returnValue = fn.fn([], {} as never, undefined);
+      const returnValue = fn.fn([] as unknown as Record<string, import('@rcrsr/rill').RillValue>, {} as never, undefined);
       expect(returnValue).toBeInstanceOf(Promise);
       // Reject the dangling promise to avoid unhandled rejection noise
       void returnValue.catch(() => undefined);

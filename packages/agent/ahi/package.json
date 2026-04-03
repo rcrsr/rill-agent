@@ -23,14 +23,14 @@
     "check": "pnpm run build && pnpm run test && pnpm run lint"
   },
   "peerDependencies": {
-    "@rcrsr/rill": "^0.9.0"
+    "@rcrsr/rill": "^0.18.0"
   },
   "dependencies": {
     "@rcrsr/rill-agent-shared": "workspace:^",
     "@rcrsr/rill-agent-registry": "workspace:^"
   },
   "devDependencies": {
-    "@rcrsr/rill": "^0.9.0"
+    "@rcrsr/rill": "^0.18.0"
   },
   "files": [
     "dist"

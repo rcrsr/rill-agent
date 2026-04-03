@@ -1,0 +1,8 @@
+{
+  "agents": [
+    {
+      "name": "test-agent",
+      "path": "simple-agent"
+    }
+  ]
+}

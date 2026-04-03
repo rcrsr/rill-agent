@@ -1,0 +1,12 @@
+{
+  "agents": [
+    {
+      "name": "test-agent",
+      "path": "../simple-agent"
+    },
+    {
+      "name": "second-agent",
+      "path": "../second-agent"
+    }
+  ]
+}

@@ -6,13 +6,10 @@
  * Registry mode (Phase 4): agents array resolved via a registry service.
  */
 
-import type {
-  ExtensionResult,
-  ExtensionConfigSchema,
-  HostFunctionDefinition,
-} from '@rcrsr/rill';
-import type { RillValue } from '@rcrsr/rill';
-import { isDict, RuntimeError } from '@rcrsr/rill';
+import type { ExtensionConfigSchema, ExtensionManifest } from '@rcrsr/rill';
+import type { RillValue, ApplicationCallable } from '@rcrsr/rill';
+import { isDict, RuntimeError, callable } from '@rcrsr/rill';
+import type { ExtensionResult } from '@rcrsr/rill-agent-shared';
 import type { InputSchema } from '@rcrsr/rill-agent-shared';
 import {
   createRegistryClient,
@@ -317,7 +314,7 @@ function createRegistryModeExtension(
     bootPromises.set(name, promise);
   }
 
-  const functions: Record<string, ExtensionResult[string]> = {};
+  const functions: Record<string, ApplicationCallable> = {};
 
   for (const name of names) {
     // Capture per-agent boot promise in closure
@@ -374,18 +371,9 @@ function createRegistryModeExtension(
       return invokeAgent(entry.endpoint, timeout, args, ctx, inFlight);
     };
 
-    functions[agentName] = {
-      params: [
-        {
-          name: 'params',
-          type: 'any',
-          description: `Parameters forwarded to agent ${agentName}`,
-        },
-      ],
-      fn,
-      description: `Invoke AHI agent: ${agentName}`,
-      returnType: 'any',
-    };
+    functions[agentName] = callable(
+      fn as unknown as Parameters<typeof callable>[0]
+    );
   }
 
   // AC-11: cancel all in-flight requests and block further calls
@@ -463,21 +451,14 @@ export function createAhiExtension(
   // FUNCTION REGISTRATION
   // ============================================================
 
-  const functions: Record<string, ExtensionResult[string]> = {};
+  const functions: Record<string, ApplicationCallable> = {};
 
   for (const [name, agent] of resolvedAgents) {
     // Capture agent state for this closure
     const agentUrl = agent.url;
 
-    functions[name] = {
-      params: [
-        {
-          name: 'params',
-          type: 'any',
-          description: `Parameters forwarded to agent ${name}`,
-        },
-      ],
-      fn: (
+    functions[name] = callable(
+      ((
         args: RillValue[],
         ctx: { readonly metadata?: Record<string, string> | undefined }
       ): Promise<RillValue> => {
@@ -486,10 +467,8 @@ export function createAhiExtension(
           throw new RuntimeError('RILL-R033', 'AHI: extension disposed');
         }
         return invokeAgent(agentUrl, timeout, args, ctx, inFlight);
-      },
-      description: `Invoke AHI agent: ${name}`,
-      returnType: 'any',
-    };
+      }) as unknown as Parameters<typeof callable>[0]
+    );
   }
 
   // ============================================================
@@ -534,6 +513,7 @@ export const configSchema: ExtensionConfigSchema = {
  */
 import type { AgentRunner as InProcessRunner } from '@rcrsr/rill-agent-shared';
 export type { InProcessRunner };
+export type { ExtensionResult } from '@rcrsr/rill-agent-shared';
 
 // ============================================================
 // IN-PROCESS CALL (TASK 3.2)
@@ -641,17 +621,32 @@ export function createInProcessFunction(
   runner: InProcessRunner,
   targetAgentName: string,
   timeout: number
-): HostFunctionDefinition {
-  return {
-    params: [
-      {
-        name: 'params',
-        type: 'any',
-        description: `Parameters forwarded to agent ${targetAgentName}`,
-      },
-    ],
-    fn: createInProcessCallFn(runner, targetAgentName, timeout),
-    description: `Invoke AHI agent in-process: ${targetAgentName}`,
-    returnType: 'any',
-  };
+): ApplicationCallable {
+  return callable(
+    createInProcessCallFn(runner, targetAgentName, timeout) as unknown as Parameters<typeof callable>[0]
+  );
 }
+
+// ============================================================
+// EXTENSION MANIFEST
+// ============================================================
+
+/**
+ * Standard extension manifest for @rcrsr/rill-agent-ext-ahi.
+ * Wraps createAhiExtension so that loadProject() can validate the
+ * bundle output config at build time (dry-run validation, AC-49).
+ *
+ * The factory accepts AhiExtensionConfig and returns the extension's
+ * callable dict as the mounted RillValue.
+ */
+export const extensionManifest: ExtensionManifest = {
+  factory: async (config: unknown) => {
+    const result = createAhiExtension(config as AhiExtensionConfig);
+    const { dispose, ...value } = result;
+    return {
+      value: value as unknown as RillValue,
+      ...(dispose !== undefined ? { dispose } : {}),
+    };
+  },
+  configSchema,
+};

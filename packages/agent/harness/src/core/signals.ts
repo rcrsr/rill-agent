@@ -28,18 +28,29 @@ interface SignalHost {
  * SIGTERM: stop accepting sessions, drain up to drainTimeout ms,
  *   exit 0 (clean) or exit 1 (timeout).
  * SIGINT: abort all sessions immediately, exit 1.
+ *
+ * Returns a cleanup function that removes the registered listeners.
+ * Call the returned function in the host's stop() to prevent listener leaks.
  */
 export function registerSignalHandlers(
   host: SignalHost,
   drainTimeout: number
-): void {
-  process.on('SIGTERM', () => {
+): () => void {
+  const onSigterm = (): void => {
     void handleSigterm(host, drainTimeout);
-  });
+  };
 
-  process.on('SIGINT', () => {
+  const onSigint = (): void => {
     handleSigint(host);
-  });
+  };
+
+  process.on('SIGTERM', onSigterm);
+  process.on('SIGINT', onSigint);
+
+  return (): void => {
+    process.off('SIGTERM', onSigterm);
+    process.off('SIGINT', onSigint);
+  };
 }
 
 // ============================================================

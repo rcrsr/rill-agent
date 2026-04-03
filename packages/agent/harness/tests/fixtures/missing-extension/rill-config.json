@@ -1,0 +1,10 @@
+{
+  "name": "missing-ext-agent",
+  "version": "0.0.1",
+  "main": "handler.rill:run",
+  "extensions": {
+    "mounts": {
+      "myext": "@nonexistent/rill-ext-does-not-exist"
+    }
+  }
+}

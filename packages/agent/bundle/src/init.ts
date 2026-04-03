@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { type ManifestExtension, ComposeError } from '@rcrsr/rill-agent-shared';
+import { ComposeError } from '@rcrsr/rill-agent-shared';
 
 // ============================================================
 // PUBLIC TYPES
@@ -28,16 +28,13 @@ function packageAlias(packageName: string): string {
 }
 
 /**
- * Builds the extensions record for agent.json from an array of package names.
+ * Builds the extensions.mounts record for rill-config.json from an array of package names.
  * Each entry uses the basename as alias.
  */
-function buildExtensionsRecord(
-  extensions: readonly string[]
-): Record<string, ManifestExtension> {
-  const result: Record<string, ManifestExtension> = {};
+function buildMountsRecord(extensions: readonly string[]): Record<string, string> {
+  const result: Record<string, string> = {};
   for (const pkg of extensions) {
-    const alias = packageAlias(pkg);
-    result[alias] = { package: pkg };
+    result[packageAlias(pkg)] = pkg;
   }
   return result;
 }
@@ -50,7 +47,7 @@ function buildExtensionsRecord(
  * Scaffold a new rill agent project directory.
  *
  * Creates a directory named `name` in the current working directory,
- * then writes agent.json, main.rill, and package.json inside it.
+ * then writes rill-config.json, main.rill, and package.json inside it.
  *
  * @param name - Project name and directory name to create
  * @param options - Optional list of extension package names to pre-configure
@@ -62,34 +59,31 @@ export async function initProject(
 ): Promise<void> {
   const projectDir = path.resolve(name);
 
-  // EC-18: Directory already exists
+  // EC-13: Directory already exists
   if (existsSync(projectDir)) {
     throw new ComposeError(`Directory already exists: ${name}`, 'init');
   }
 
   await mkdir(projectDir, { recursive: true });
 
-  // Build extensions object for agent.json
-  const extensions =
-    options?.extensions !== undefined && options.extensions.length > 0
-      ? buildExtensionsRecord(options.extensions)
-      : {};
-
-  // Write agent.json
-  const agentManifest = {
+  // Build rill-config.json
+  const hasExtensions =
+    options?.extensions !== undefined && options.extensions.length > 0;
+  const rillConfig: Record<string, unknown> = {
     name,
     version: '0.1.0',
-    runtime: '@rcrsr/rill@*',
-    entry: 'main.rill',
-    extensions,
-    modules: {},
-    functions: {},
-    assets: [],
-    skills: [],
+    runtime: '>=0.18.0',
+    main: 'main.rill:handler',
   };
+  if (hasExtensions) {
+    rillConfig['extensions'] = {
+      mounts: buildMountsRecord(options!.extensions!),
+    };
+  }
+
   await writeFile(
-    path.join(projectDir, 'agent.json'),
-    JSON.stringify(agentManifest, null, 2),
+    path.join(projectDir, 'rill-config.json'),
+    JSON.stringify(rillConfig, null, 2),
     'utf-8'
   );
 
@@ -103,7 +97,7 @@ export async function initProject(
     version: '0.1.0',
     type: 'module',
     scripts: {
-      build: 'rill-agent-bundle build agent.json',
+      build: 'rill-agent-bundle build',
       check: 'rill-agent-bundle check --platform node dist/',
     },
     dependencies: {

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "rill-agent-bundle build harness.json",
+    "build": "rill-agent-bundle build agents/classifier && rill-agent-bundle build agents/summarizer && rill-agent-bundle build agents/orchestrator",
     "check": "rill-agent-bundle check --platform node dist/",
     "start": "tsx host.ts",
     "dev": "tsx host.ts"
