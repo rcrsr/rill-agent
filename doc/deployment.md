@@ -7,8 +7,8 @@ Transport modes, multi-agent setups, and deployment patterns for rill agents.
 Every deployment starts with the same 2-step build:
 
 ```bash
-# 1. Bundle the manifest into a self-contained directory
-rill-agent-bundle build agent.json --output dist/
+# 1. Bundle the project into a self-contained directory
+rill-agent-bundle build
 
 # 2. Generate a harness entry point for the target transport
 rill-agent-build --harness <type> dist/
@@ -39,7 +39,7 @@ Endpoints available after startup:
 ### Docker
 
 ```dockerfile
-FROM node:20-slim
+FROM node:22-slim
 WORKDIR /app
 COPY dist/ ./dist/
 COPY node_modules/ ./node_modules/
@@ -117,22 +117,20 @@ export default createWorkerHarness(handlers);
 
 ## Multi-Agent: Harness
 
-Run multiple agents in one process using a harness manifest.
+Run multiple agents in one process using a harness configuration.
 
 ```json
 {
-  "shared": {
-    "llm": { "package": "@rcrsr/rill-ext-anthropic" }
-  },
   "agents": [
-    { "name": "classifier", "entry": "classify.rill", "maxConcurrency": 10 },
-    { "name": "summarizer", "entry": "summarize.rill", "maxConcurrency": 5 }
+    { "name": "classifier", "path": "./agents/classifier", "maxConcurrency": 10 },
+    { "name": "summarizer", "path": "./agents/summarizer", "maxConcurrency": 5 }
   ]
 }
 ```
 
+Each agent directory contains its own `rill-config.json` with extensions and entry point.
+
 Benefits:
-- Shared extensions instantiate once (1 LLM client, not N)
 - AHI calls between co-located agents use in-process invocation (no HTTP)
 - Single process to deploy and monitor
 

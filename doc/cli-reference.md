@@ -9,15 +9,15 @@ Build agent bundles from manifests.
 ### build
 
 ```bash
-rill-agent-bundle build <manifest-path> [--output <dir>]
+rill-agent-bundle build [<project-path>] [--output <dir>]
 ```
 
 | Argument | Default | Description |
 |----------|---------|-------------|
-| `manifest-path` | — | Path to `agent.json` or `harness.json` |
+| `project-path` | `.` (current directory) | Path to directory containing `rill-config.json` |
 | `--output` | `dist/` | Output directory for the bundle |
 
-Validates the manifest, resolves extensions, compiles custom functions, and writes a self-contained bundle directory.
+Loads the project, resolves extensions, and writes a self-contained bundle directory.
 
 ### init
 
@@ -30,7 +30,7 @@ rill-agent-bundle init <project-name> [--extensions <ext1,ext2>]
 | `project-name` | Valid npm package name |
 | `--extensions` | Comma-separated: `anthropic`, `openai`, `qdrant`, `fetch`, `kv`, `fs` |
 
-Creates a new project directory with `agent.json`, `main.rill`, `package.json`, and `.env.example`.
+Creates a new project directory with `rill-config.json`, `main.rill`, `package.json`, and `.env.example`.
 
 ### check
 

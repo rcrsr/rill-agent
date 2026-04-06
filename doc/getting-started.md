@@ -4,8 +4,8 @@ Build and run your first rill agent in 4 steps.
 
 ## Prerequisites
 
-- Node.js 20+
-- pnpm 9+
+- Node.js 22+
+- pnpm 10+
 - A [rill](https://github.com/rcrsr/rill) runtime understanding (see rill docs for the language itself)
 
 ## 1. Scaffold a New Agent
@@ -20,46 +20,39 @@ This creates:
 
 ```
 my-agent/
-  agent.json       # Agent manifest
-  main.rill        # Entry script
-  package.json     # Node project with rill dependencies
-  .env.example     # Required environment variables
+  rill-config.json   # Agent configuration
+  main.rill          # Entry script
+  package.json       # Node project with rill dependencies
+  .env.example       # Required environment variables
 ```
 
 The `--extensions` flag pre-configures the Anthropic LLM extension. Other options: `openai`, `kv`, `fetch`, `fs`, `qdrant`.
 
-## 2. Define the Agent Manifest
+## 2. Define the Agent Configuration
 
-`agent.json` declares the agent's identity, extensions, and I/O contract.
+`rill-config.json` declares the agent's identity, extensions, and entry point.
 
 ```json
 {
   "name": "my-agent",
   "version": "0.1.0",
-  "runtime": "@rcrsr/rill@^0.9.0",
-  "entry": "main.rill",
+  "main": "main.rill:handler",
+  "runtime": ">=0.18.0",
   "extensions": {
-    "llm": {
-      "package": "@rcrsr/rill-ext-anthropic"
-    }
-  },
-  "input": {
-    "question": {
-      "type": "string",
-      "required": true,
-      "description": "The question to answer"
-    }
-  },
-  "output": {
-    "type": "dict",
-    "fields": {
-      "answer": { "type": "string" }
+    "mounts": {
+      "llm": { "package": "@rcrsr/rill-ext-anthropic" }
+    },
+    "config": {
+      "llm": {
+        "api_key": "${ANTHROPIC_API_KEY}",
+        "model": "claude-sonnet-4-20250514"
+      }
     }
   }
 }
 ```
 
-See [concepts.md](concepts.md) for the full manifest format.
+See [concepts.md](concepts.md) for the full configuration format.
 
 ## 3. Write the Entry Script
 
@@ -70,22 +63,21 @@ $question => llm::message("Answer this question concisely: " + $question) => $an
 [answer: $answer]
 ```
 
-The `$question` variable comes from the `input` declaration in the manifest. `llm::message()` calls the configured LLM extension. The final expression is the agent's return value.
+The `$question` variable comes from the handler's parameters. `llm::message()` calls the configured LLM extension. The final expression is the agent's return value.
 
 ## 4. Build and Run
 
 Build the agent into a deployable bundle:
 
 ```bash
-npx @rcrsr/rill-agent-bundle build agent.json --output dist/
+npx @rcrsr/rill-agent-bundle build
 ```
 
-Run it with parameters and extension config:
+Run it with parameters:
 
 ```bash
 npx @rcrsr/rill-agent-run dist/ my-agent \
-  --param question="What is the capital of France?" \
-  --config '{"llm":{"api_key":"'"$ANTHROPIC_API_KEY"'"}}'
+  --param question="What is the capital of France?"
 ```
 
 The result prints to stdout as JSON:
@@ -113,30 +105,10 @@ curl -X POST http://localhost:3000/run \
 
 The server provides session management, SSE streaming, health checks, and Prometheus metrics out of the box.
 
-## Config Files
-
-Store extension config in a JSON file instead of inline:
-
-```json
-{
-  "llm": {
-    "api_key": "${ANTHROPIC_API_KEY}",
-    "model": "claude-sonnet-4-20250514"
-  }
-}
-```
-
-`${VAR}` tokens resolve from environment variables at runtime.
-
-```bash
-export ANTHROPIC_API_KEY="sk-..."
-npx @rcrsr/rill-agent-run dist/ my-agent --config config.json --param question="Hello"
-```
-
 ## Next Steps
 
-- [Concepts](concepts.md) — Manifests, composition, extensions, sessions, and AHI
-- [Architecture](architecture.md) — Package map and data flow
-- [Deployment](deployment.md) — HTTP, stdio, serverless, and Docker patterns
-- [CLI Reference](cli-reference.md) — All CLI commands and flags
-- [Demo apps](../demo/) — Working examples in the `demo/` directory
+- [Concepts](concepts.md) -- Configuration format, composition, extensions, sessions, and AHI
+- [Architecture](architecture.md) -- Package map and data flow
+- [Deployment](deployment.md) -- HTTP, stdio, serverless, and Docker patterns
+- [CLI Reference](cli-reference.md) -- All CLI commands and flags
+- [Demo apps](../demo/) -- Working examples in the `demo/` directory

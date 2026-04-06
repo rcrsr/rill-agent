@@ -14,14 +14,14 @@ pnpm run -r build
 Set your Groq API key:
 
 ```bash
-export GROQ_API_KEY="gsk_..."
+export OPENAI_API_KEY="gsk_..."
 ```
 
 ## Build and start
 
 ```bash
 cd demo/content-pipeline
-pnpm build   # rill-agent-bundle build harness.json
+pnpm build   # builds all 3 agent bundles
 pnpm start   # tsx host.ts
 ```
 
@@ -39,33 +39,42 @@ curl -X POST http://localhost:4002/orchestrator/run \
 
 | Agent | Entry Script | Role |
 |-------|-------------|------|
-| classifier | `scripts/classify.rill` | Extracts category, language, and confidence from text |
+| classifier | `scripts/classify.rill` | Extracts category, language, and confidence |
 | summarizer | `scripts/summarize.rill` | Produces summary, key points, and word count |
-| orchestrator | `scripts/orchestrate.rill` | Calls classifier and summarizer via AHI, merges results |
+| orchestrator | `scripts/orchestrate.rill` | Calls classifier and summarizer via AHI |
 
 The orchestrator uses `ahi::classifier()` and `ahi::summarizer()` to invoke co-located agents. Because all 3 agents share the same harness process, AHI uses in-process invocation (no HTTP).
 
-## Runtime configuration
+Each agent has its own `rill-config.json` in its subdirectory under `agents/`.
 
-`config.json` provides the `llm` extension its API credentials:
+## Configuration
+
+Extension config is embedded in each agent's `rill-config.json` under `extensions.config`:
 
 ```json
 {
-  "llm": {
-    "api_key": "${GROQ_API_KEY}",
-    "model": "llama-3.3-70b-versatile",
-    "base_url": "https://api.groq.com/openai/v1"
+  "extensions": {
+    "mounts": {
+      "llm": { "package": "@rcrsr/rill-ext-openai" }
+    },
+    "config": {
+      "llm": {
+        "api_key": "${OPENAI_API_KEY}",
+        "model": "openai/gpt-oss-20b",
+        "base_url": "https://api.groq.com/openai/v1"
+      }
+    }
   }
 }
 ```
 
 ## What it demonstrates
 
-- **Multi-agent harness**: 3 agents in one process with shared LLM extension
+- **Multi-agent harness**: 3 agents in one process
 - **AHI invocation**: Orchestrator calls other agents via `ahi::` functions
 - **In-process optimization**: Co-located agents skip HTTP serialization
 - **Structured LLM output**: `llm::generate()` with typed schema extraction
-- **Shared extensions**: Single LLM client instance across all agents
+- **Per-agent configuration**: Each agent has its own `rill-config.json`
 
 ## Build output
 

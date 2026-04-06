@@ -6,86 +6,81 @@ Core ideas behind the rill agent framework. Read [Getting Started](getting-start
 
 An agent is a rill script packaged with its dependencies and configuration. Each agent has:
 
-- A **manifest** (`agent.json`) declaring its name, version, entry script, extensions, and I/O contract
+- A **configuration** (`rill-config.json`) declaring its name, version, entry point, and extensions
 - An **entry script** (`.rill` file) containing the execution logic
 - Zero or more **extensions** providing host functions (LLM calls, key-value storage, HTTP fetch)
-- Optional **custom functions** (TypeScript) compiled at build time via esbuild
 
 Agents accept named parameters as input and return a single rill value as output.
 
-## Manifests
+## Configuration
 
-Two manifest types exist: **agent manifests** and **harness manifests**.
+Two configuration levels exist: **agent configs** and **harness configs**.
 
-### Agent Manifest (`agent.json`)
+### Agent Configuration (`rill-config.json`)
 
-Defines a single agent. Required fields: `name`, `version`, `runtime`, `entry`.
+Defines a single agent. Required fields: `name`, `version`, `main`, `runtime`.
 
 ```json
 {
   "name": "classifier",
   "version": "1.0.0",
-  "runtime": "@rcrsr/rill@^0.9.0",
-  "entry": "classify.rill",
+  "main": "classify.rill:handler",
+  "runtime": ">=0.18.0",
   "extensions": {
-    "llm": { "package": "@rcrsr/rill-ext-anthropic" }
-  },
-  "input": {
-    "text": { "type": "string", "required": true }
+    "mounts": {
+      "llm": { "package": "@rcrsr/rill-ext-anthropic" }
+    },
+    "config": {
+      "llm": {
+        "api_key": "${ANTHROPIC_API_KEY}"
+      }
+    }
   }
 }
 ```
 
-Optional fields include `modules`, `functions`, `assets`, `description`, `skills`, `output`, `host`, and `deploy`. See [agent-bundle.md](../packages/agent/bundle/docs/agent-bundle.md) for the full field reference.
+Extension config supports `${VAR}` interpolation (resolved at load time) and `@{VAR}` interpolation (resolved per invocation). See [rill-config-migration.md](rill-config-migration.md) for details.
 
-### Harness Manifest (`harness.json`)
+### Harness Configuration (`harness.json`)
 
-Runs multiple agents in one process. The `agents` array distinguishes it from an agent manifest.
+Runs multiple agents in one process. References per-agent `rill-config.json` directories.
 
 ```json
 {
-  "shared": {
-    "llm": { "package": "@rcrsr/rill-ext-anthropic" }
-  },
   "agents": [
-    { "name": "classifier", "entry": "classify.rill" },
-    { "name": "summarizer", "entry": "summarize.rill" }
+    { "name": "classifier", "path": "./agents/classifier" },
+    { "name": "summarizer", "path": "./agents/summarizer" }
   ]
 }
 ```
 
-Shared extensions instantiate once and bind to every agent. Per-agent extensions in `agents[].extensions` are additive. The harness validates that extension namespaces do not collide.
-
-### Manifest Detection
-
-`detectManifestType()` checks for an `agents` key. Returns `'harness'` if present, `'agent'` otherwise. The build tools and host call this before routing to the correct validator.
+Each agent directory contains its own `rill-config.json` and scripts. The harness validates that extension namespaces do not collide.
 
 ## Composition Pipeline
 
-The core workflow transforms a manifest into a running agent: **manifest → compose → host → serve**.
+The core workflow transforms a configuration into a running agent: **config -> compose -> host -> serve**.
 
-### Step 1: Validate
+### Step 1: Load
 
-`validateManifest()` or `validateHarnessManifest()` parses raw JSON against the zod schema. Returns a typed manifest or throws `ManifestValidationError` with field-level issues.
+`loadProject()` from `@rcrsr/rill-config` parses `rill-config.json`, resolves `${VAR}` interpolation, loads extensions, and builds bindings.
 
 ### Step 2: Compose
 
-`composeAgent()` takes a validated manifest and:
+`composeAgent()` takes a loaded project and:
 
 1. Resolves extensions from npm, built-in, or local paths
 2. Instantiates each extension with its runtime config
-3. Compiles custom TypeScript functions via esbuild
-4. Parses the entry `.rill` script
-5. Loads module scripts
-6. Generates an `AgentCard` for discovery
+3. Parses the entry `.rill` script
+4. Loads module scripts
+5. Generates an `AgentCard` for discovery
 
 Returns a `ComposedAgent` with a `RuntimeContext`, parsed AST, modules, and card.
 
-For harness manifests, `composeHarness()` instantiates shared extensions once, then composes each agent with the merged function map. Returns a `ComposedHarness` with a `Map<string, ComposedAgent>`.
+For harness configurations, `composeHarness()` composes each agent from its own `rill-config.json`. Returns a `ComposedHarness` with a `Map<string, ComposedAgent>`.
 
 ### Step 3: Host
 
-`createAgentHost()` wraps a `ComposedAgent` (or a Map of them) with session management, lifecycle, metrics, and HTTP routing. The host transitions through `READY → RUNNING → STOPPED` phases.
+`createAgentHost()` wraps a `ComposedAgent` (or a Map of them) with session management, lifecycle, metrics, and HTTP routing. The host transitions through `READY -> RUNNING -> STOPPED` phases.
 
 ### Step 4: Serve
 
@@ -97,7 +92,7 @@ Extensions provide host functions that rill scripts call at runtime. Each extens
 
 ### Resolution
 
-The `package` field in the manifest determines how an extension loads:
+The `package` field in the configuration determines how an extension loads:
 
 | Pattern | Strategy | Example |
 |---------|----------|---------|
@@ -109,26 +104,20 @@ Built-in extensions shipped with rill: `fs`, `fetch`, `exec`, `kv`, `crypto`.
 
 ### Runtime Config
 
-Extension config is not embedded in the manifest. Pass it at runtime via `--config` (CLI) or the `config` option in the programmatic API. Config values support `${VAR}` interpolation from environment variables.
-
-```bash
-rill-agent-run dist/ my-agent --config '{"llm":{"api_key":"${ANTHROPIC_API_KEY}"}}'
-```
-
-### Custom Functions
-
-TypeScript functions declared in `agent.json` under `functions` compile via esbuild at bundle time. They register under the `app::` namespace.
+Extension config is embedded in `rill-config.json` under `extensions.config`. Config values support `${VAR}` interpolation (static, resolved at load time) and `@{VAR}` interpolation (deferred, resolved per invocation).
 
 ```json
 {
-  "functions": {
-    "app::format": "./src/format.ts"
+  "extensions": {
+    "mounts": { "llm": "@rcrsr/rill-ext-openai" },
+    "config": {
+      "llm": {
+        "api_key": "${OPENAI_API_KEY}",
+        "model": "gpt-4o"
+      }
+    }
   }
 }
-```
-
-```rill
-app::format($data) => $formatted
 ```
 
 ## Sessions
@@ -147,7 +136,7 @@ Each `POST /run` request creates a session. Sessions track execution state, timi
 
 ### TTL
 
-Completed and failed sessions remain queryable for `sessionTtl` milliseconds (default: 3,600,000 ms / 1 hour). After expiry, `GET /sessions/{id}` returns 404.
+Completed and failed sessions remain queryable for `sessionTtl` milliseconds (default: 3,600,000 ms / 1 hr). After expiry, `GET /sessions/{id}` returns 404.
 
 ### SSE Streaming
 
@@ -203,7 +192,7 @@ Every agent exposes an A2A-compliant `AgentCard` at `/.well-known/agent-card.jso
 }
 ```
 
-Skills, input modes, and output modes are declared in the manifest and propagated to the card automatically during composition.
+Skills, input modes, and output modes are declared in the configuration and propagated to the card automatically during composition.
 
 ## Bundles
 
@@ -211,18 +200,20 @@ Skills, input modes, and output modes are declared in the manifest and propagate
 
 ```
 dist/
-  agent.json          # Normalized manifest
-  *.rill              # Entry and module scripts
-  functions/          # Compiled custom functions
-  extensions.json     # Resolved extension map
-  assets/             # Declared asset files
+  bundle.json          # Bundle metadata
+  handlers.js          # Compiled handler entry
+  agents/
+    <agent-name>/
+      scripts/*.rill   # Entry and module scripts
+  .well-known/
+    agent-card.json    # Agent discovery card
 ```
 
 Bundles are the deployment unit. Pass a bundle to `rill-agent-run` for CLI execution, `rill-agent-build` for harness generation, or `rill-agent-proxy` for multi-agent routing.
 
 ## See Also
 
-- [Getting Started](getting-started.md) — Build your first agent
-- [Architecture](architecture.md) — Package dependency graph and data flow
-- [Deployment](deployment.md) — Transport modes and deployment patterns
-- [CLI Reference](cli-reference.md) — All commands and flags
+- [Getting Started](getting-started.md) -- Build your first agent
+- [Architecture](architecture.md) -- Package dependency graph and data flow
+- [Deployment](deployment.md) -- Transport modes and deployment patterns
+- [CLI Reference](cli-reference.md) -- All commands and flags

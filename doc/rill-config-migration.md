@@ -4,15 +4,15 @@ Findings and open questions for aligning rill-agent with `@rcrsr/rill-config@0.1
 
 ## Current State
 
-All 5 packages that depend on `@rcrsr/rill` pin version `^0.9.0`. The rill ecosystem is at `0.18.0`.
+All 5 packages that depend on `@rcrsr/rill` pin version `^0.18.4`. Migration is complete.
 
 | Package | Dep type | Current |
 |---------|----------|---------|
-| shared | dependency | ^0.9.0 |
-| harness | dependency | ^0.9.0 |
-| bundle | dependency | ^0.9.0 |
-| run | dependency | ^0.9.0 |
-| ahi | peer + dev | ^0.9.0 |
+| shared | dependency | ^0.18.4 |
+| harness | dependency | ^0.18.4 |
+| bundle | dependency | ^0.18.4 |
+| run | dependency | ^0.18.4 |
+| ahi | peer ~0.18.4 + dev ^0.18.4 |
 
 ## Obsolete Concepts
 
@@ -408,13 +408,11 @@ Consolidated list of changes needed in `@rcrsr/rill-config` before rill-agent mi
 
 - `parseConfig()` already accepts a caller-provided `env` parameter. Confirm no code path reads `process.env` directly. The harness owns variable resolution strategy.
 
-## Dependency Changes Required
+## Dependency Changes (Completed)
 
-Regardless of design decisions, these version bumps are needed:
+Version bumps applied:
 
 ```
-@rcrsr/rill          ^0.9.0  →  ^0.18.0   (shared, harness, bundle, run, ahi)
-@rcrsr/rill-config   (new)                  (harness, bundle, run)
+@rcrsr/rill          ^0.9.0  →  ^0.18.4   (shared, harness, bundle, run, ahi)
+@rcrsr/rill-config   (new)   →  ^0.18.4   (harness, bundle, run, proxy)
 ```
-
-New dependency on `@rcrsr/rill-config` for packages that currently implement config loading themselves.

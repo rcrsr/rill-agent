@@ -60,20 +60,20 @@ Key relationships:
 ### CLI Execution (`rill-agent-run`)
 
 ```
-agent.json ──► validateManifest() ──► composeAgent() ──► execute() ──► stdout
-                   (shared)              (harness)         (rill)
+rill-config.json ──► loadProject() ──► composeAgent() ──► execute() ──► stdout
+                     (rill-config)      (harness)          (rill)
 ```
 
 1. `rill-agent-run` reads `bundle.json` from the bundle directory
-2. `validateManifest()` parses and validates against the zod schema
-3. `composeAgent()` resolves extensions, compiles functions, parses the entry script
+2. `loadProject()` parses `rill-config.json`, loads extensions, builds bindings
+3. `composeAgent()` resolves extensions, parses the entry script
 4. The rill runtime executes the script with injected parameters
 5. The result value serializes to JSON on stdout
 
 ### HTTP Server (`createAgentHost`)
 
 ```
-agent.json ──► validate ──► compose ──► createAgentHost() ──► listen()
+rill-config.json ──► validate ──► compose ──► createAgentHost() ──► listen()
                                               │
                     POST /run ───────► run() ──┤──► SessionRecord
                     GET /sessions/:id/stream ──┤──► SSE events
@@ -89,18 +89,17 @@ agent.json ──► validate ──► compose ──► createAgentHost() ─�
 ### Multi-Agent Harness
 
 ```
-harness.json ──► validateHarnessManifest() ──► composeHarness()
-                                                     │
-                    shared extensions ────────────────┤ (instantiated once)
-                    per-agent extensions ─────────────┤ (merged per agent)
-                    ComposedHarness ──────────────────┘
+harness.json ──────► composeHarness()
+                       │
+    per-agent rill-config.json ──────────────┤ (each agent loads independently)
+    ComposedHarness ─────────────────────────┘
                          │
                     createAgentHost(agents) ──► listen()
                          │
                     bindHost() ──► in-process AHI wiring
 ```
 
-`composeHarness()` instantiates shared extensions once and distributes them to each agent. `bindHost()` replaces HTTP-based AHI functions with direct in-process calls for co-located agents.
+`composeHarness()` loads each agent from its own `rill-config.json` directory. `bindHost()` replaces HTTP-based AHI functions with direct in-process calls for co-located agents.
 
 ### Proxy Architecture
 

@@ -62,14 +62,13 @@ All packages consume `@rcrsr/rill` from npm as a direct dependency (not peer), e
 
 ### Composition Pipeline
 
-The core workflow is: **manifest → compose → host → serve**.
+The core workflow is: **rill-config.json -> compose -> host -> serve**.
 
-1. **shared/schema.ts** defines `AgentManifest` and `HarnessManifest` schemas (zod validation)
-2. **harness/compose.ts** has two entry points:
-   - `composeAgent()` — single agent: resolves extensions, compiles custom functions (esbuild), parses `.rill` entry, returns `ComposedAgent`
-   - `composeHarness()` — multi-agent: instantiates shared extensions once, composes each agent with merged shared + per-agent functions, returns `ComposedHarness`
-3. **harness/host.ts** `createAgentHost()` — accepts single `ComposedAgent` or `Map<string, ComposedAgent>`, manages sessions, execution, metrics, and Hono HTTP routes
-4. **harness/handler.ts** `createAgentHandler()` — serverless/Lambda entry point alternative to the HTTP host
+1. **harness/compose.ts** has two entry points:
+   - `composeAgent()` — single agent: loads `rill-config.json` via `@rcrsr/rill-config`, resolves extensions, parses `.rill` entry, returns `ComposedAgent`
+   - `composeHarness()` — multi-agent: loads each agent from its own `rill-config.json` directory, returns `ComposedHarness`
+2. **harness/host.ts** `createAgentHost()` — accepts single `ComposedAgent` or `Map<string, ComposedAgent>`, manages sessions, execution, metrics, and Hono HTTP routes
+3. **harness/handler.ts** `createAgentHandler()` — serverless/Lambda entry point alternative to the HTTP host
 
 ### Transport Modes
 

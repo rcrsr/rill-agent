@@ -1,6 +1,6 @@
 # rill-agent
 
-[![CI](https://github.com/rcrsr/rill-agent/actions/workflows/pr-check.yml/badge.svg?branch=main)](https://github.com/rcrsr/rill-agent/actions/workflows/pr-check.yml)
+[![CI](https://github.com/rcrsr/rill-agent/actions/workflows/pr-check.yml/badge.svg?branch=main)](https://github.com/rcrsr/rill-agent/actions/workflows/pr-check.yml?query=branch%3Amain)
 [![License](https://img.shields.io/github/license/rcrsr/rill-agent)](https://github.com/rcrsr/rill-agent/blob/main/LICENSE)
 
 Agent framework for [rill](https://github.com/rcrsr/rill). Production HTTP server, build tools, bundle system, and multi-agent proxy.

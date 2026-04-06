@@ -14,21 +14,21 @@ pnpm run -r build
 Set your Groq API key:
 
 ```bash
-export GROQ_API_KEY="gsk_..."
+export OPENAI_API_KEY="gsk_..."
 ```
 
 ## Build and start
 
 ```bash
 cd demo/tool-calling
-pnpm build   # rill-agent-bundle build agent.json
+pnpm build   # rill-agent-bundle build
 pnpm start   # rill-agent-run with example question
 ```
 
 Or run directly:
 
 ```bash
-rill-agent-run dist/ tool-calling-demo --config config.json \
+rill-agent-run dist/ tool-calling \
   --param question="What is the weather in Paris and Tokyo? Convert the Paris temperature to Fahrenheit."
 ```
 
@@ -36,7 +36,7 @@ Example output:
 
 ```json
 {
-  "answer": "Paris: 22°C (71.6°F), partly cloudy. Tokyo: 28°C, humid and sunny.",
+  "answer": "Paris: 22C (71.6F), partly cloudy. Tokyo: 28C, humid and sunny.",
   "turns": 3,
   "usage": { "input_tokens": 1520, "output_tokens": 380 }
 }
@@ -48,22 +48,29 @@ Three simulated tools are defined inline in `scripts/main.rill`:
 
 | Tool | Description |
 |------|-------------|
-| `weather` | Returns hardcoded weather for 5 cities (paris, london, tokyo, new_york, sydney) |
+| `weather` | Returns hardcoded weather for 5 cities |
 | `convert_temperature` | Converts between Celsius and Fahrenheit |
 | `calculator` | Basic arithmetic: add, subtract, multiply, divide |
 
 The LLM decides which tools to call and in what order. `llm::tool_loop()` runs up to 5 turns, invoking the selected tools each turn until the LLM produces a final answer.
 
-## Runtime configuration
+## Configuration
 
-`config.json` provides the `llm` extension its API credentials:
+Extension config is embedded in `rill-config.json` under `extensions.config`:
 
 ```json
 {
-  "llm": {
-    "api_key": "${GROQ_API_KEY}",
-    "model": "llama-3.3-70b-versatile",
-    "base_url": "https://api.groq.com/openai/v1"
+  "extensions": {
+    "mounts": {
+      "llm": { "package": "@rcrsr/rill-ext-openai" }
+    },
+    "config": {
+      "llm": {
+        "api_key": "${OPENAI_API_KEY}",
+        "model": "openai/gpt-oss-20b",
+        "base_url": "https://api.groq.com/openai/v1"
+      }
+    }
   }
 }
 ```
@@ -82,7 +89,7 @@ dist/
   bundle.json
   handlers.js
   agents/
-    tool-calling-demo/
+    tool-calling/
       scripts/main.rill
   .well-known/agent-card.json
 ```
