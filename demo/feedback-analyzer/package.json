@@ -9,9 +9,9 @@
     "start": "rill-agent-run dist/ feedback-analyzer --log-level info --param feedback='The onboarding was confusing'"
   },
   "dependencies": {
-    "@rcrsr/rill": "^0.9.0",
+    "@rcrsr/rill": "^0.18.0",
     "@rcrsr/rill-agent-harness": "workspace:^",
-    "@rcrsr/rill-ext-openai": "^0.9.0"
+    "@rcrsr/rill-ext-openai": "^0.18.0"
   },
   "devDependencies": {
     "@rcrsr/rill-agent-bundle": "workspace:^",
