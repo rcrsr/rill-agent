@@ -267,17 +267,10 @@ export function createAgentHost(
 
       // Resolve deferred extension instances
       if (deferredExtensions.length > 0) {
-        let resolved;
-        try {
-          resolved = await resolveDeferredExtensions(
-            deferredExtensions,
-            runtimeConfig
-          );
-        } catch (err) {
-          // EC-8: resolveDeferredExtensions throws AgentHostError with
-          // extensionAlias already set — re-throw as-is
-          throw err;
-        }
+        const resolved = await resolveDeferredExtensions(
+          deferredExtensions,
+          runtimeConfig
+        );
         deferredDispose = resolved.dispose;
 
         // Hoist resolved extension functions into the session context
