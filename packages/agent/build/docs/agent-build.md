@@ -195,7 +195,7 @@ export interface GenerateHarnessResult {
 
 ## See Also
 
-- [Agent Bundle](agent-bundle.md) — Build bundle directories from `agent.json` manifests
+- [Agent Bundle](agent-bundle.md) — Build bundle directories from `rill-config.json` projects
 - [Agent Run](agent-run.md) — Execute bundled rill agents from the command line
 - [Agent Harness](agent-harness.md) — Production HTTP server for long-running rill agents
 - [Agent Shared](agent-shared.md) — Shared agent types, validation, and card generation

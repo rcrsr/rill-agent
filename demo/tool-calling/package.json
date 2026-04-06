@@ -4,14 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "rill-agent-bundle build agent.json",
+    "build": "rill-agent-bundle build",
     "check": "rill-agent-bundle check --platform node dist/",
-    "start": "rill-agent-run dist/ tool-calling --config config.json --log-level info --param question='What is the weather in Paris and Tokyo? Convert the Paris temperature to Fahrenheit.'"
+    "start": "rill-agent-run dist/ tool-calling --log-level info --param question='What is the weather in Paris and Tokyo? Convert the Paris temperature to Fahrenheit.'"
   },
   "dependencies": {
-    "@rcrsr/rill": "^0.9.0",
+    "@rcrsr/rill": "^0.18.0",
     "@rcrsr/rill-agent-harness": "workspace:^",
-    "@rcrsr/rill-ext-openai": "^0.9.0"
+    "@rcrsr/rill-ext-openai": "^0.18.0"
   },
   "devDependencies": {
     "@rcrsr/rill-agent-bundle": "workspace:^",

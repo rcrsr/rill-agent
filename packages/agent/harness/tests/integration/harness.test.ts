@@ -16,7 +16,7 @@ import type { AgentHost, ComposedAgent } from '../../src/index.js';
 import { createAgentHost } from '../../src/index.js';
 import { mockComposedAgent } from '../helpers/host.js';
 import { parse, createRuntimeContext } from '@rcrsr/rill';
-import type { ExtensionResult } from '@rcrsr/rill';
+import type { ExtensionResult } from '../../src/index.js';
 
 // ============================================================
 // HELPERS

@@ -4,25 +4,16 @@ import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { buildBundle } from '../src/build.js';
-import {
-  ComposeError,
-  ManifestValidationError,
-} from '@rcrsr/rill-agent-shared';
+import { ComposeError } from '@rcrsr/rill-agent-shared';
 
 // ============================================================
 // MINIMAL FIXTURE
 // ============================================================
 
-const MINIMAL_AGENT_MANIFEST = {
+const MINIMAL_RILL_CONFIG = {
   name: 'test-agent',
   version: '0.1.0',
-  runtime: '@rcrsr/rill@*',
-  entry: 'main.rill',
-  extensions: {},
-  modules: {},
-  functions: {},
-  assets: [],
-  skills: [],
+  main: 'main.rill:run',
 };
 
 const MINIMAL_RILL_SCRIPT = `"hello world"`;
@@ -40,32 +31,33 @@ async function makeTmpDir(): Promise<string> {
 }
 
 /**
- * Create a minimal agent fixture in a temp directory.
- * Returns the manifest path and the output dir path.
+ * Create a minimal agent fixture in a temp directory using rill-config.json.
+ * Returns the project directory path and the output dir path.
  */
-async function makeAgentFixture(
-  overrides: Partial<typeof MINIMAL_AGENT_MANIFEST> = {}
-): Promise<{ manifestPath: string; outputDir: string; fixtureDir: string }> {
-  const fixtureDir = await makeTmpDir();
+async function makeProjectFixture(
+  overrides: Partial<typeof MINIMAL_RILL_CONFIG> = {},
+  extraFiles: Record<string, string> = {}
+): Promise<{ projectDir: string; outputDir: string }> {
+  const projectDir = await makeTmpDir();
   const outputDir = await makeTmpDir();
 
-  const manifest = { ...MINIMAL_AGENT_MANIFEST, ...overrides };
+  const rillConfig = { ...MINIMAL_RILL_CONFIG, ...overrides };
   await writeFile(
-    path.join(fixtureDir, 'agent.json'),
-    JSON.stringify(manifest, null, 2),
+    path.join(projectDir, 'rill-config.json'),
+    JSON.stringify(rillConfig, null, 2),
     'utf-8'
   );
   await writeFile(
-    path.join(fixtureDir, 'main.rill'),
+    path.join(projectDir, 'main.rill'),
     MINIMAL_RILL_SCRIPT,
     'utf-8'
   );
 
-  return {
-    manifestPath: path.join(fixtureDir, 'agent.json'),
-    outputDir,
-    fixtureDir,
-  };
+  for (const [filename, content] of Object.entries(extraFiles)) {
+    await writeFile(path.join(projectDir, filename), content, 'utf-8');
+  }
+
+  return { projectDir, outputDir };
 }
 
 afterEach(async () => {
@@ -80,12 +72,12 @@ afterEach(async () => {
 
 describe('buildBundle success cases', () => {
   // ----------------------------------------------------------
-  // AC-19: bundle.json matches BundleManifest schema
+  // AC-18: Bundle builds from rill-config.json with all outputs correct
   // ----------------------------------------------------------
-  it('produces dist/bundle.json matching BundleManifest schema [AC-19]', async () => {
-    const { manifestPath, outputDir } = await makeAgentFixture();
+  it('produces bundle.json matching BundleManifest schema [AC-18/AC-19]', async () => {
+    const { projectDir, outputDir } = await makeProjectFixture();
 
-    const result = await buildBundle(manifestPath, { outputDir });
+    const result = await buildBundle(projectDir, { outputDir });
 
     const bundleJsonPath = path.join(outputDir, 'bundle.json');
     expect(existsSync(bundleJsonPath)).toBe(true);
@@ -100,6 +92,7 @@ describe('buildBundle success cases', () => {
     expect(typeof parsed['rillVersion']).toBe('string');
     expect(typeof parsed['agents']).toBe('object');
     expect(parsed['agents']).not.toBeNull();
+    expect(parsed['configVersion']).toBe('2');
 
     // Return value also has the manifest
     expect(result.manifest.name).toBe('test-agent');
@@ -111,9 +104,9 @@ describe('buildBundle success cases', () => {
   // AC-20: bundle.json contains sha256 checksum
   // ----------------------------------------------------------
   it('bundle.json contains sha256 checksum in format sha256:<hex> [AC-20]', async () => {
-    const { manifestPath, outputDir } = await makeAgentFixture();
+    const { projectDir, outputDir } = await makeProjectFixture();
 
-    const result = await buildBundle(manifestPath, { outputDir });
+    const result = await buildBundle(projectDir, { outputDir });
 
     expect(result.checksum).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(result.manifest.checksum).toMatch(/^sha256:[0-9a-f]{64}$/);
@@ -121,12 +114,12 @@ describe('buildBundle success cases', () => {
   });
 
   // ----------------------------------------------------------
-  // AC-21: dist/handlers.js exports a ComposedHandlerMap
+  // AC-21: dist/handlers.js present with export and handlers
   // ----------------------------------------------------------
   it('dist/handlers.js exists and contains export and handlers [AC-21]', async () => {
-    const { manifestPath, outputDir } = await makeAgentFixture();
+    const { projectDir, outputDir } = await makeProjectFixture();
 
-    await buildBundle(manifestPath, { outputDir });
+    await buildBundle(projectDir, { outputDir });
 
     const handlersPath = path.join(outputDir, 'handlers.js');
     expect(existsSync(handlersPath)).toBe(true);
@@ -137,12 +130,44 @@ describe('buildBundle success cases', () => {
   });
 
   // ----------------------------------------------------------
+  // AC-19: handlers.js thin loader imports from rill-config and rill-agent-harness
+  // ----------------------------------------------------------
+  it('handlers.js imports loadProject and invokeCallable from @rcrsr/rill-config [AC-19]', async () => {
+    const { projectDir, outputDir } = await makeProjectFixture();
+
+    await buildBundle(projectDir, { outputDir });
+
+    const content = await readFile(path.join(outputDir, 'handlers.js'), 'utf-8');
+    expect(content).toContain(`from '@rcrsr/rill-config'`);
+    expect(content).toContain('loadProject');
+    expect(content).toContain('invokeCallable');
+    expect(content).toContain(`from '@rcrsr/rill-agent-harness'`);
+    expect(content).toContain('createAgentHost');
+  });
+
+  // ----------------------------------------------------------
+  // AC-19: handlers.js reads rill-config.json from bundle-relative path
+  // ----------------------------------------------------------
+  it('handlers.js reads rill-config.json from bundle-relative agent path [AC-19]', async () => {
+    const { projectDir, outputDir } = await makeProjectFixture();
+
+    await buildBundle(projectDir, { outputDir });
+
+    const content = await readFile(path.join(outputDir, 'handlers.js'), 'utf-8');
+    expect(content).toContain('rill-config.json');
+    expect(content).toContain(`'agents'`);
+    // Verify no old harness compose imports remain
+    expect(content).not.toContain('composeAgent');
+    expect(content).not.toContain(`from '@rcrsr/rill'`);
+  });
+
+  // ----------------------------------------------------------
   // AC-22: dist/agents/<name>/entry.rill copied
   // ----------------------------------------------------------
   it('copies entry.rill to dist/agents/<name>/entry.rill [AC-22]', async () => {
-    const { manifestPath, outputDir } = await makeAgentFixture();
+    const { projectDir, outputDir } = await makeProjectFixture();
 
-    await buildBundle(manifestPath, { outputDir });
+    await buildBundle(projectDir, { outputDir });
 
     const entryPath = path.join(
       outputDir,
@@ -157,88 +182,152 @@ describe('buildBundle success cases', () => {
   });
 
   // ----------------------------------------------------------
-  // AC-23: dist/agents/<name>/card.json present per agent
+  // AC-18: Output rill-config.json written with rewritten main field
   // ----------------------------------------------------------
-  it('writes card.json per agent [AC-23]', async () => {
-    const { manifestPath, outputDir } = await makeAgentFixture();
+  it('writes rill-config.json to agents/<name>/ with main rewritten to entry.rill [AC-18]', async () => {
+    const { projectDir, outputDir } = await makeProjectFixture();
 
-    await buildBundle(manifestPath, { outputDir });
+    await buildBundle(projectDir, { outputDir });
 
-    const cardPath = path.join(outputDir, 'agents', 'test-agent', 'card.json');
-    expect(existsSync(cardPath)).toBe(true);
-
-    const raw = await readFile(cardPath, 'utf-8');
-    const card = JSON.parse(raw) as Record<string, unknown>;
-    expect(typeof card['name']).toBe('string');
-    expect(card['name']).toBe('test-agent');
-  });
-
-  // ----------------------------------------------------------
-  // AC-24: modules/ contains module .rill files when declared
-  // ----------------------------------------------------------
-  it('copies module .rill files when declared [AC-24]', async () => {
-    const { manifestPath, outputDir, fixtureDir } = await makeAgentFixture({
-      modules: { utils: 'utils.rill' },
-    });
-
-    await writeFile(
-      path.join(fixtureDir, 'utils.rill'),
-      `"utils module"`,
-      'utf-8'
-    );
-
-    await buildBundle(manifestPath, { outputDir });
-
-    const modulePath = path.join(
+    const rillConfigPath = path.join(
       outputDir,
       'agents',
       'test-agent',
-      'modules',
-      'utils.rill'
+      'rill-config.json'
     );
-    expect(existsSync(modulePath)).toBe(true);
+    expect(existsSync(rillConfigPath)).toBe(true);
 
-    const content = await readFile(modulePath, 'utf-8');
-    expect(content).toBe(`"utils module"`);
+    const raw = await readFile(rillConfigPath, 'utf-8');
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    expect(typeof parsed['main']).toBe('string');
+    expect((parsed['main'] as string).startsWith('entry.rill')).toBe(true);
   });
 
   // ----------------------------------------------------------
-  // AC-25: functions/ contains compiled .js when declared
+  // DS-6: BundleAgentEntry has configPath
   // ----------------------------------------------------------
-  it('compiles TypeScript functions to .js when declared [AC-25]', async () => {
-    const { manifestPath, outputDir, fixtureDir } = await makeAgentFixture({
-      functions: { 'myns::greet': 'greet.ts' },
-    });
+  it('bundle.json agents record has configPath field [DS-6/DS-7]', async () => {
+    const { projectDir, outputDir } = await makeProjectFixture();
 
+    const result = await buildBundle(projectDir, { outputDir });
+
+    const agentEntry = result.manifest.agents['test-agent'];
+    expect(agentEntry).toBeDefined();
+    expect(typeof agentEntry!.configPath).toBe('string');
+    expect(agentEntry!.configPath).toBe('agents/test-agent/rill-config.json');
+  });
+
+  // ----------------------------------------------------------
+  // DS-6: configVersion is "2"
+  // ----------------------------------------------------------
+  it('bundle.json has configVersion "2" [DS-6]', async () => {
+    const { projectDir, outputDir } = await makeProjectFixture();
+
+    const result = await buildBundle(projectDir, { outputDir });
+
+    expect(result.manifest.configVersion).toBe('2');
+  });
+
+  // ----------------------------------------------------------
+  // AC-28: Same source built twice produces identical checksums
+  // ----------------------------------------------------------
+  it('same source built twice produces identical checksums [AC-28]', async () => {
+    const { projectDir, outputDir } = await makeProjectFixture();
+    const outputDir2 = await makeTmpDir();
+
+    const result1 = await buildBundle(projectDir, { outputDir });
+    const result2 = await buildBundle(projectDir, { outputDir: outputDir2 });
+
+    expect(result1.checksum).toBe(result2.checksum);
+  });
+
+  // ----------------------------------------------------------
+  // AC-51: built timestamp varies but checksum identical
+  // ----------------------------------------------------------
+  it('built timestamp varies between builds but checksum is identical [AC-51]', async () => {
+    const { projectDir, outputDir } = await makeProjectFixture();
+    const outputDir2 = await makeTmpDir();
+
+    const result1 = await buildBundle(projectDir, { outputDir });
+    // Small delay to ensure timestamp differs
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const result2 = await buildBundle(projectDir, { outputDir: outputDir2 });
+
+    // Checksums are identical
+    expect(result1.checksum).toBe(result2.checksum);
+    // Timestamps may differ (not guaranteed in fast CI, but built field is set independently)
+    expect(typeof result1.manifest.built).toBe('string');
+    expect(typeof result2.manifest.built).toBe('string');
+  });
+
+  // ----------------------------------------------------------
+  // AC-18: Local TS extension compiled and mount path rewritten
+  // ----------------------------------------------------------
+  it('compiles local TS extension and rewrites mount path in rill-config.json [AC-18]', async () => {
+    const projectDir = await makeTmpDir();
+    const outputDir = await makeTmpDir();
+
+    // Write a minimal valid rill extension (must export extensionManifest with
+    // a factory returning { value: ... } as required by the rill-config loader)
+    const extensionSrc = `
+export const extensionManifest = {
+  name: 'my-ext',
+  version: '0.1.0',
+  exports: {},
+  factory: async () => ({ value: {} }),
+};
+`;
+    await writeFile(path.join(projectDir, 'my-ext.ts'), extensionSrc, 'utf-8');
+    await writeFile(path.join(projectDir, 'main.rill'), MINIMAL_RILL_SCRIPT, 'utf-8');
     await writeFile(
-      path.join(fixtureDir, 'greet.ts'),
-      `export default function greet(name: string): string { return \`Hello \${name}\`; }`,
+      path.join(projectDir, 'rill-config.json'),
+      JSON.stringify(
+        {
+          name: 'ext-agent',
+          version: '0.1.0',
+          main: 'main.rill:run',
+          extensions: { mounts: { myExt: './my-ext.ts' } },
+        },
+        null,
+        2
+      ),
       'utf-8'
     );
 
-    await buildBundle(manifestPath, { outputDir });
+    await buildBundle(projectDir, { outputDir });
 
-    const functionsDir = path.join(
+    // Compiled extension file must exist
+    const compiledPath = path.join(
       outputDir,
       'agents',
-      'test-agent',
-      'functions'
+      'ext-agent',
+      'extensions',
+      'myExt.js'
     );
-    expect(existsSync(functionsDir)).toBe(true);
-
-    // File is sanitized: :: → - (single dash per replacement)
-    const compiledPath = path.join(functionsDir, 'myns-greet.js');
     expect(existsSync(compiledPath)).toBe(true);
+
+    // Output rill-config.json must have rewritten mount path
+    const rillConfigPath = path.join(
+      outputDir,
+      'agents',
+      'ext-agent',
+      'rill-config.json'
+    );
+    const raw = await readFile(rillConfigPath, 'utf-8');
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const ext = parsed['extensions'] as Record<string, unknown>;
+    const mounts = ext['mounts'] as Record<string, string>;
+    expect(mounts['myExt']).toBe('./extensions/myExt.js');
   });
 
   // ----------------------------------------------------------
   // AC-26: --output flag writes to custom dir via outputDir option
   // ----------------------------------------------------------
   it('writes output to custom outputDir [AC-26]', async () => {
-    const { manifestPath } = await makeAgentFixture();
+    const { projectDir } = await makeProjectFixture();
     const customOutputDir = await makeTmpDir();
 
-    const result = await buildBundle(manifestPath, {
+    const result = await buildBundle(projectDir, {
       outputDir: customOutputDir,
     });
 
@@ -251,9 +340,9 @@ describe('buildBundle success cases', () => {
   // AC-29: No Dockerfile, .zip, deployment artifacts in output
   // ----------------------------------------------------------
   it('produces no Dockerfile, .zip, or deployment artifacts [AC-29]', async () => {
-    const { manifestPath, outputDir } = await makeAgentFixture();
+    const { projectDir, outputDir } = await makeProjectFixture();
 
-    await buildBundle(manifestPath, { outputDir });
+    await buildBundle(projectDir, { outputDir });
 
     expect(existsSync(path.join(outputDir, 'Dockerfile'))).toBe(false);
     // Walk output dir and assert no .zip files
@@ -282,109 +371,30 @@ describe('buildBundle success cases', () => {
   });
 
   // ----------------------------------------------------------
-  // AC-37: Zero modules → modules: {}, no modules/ dir
+  // Verify built timestamp is an ISO 8601 string
   // ----------------------------------------------------------
-  it('produces no modules/ dir when modules is empty [AC-37]', async () => {
-    const { manifestPath, outputDir } = await makeAgentFixture({ modules: {} });
+  it('bundle.json built field is a valid ISO 8601 timestamp', async () => {
+    const { projectDir, outputDir } = await makeProjectFixture();
 
-    const result = await buildBundle(manifestPath, { outputDir });
+    const result = await buildBundle(projectDir, { outputDir });
 
-    const agentEntry = result.manifest.agents['test-agent'];
-    expect(agentEntry).toBeDefined();
-    expect(agentEntry!.modules).toEqual({});
-
-    const modulesDir = path.join(outputDir, 'agents', 'test-agent', 'modules');
-    expect(existsSync(modulesDir)).toBe(false);
-  });
-
-  // ----------------------------------------------------------
-  // AC-38: Zero extensions → extensions: {} in bundle.json
-  // ----------------------------------------------------------
-  it('bundle.json has extensions: {} when no extensions declared [AC-38]', async () => {
-    const { manifestPath, outputDir } = await makeAgentFixture({
-      extensions: {},
-    });
-
-    const result = await buildBundle(manifestPath, { outputDir });
-
-    const agentEntry = result.manifest.agents['test-agent'];
-    expect(agentEntry).toBeDefined();
-    expect(agentEntry!.extensions).toEqual({});
-  });
-
-  // ----------------------------------------------------------
-  // AC-39: Zero assets → no assets/ dir (or empty)
-  // ----------------------------------------------------------
-  it('produces no asset files when assets array is empty [AC-39]', async () => {
-    const { manifestPath, outputDir } = await makeAgentFixture({ assets: [] });
-
-    await buildBundle(manifestPath, { outputDir });
-
-    const assetsDir = path.join(outputDir, 'assets');
-    if (existsSync(assetsDir)) {
-      const { readdir } = await import('node:fs/promises');
-      const files = await readdir(assetsDir);
-      expect(files).toHaveLength(0);
-    }
-  });
-
-  // ----------------------------------------------------------
-  // AC-40: 10-agent harness → all 10 in bundle.json.agents
-  // ----------------------------------------------------------
-  it('bundles all 10 agents from a harness manifest [AC-40]', async () => {
-    const fixtureDir = await makeTmpDir();
-    const outputDir = await makeTmpDir();
-
-    const agentCount = 10;
-    const agents = Array.from({ length: agentCount }, (_, i) => ({
-      name: `agent-${i + 1}`,
-      entry: `agent-${i + 1}.rill`,
-      extensions: {},
-      modules: {},
-    }));
-
-    // Write main.rill for each agent
-    for (const agent of agents) {
-      await writeFile(
-        path.join(fixtureDir, agent.entry),
-        `"${agent.name}"`,
-        'utf-8'
-      );
-    }
-
-    const harnessManifest = { shared: {}, agents };
-    const manifestPath = path.join(fixtureDir, 'harness.json');
-    await writeFile(
-      manifestPath,
-      JSON.stringify(harnessManifest, null, 2),
-      'utf-8'
+    const parsed = new Date(result.manifest.built);
+    expect(parsed.toString()).not.toBe('Invalid Date');
+    expect(result.manifest.built).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
     );
-
-    const result = await buildBundle(manifestPath, { outputDir });
-
-    expect(Object.keys(result.manifest.agents)).toHaveLength(agentCount);
-    for (const agent of agents) {
-      expect(result.manifest.agents[agent.name]).toBeDefined();
-    }
   });
 
   // ----------------------------------------------------------
-  // AC-41: Zero custom functions → no functions/ dir
+  // Verify rillVersion field is a non-empty string
   // ----------------------------------------------------------
-  it('produces no functions/ dir when functions is empty [AC-41]', async () => {
-    const { manifestPath, outputDir } = await makeAgentFixture({
-      functions: {},
-    });
+  it('bundle.json rillVersion is a non-empty string', async () => {
+    const { projectDir, outputDir } = await makeProjectFixture();
 
-    await buildBundle(manifestPath, { outputDir });
+    const result = await buildBundle(projectDir, { outputDir });
 
-    const functionsDir = path.join(
-      outputDir,
-      'agents',
-      'test-agent',
-      'functions'
-    );
-    expect(existsSync(functionsDir)).toBe(false);
+    expect(typeof result.manifest.rillVersion).toBe('string');
+    expect(result.manifest.rillVersion.length).toBeGreaterThan(0);
   });
 });
 
@@ -394,114 +404,143 @@ describe('buildBundle success cases', () => {
 
 describe('buildBundle error cases', () => {
   // ----------------------------------------------------------
-  // AC-30/EC-10: Missing manifest → ComposeError phase 'validation'
+  // AC-47: rill-config.json not found → ComposeError('validation')
   // ----------------------------------------------------------
-  it('throws ComposeError phase validation when manifest is missing [AC-30/EC-10]', async () => {
+  it('throws ComposeError phase validation when rill-config.json is missing [AC-47]', async () => {
     const outputDir = await makeTmpDir();
-    const nonExistentPath = path.join(outputDir, 'does-not-exist.json');
+    const nonExistentDir = path.join(outputDir, 'does-not-exist');
 
-    await expect(buildBundle(nonExistentPath, { outputDir })).rejects.toSatisfy(
-      (e: unknown) => {
-        return (
-          e instanceof ComposeError &&
-          e.phase === 'validation' &&
-          e.message.includes('Manifest not found')
-        );
-      }
-    );
+    await expect(
+      buildBundle(nonExistentDir, { outputDir })
+    ).rejects.toSatisfy((e: unknown) => {
+      return (
+        e instanceof ComposeError &&
+        e.phase === 'validation' &&
+        e.message.includes('rill-config.json not found')
+      );
+    });
   });
 
   // ----------------------------------------------------------
-  // AC-31/EC-11: Invalid manifest JSON → ManifestValidationError
+  // AC-48: Malformed rill-config.json → ComposeError('validation') with parse detail
   // ----------------------------------------------------------
-  it('throws ComposeError phase validation when manifest JSON is invalid [AC-31/EC-11]', async () => {
-    const fixtureDir = await makeTmpDir();
+  it('throws ComposeError phase validation when rill-config.json is malformed JSON [AC-48]', async () => {
+    const projectDir = await makeTmpDir();
     const outputDir = await makeTmpDir();
-    const manifestPath = path.join(fixtureDir, 'agent.json');
 
-    await writeFile(manifestPath, '{ this is not valid json }', 'utf-8');
-
-    await expect(buildBundle(manifestPath, { outputDir })).rejects.toSatisfy(
-      (e: unknown) => {
-        return e instanceof ComposeError && e.phase === 'validation';
-      }
-    );
-  });
-
-  it('throws ManifestValidationError when manifest fails schema validation [EC-11]', async () => {
-    const fixtureDir = await makeTmpDir();
-    const outputDir = await makeTmpDir();
-    const manifestPath = path.join(fixtureDir, 'agent.json');
-
-    // Valid JSON but missing required fields
     await writeFile(
-      manifestPath,
-      JSON.stringify({ name: 'bad-agent' }),
+      path.join(projectDir, 'rill-config.json'),
+      '{ this is not valid json }',
       'utf-8'
     );
 
     await expect(
-      buildBundle(manifestPath, { outputDir })
-    ).rejects.toBeInstanceOf(ManifestValidationError);
+      buildBundle(projectDir, { outputDir })
+    ).rejects.toSatisfy((e: unknown) => {
+      return (
+        e instanceof ComposeError &&
+        e.phase === 'validation' &&
+        e.message.includes('Failed to parse rill-config.json')
+      );
+    });
   });
 
   // ----------------------------------------------------------
-  // AC-32/EC-13: Missing entry .rill → ComposeError phase 'compilation'
+  // Entry .rill file not found → ComposeError('compilation')
   // ----------------------------------------------------------
-  it('throws ComposeError phase compilation when entry.rill is missing [AC-32/EC-13]', async () => {
-    const fixtureDir = await makeTmpDir();
+  it('throws ComposeError phase compilation when entry.rill is missing', async () => {
+    const projectDir = await makeTmpDir();
     const outputDir = await makeTmpDir();
-    const manifestPath = path.join(fixtureDir, 'agent.json');
 
-    // Write manifest but do NOT create main.rill
+    // Write config but NOT the .rill file
     await writeFile(
-      manifestPath,
-      JSON.stringify(
-        { ...MINIMAL_AGENT_MANIFEST, entry: 'main.rill' },
-        null,
-        2
-      ),
+      path.join(projectDir, 'rill-config.json'),
+      JSON.stringify({ name: 'test', version: '0.1.0', main: 'main.rill:run' }),
       'utf-8'
     );
 
-    await expect(buildBundle(manifestPath, { outputDir })).rejects.toSatisfy(
-      (e: unknown) => {
-        return (
-          e instanceof ComposeError &&
-          e.phase === 'compilation' &&
-          e.message.includes('Entry file not found')
-        );
-      }
-    );
+    await expect(
+      buildBundle(projectDir, { outputDir })
+    ).rejects.toSatisfy((e: unknown) => {
+      return (
+        e instanceof ComposeError &&
+        e.phase === 'compilation' &&
+        e.message.includes('Entry file not found')
+      );
+    });
   });
 
   // ----------------------------------------------------------
-  // AC-33/EC-14: TS compile error → ComposeError phase 'compilation'
+  // Local extension source missing → ComposeError('compilation')
   // ----------------------------------------------------------
-  it('throws ComposeError phase compilation when a function has a TS syntax error [AC-33/EC-14]', async () => {
-    const { manifestPath, outputDir, fixtureDir } = await makeAgentFixture({
-      functions: { 'broken::fn': 'broken.ts' },
+  it('throws ComposeError phase compilation when local extension source is missing', async () => {
+    const projectDir = await makeTmpDir();
+    const outputDir = await makeTmpDir();
+
+    await writeFile(
+      path.join(projectDir, 'rill-config.json'),
+      JSON.stringify({
+        name: 'test',
+        version: '0.1.0',
+        main: 'main.rill:run',
+        extensions: { mounts: { myExt: './missing-ext.ts' } },
+      }),
+      'utf-8'
+    );
+    await writeFile(path.join(projectDir, 'main.rill'), `"hello"`, 'utf-8');
+
+    await expect(
+      buildBundle(projectDir, { outputDir })
+    ).rejects.toSatisfy((e: unknown) => {
+      return (
+        e instanceof ComposeError &&
+        e.phase === 'compilation' &&
+        e.message.includes('Extension source not found')
+      );
+    });
+  });
+
+  // ----------------------------------------------------------
+  // AC-49: loadProject() dry-run failure deletes output and throws
+  // ----------------------------------------------------------
+  it('deletes output directory and throws when dry-run validation fails [AC-49]', async () => {
+    const projectDir = await makeTmpDir();
+    const outputDir = await makeTmpDir();
+
+    // Write a config that references a non-existent npm extension (will fail loadProject)
+    await writeFile(
+      path.join(projectDir, 'rill-config.json'),
+      JSON.stringify({
+        name: 'test',
+        version: '0.1.0',
+        main: 'main.rill:run',
+        extensions: {
+          mounts: { badExt: '@non-existent-pkg/does-not-exist-xyz123' },
+        },
+      }),
+      'utf-8'
+    );
+    await writeFile(path.join(projectDir, 'main.rill'), `"hello"`, 'utf-8');
+
+    await expect(
+      buildBundle(projectDir, { outputDir })
+    ).rejects.toSatisfy((e: unknown) => {
+      return (
+        e instanceof ComposeError &&
+        e.phase === 'validation' &&
+        e.message.includes('Bundle validation failed')
+      );
     });
 
-    // Write a TypeScript file with a syntax error
-    await writeFile(
-      path.join(fixtureDir, 'broken.ts'),
-      `export default function broken(: string) { return "bad"; }`,
-      'utf-8'
-    );
-
-    await expect(buildBundle(manifestPath, { outputDir })).rejects.toSatisfy(
-      (e: unknown) => {
-        return e instanceof ComposeError && e.phase === 'compilation';
-      }
-    );
+    // Output directory must be deleted after failure
+    expect(existsSync(outputDir)).toBe(false);
   });
 
   // ----------------------------------------------------------
   // AC-34/EC-15: Output not writable → ComposeError phase 'bundling'
   // ----------------------------------------------------------
   it('throws ComposeError phase bundling when output dir is not writable [AC-34/EC-15]', async () => {
-    const { manifestPath } = await makeAgentFixture();
+    const { projectDir } = await makeProjectFixture();
 
     // Make a read-only parent directory so mkdir on the outputDir path fails.
     const readOnlyParent = await makeTmpDir();
@@ -514,7 +553,7 @@ describe('buildBundle error cases', () => {
 
     try {
       await expect(
-        buildBundle(manifestPath, { outputDir: blockedOutputDir })
+        buildBundle(projectDir, { outputDir: blockedOutputDir })
       ).rejects.toSatisfy((e: unknown) => {
         return e instanceof ComposeError && e.phase === 'bundling';
       });
@@ -533,57 +572,12 @@ describe('buildBundle error cases', () => {
 
 describe('buildBundle boundary conditions', () => {
   // ----------------------------------------------------------
-  // Verify bundle.json agents record structure
-  // ----------------------------------------------------------
-  it('bundle.json agents record includes entry, modules, extensions, card per agent', async () => {
-    const { manifestPath, outputDir } = await makeAgentFixture();
-
-    const result = await buildBundle(manifestPath, { outputDir });
-
-    const agentEntry = result.manifest.agents['test-agent'];
-    expect(agentEntry).toBeDefined();
-    expect(agentEntry!.entry).toBe('entry.rill');
-    expect(typeof agentEntry!.modules).toBe('object');
-    expect(typeof agentEntry!.extensions).toBe('object');
-    expect(typeof agentEntry!.card).toBe('object');
-    expect(agentEntry!.card.name).toBe('test-agent');
-  });
-
-  // ----------------------------------------------------------
-  // Verify harness produces name 'harness' in bundle.json
-  // ----------------------------------------------------------
-  it('harness manifest sets bundle name to harness and version to 0.0.0', async () => {
-    const fixtureDir = await makeTmpDir();
-    const outputDir = await makeTmpDir();
-
-    await writeFile(path.join(fixtureDir, 'main.rill'), `"hello"`, 'utf-8');
-
-    const harnessManifest = {
-      shared: {},
-      agents: [
-        { name: 'my-agent', entry: 'main.rill', extensions: {}, modules: {} },
-      ],
-    };
-    const manifestPath = path.join(fixtureDir, 'harness.json');
-    await writeFile(
-      manifestPath,
-      JSON.stringify(harnessManifest, null, 2),
-      'utf-8'
-    );
-
-    const result = await buildBundle(manifestPath, { outputDir });
-
-    expect(result.manifest.name).toBe('harness');
-    expect(result.manifest.version).toBe('0.0.0');
-  });
-
-  // ----------------------------------------------------------
   // Verify built timestamp is an ISO 8601 string
   // ----------------------------------------------------------
   it('bundle.json built field is a valid ISO 8601 timestamp', async () => {
-    const { manifestPath, outputDir } = await makeAgentFixture();
+    const { projectDir, outputDir } = await makeProjectFixture();
 
-    const result = await buildBundle(manifestPath, { outputDir });
+    const result = await buildBundle(projectDir, { outputDir });
 
     const parsed = new Date(result.manifest.built);
     expect(parsed.toString()).not.toBe('Invalid Date');
@@ -593,14 +587,90 @@ describe('buildBundle boundary conditions', () => {
   });
 
   // ----------------------------------------------------------
-  // Verify rillVersion field is a non-empty string
+  // Name defaults to directory basename when not in config
   // ----------------------------------------------------------
-  it('bundle.json rillVersion is a non-empty string', async () => {
-    const { manifestPath, outputDir } = await makeAgentFixture();
+  it('uses directory basename as agent name when name field absent', async () => {
+    const projectDir = await makeTmpDir();
+    const outputDir = await makeTmpDir();
+    const dirName = path.basename(projectDir);
 
-    const result = await buildBundle(manifestPath, { outputDir });
+    await writeFile(
+      path.join(projectDir, 'rill-config.json'),
+      JSON.stringify({ version: '0.1.0', main: 'main.rill:run' }),
+      'utf-8'
+    );
+    await writeFile(path.join(projectDir, 'main.rill'), `"hello"`, 'utf-8');
 
-    expect(typeof result.manifest.rillVersion).toBe('string');
-    expect(result.manifest.rillVersion.length).toBeGreaterThan(0);
+    const result = await buildBundle(projectDir, { outputDir });
+
+    expect(result.manifest.name).toBe(dirName);
+  });
+
+  // ----------------------------------------------------------
+  // AC-49: 3+ local TS extensions all produce compiled JS
+  // ----------------------------------------------------------
+  it('compiles 3 local TS extensions and all produce JS output files [AC-49]', async () => {
+    const projectDir = await makeTmpDir();
+    const outputDir = await makeTmpDir();
+
+    const extensionSrc = (name: string) => `
+export const extensionManifest = {
+  name: '${name}',
+  version: '0.1.0',
+  exports: {},
+  factory: async () => ({ value: {} }),
+};
+`;
+
+    await writeFile(path.join(projectDir, 'ext-alpha.ts'), extensionSrc('ext-alpha'), 'utf-8');
+    await writeFile(path.join(projectDir, 'ext-beta.ts'), extensionSrc('ext-beta'), 'utf-8');
+    await writeFile(path.join(projectDir, 'ext-gamma.ts'), extensionSrc('ext-gamma'), 'utf-8');
+    await writeFile(path.join(projectDir, 'main.rill'), MINIMAL_RILL_SCRIPT, 'utf-8');
+    await writeFile(
+      path.join(projectDir, 'rill-config.json'),
+      JSON.stringify(
+        {
+          name: 'multi-ext-agent',
+          version: '0.1.0',
+          main: 'main.rill:run',
+          extensions: {
+            mounts: {
+              extAlpha: './ext-alpha.ts',
+              extBeta: './ext-beta.ts',
+              extGamma: './ext-gamma.ts',
+            },
+          },
+        },
+        null,
+        2
+      ),
+      'utf-8'
+    );
+
+    await buildBundle(projectDir, { outputDir });
+
+    const extensionsDir = path.join(outputDir, 'agents', 'multi-ext-agent', 'extensions');
+    expect(existsSync(path.join(extensionsDir, 'extAlpha.js'))).toBe(true);
+    expect(existsSync(path.join(extensionsDir, 'extBeta.js'))).toBe(true);
+    expect(existsSync(path.join(extensionsDir, 'extGamma.js'))).toBe(true);
+  });
+
+  // ----------------------------------------------------------
+  // Version defaults to '0.0.0' when not in config
+  // ----------------------------------------------------------
+  it('uses 0.0.0 as version when version field absent', async () => {
+    const projectDir = await makeTmpDir();
+    const outputDir = await makeTmpDir();
+
+    await writeFile(
+      path.join(projectDir, 'rill-config.json'),
+      JSON.stringify({ name: 'test', main: 'main.rill:run' }),
+      'utf-8'
+    );
+    await writeFile(path.join(projectDir, 'main.rill'), `"hello"`, 'utf-8');
+
+    const result = await buildBundle(projectDir, { outputDir });
+
+    expect(result.manifest.version).toBe('0.0.0');
   });
 });

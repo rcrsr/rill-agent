@@ -11,6 +11,16 @@ import type {
   ComposedHandlerMap,
 } from '@rcrsr/rill-agent-shared';
 
+// ============================================================
+// VERSION CONSTANTS
+// ============================================================
+
+/**
+ * The bundle format version this harness supports.
+ * Must match the configVersion written by the bundle tool.
+ */
+const SUPPORTED_CONFIG_VERSION = '2';
+
 export type { BundleAgentEntry };
 
 // ============================================================
@@ -36,6 +46,7 @@ function isBundleManifest(value: unknown): value is BundleManifest {
     typeof v['built'] === 'string' &&
     typeof v['checksum'] === 'string' &&
     typeof v['rillVersion'] === 'string' &&
+    typeof v['configVersion'] === 'string' &&
     v['agents'] !== null &&
     typeof v['agents'] === 'object'
   );
@@ -65,13 +76,47 @@ export async function loadBundle(
 
   // EC-20: Read and parse bundle.json
   const bundleJsonPath = path.join(bundleDir, 'bundle.json');
+
+  // Step 1: Parse raw JSON — JSON syntax errors wrapped as "Invalid bundle.json"
+  let rawParsed: unknown;
+  try {
+    rawParsed = JSON.parse(readFileSync(bundleJsonPath, 'utf-8'));
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`Invalid bundle.json at ${bundleJsonPath}: ${detail}`, {
+      cause: err,
+    });
+  }
+
+  // Step 2: Check configVersion before full schema validation so specific
+  // error messages are not wrapped in "Invalid bundle.json at ...".
+  // EC-14: missing configVersion → outdated bundle error
+  // AC-29: incompatible configVersion → version mismatch error
+  if (
+    rawParsed !== null &&
+    typeof rawParsed === 'object' &&
+    !Array.isArray(rawParsed)
+  ) {
+    const rawObj = rawParsed as Record<string, unknown>;
+    if (!('configVersion' in rawObj)) {
+      throw new Error(
+        'Bundle format outdated; rebuild with current bundle tool'
+      );
+    }
+    if (rawObj['configVersion'] !== SUPPORTED_CONFIG_VERSION) {
+      throw new Error(
+        `Bundle version ${String(rawObj['configVersion'])} not supported by harness version ${SUPPORTED_CONFIG_VERSION}`
+      );
+    }
+  }
+
+  // Step 3: Validate full schema — schema mismatches wrapped as "Invalid bundle.json"
   let manifest: BundleManifest;
   try {
-    const raw: unknown = JSON.parse(readFileSync(bundleJsonPath, 'utf-8'));
-    if (!isBundleManifest(raw)) {
+    if (!isBundleManifest(rawParsed)) {
       throw new Error('Schema mismatch: missing required fields');
     }
-    manifest = raw;
+    manifest = rawParsed;
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     throw new Error(`Invalid bundle.json at ${bundleJsonPath}: ${detail}`, {

@@ -1,6 +1,6 @@
 {
   "name": "@rcrsr/rill-agent-ext-ahi",
-  "version": "0.9.0",
+  "version": "0.18.4",
   "description": "rill extension for Agent Host Interface (AHI) integration",
   "license": "MIT",
   "author": "Andre Bremer",
@@ -23,14 +23,14 @@
     "check": "pnpm run build && pnpm run test && pnpm run lint"
   },
   "peerDependencies": {
-    "@rcrsr/rill": "^0.9.0"
+    "@rcrsr/rill": "~0.18.4"
   },
   "dependencies": {
-    "@rcrsr/rill-agent-shared": "workspace:^",
-    "@rcrsr/rill-agent-registry": "workspace:^"
+    "@rcrsr/rill-agent-registry": "workspace:^",
+    "@rcrsr/rill-agent-shared": "workspace:^"
   },
   "devDependencies": {
-    "@rcrsr/rill": "^0.9.0"
+    "@rcrsr/rill": "^0.18.4"
   },
   "files": [
     "dist"

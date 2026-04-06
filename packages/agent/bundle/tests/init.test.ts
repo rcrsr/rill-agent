@@ -30,14 +30,14 @@ afterEach(async () => {
 });
 
 // ============================================================
-// AC-27: initProject creates directory with required files
+// IR-13: initProject creates rill-config.json with :handler suffix
 // ============================================================
 
 describe('initProject success cases', () => {
   // ----------------------------------------------------------
-  // AC-27: Creates agent.json, main.rill, package.json
+  // IR-13: Creates rill-config.json, main.rill, and package.json
   // ----------------------------------------------------------
-  it('creates agent.json, main.rill, and package.json in new directory [AC-27]', async () => {
+  it('creates rill-config.json, main.rill, and package.json in new directory [IR-13]', async () => {
     const tmpDir = await makeTmpDir();
     originalCwd = process.cwd();
     process.chdir(tmpDir);
@@ -45,15 +45,29 @@ describe('initProject success cases', () => {
     await initProject('test-project');
 
     const projectDir = path.join(tmpDir, 'test-project');
-    expect(existsSync(path.join(projectDir, 'agent.json'))).toBe(true);
+    expect(existsSync(path.join(projectDir, 'rill-config.json'))).toBe(true);
     expect(existsSync(path.join(projectDir, 'main.rill'))).toBe(true);
     expect(existsSync(path.join(projectDir, 'package.json'))).toBe(true);
   });
 
   // ----------------------------------------------------------
-  // Additional: agent.json has correct shape
+  // IR-13: Does not create agent.json
   // ----------------------------------------------------------
-  it('agent.json has correct name, version, runtime, and entry fields', async () => {
+  it('does not create agent.json [IR-13]', async () => {
+    const tmpDir = await makeTmpDir();
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+
+    await initProject('test-project');
+
+    const projectDir = path.join(tmpDir, 'test-project');
+    expect(existsSync(path.join(projectDir, 'agent.json'))).toBe(false);
+  });
+
+  // ----------------------------------------------------------
+  // IR-13: rill-config.json has correct name, version, runtime, and main with :handler
+  // ----------------------------------------------------------
+  it('rill-config.json has name, version, runtime >=0.18.0, and main with :handler suffix [IR-13]', async () => {
     const tmpDir = await makeTmpDir();
     originalCwd = process.cwd();
     process.chdir(tmpDir);
@@ -61,23 +75,62 @@ describe('initProject success cases', () => {
     await initProject('my-agent');
 
     const raw = await readFile(
-      path.join(tmpDir, 'my-agent', 'agent.json'),
+      path.join(tmpDir, 'my-agent', 'rill-config.json'),
       'utf-8'
     );
-    const agentJson = JSON.parse(raw) as Record<string, unknown>;
+    const rillConfig = JSON.parse(raw) as Record<string, unknown>;
 
-    expect(agentJson['name']).toBe('my-agent');
-    expect(agentJson['version']).toBe('0.1.0');
-    expect(typeof agentJson['runtime']).toBe('string');
-    expect(agentJson['entry']).toBe('main.rill');
-    expect(typeof agentJson['extensions']).toBe('object');
-    expect(typeof agentJson['modules']).toBe('object');
+    expect(rillConfig['name']).toBe('my-agent');
+    expect(rillConfig['version']).toBe('0.1.0');
+    expect(rillConfig['runtime']).toBe('>=0.18.0');
+    expect(rillConfig['main']).toBe('main.rill:handler');
   });
 
   // ----------------------------------------------------------
-  // Additional: package.json has type: "module" and build/check scripts
+  // IR-13: rill-config.json has no functions, assets, or old runtime field
   // ----------------------------------------------------------
-  it('package.json has type: "module" and build and check scripts', async () => {
+  it('rill-config.json has no functions, assets, or @rcrsr/rill@* runtime [IR-13]', async () => {
+    const tmpDir = await makeTmpDir();
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+
+    await initProject('my-agent');
+
+    const raw = await readFile(
+      path.join(tmpDir, 'my-agent', 'rill-config.json'),
+      'utf-8'
+    );
+    const rillConfig = JSON.parse(raw) as Record<string, unknown>;
+
+    expect('functions' in rillConfig).toBe(false);
+    expect('assets' in rillConfig).toBe(false);
+    expect(rillConfig['runtime']).not.toBe('@rcrsr/rill@*');
+  });
+
+  // ----------------------------------------------------------
+  // IR-13: package.json build script uses rill-agent-bundle build with no path arg
+  // ----------------------------------------------------------
+  it('package.json build script uses "rill-agent-bundle build" with no path argument [IR-13]', async () => {
+    const tmpDir = await makeTmpDir();
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+
+    await initProject('my-agent');
+
+    const raw = await readFile(
+      path.join(tmpDir, 'my-agent', 'package.json'),
+      'utf-8'
+    );
+    const pkgJson = JSON.parse(raw) as Record<string, unknown>;
+    const scripts = pkgJson['scripts'] as Record<string, unknown>;
+
+    expect(scripts['build']).toBe('rill-agent-bundle build');
+  });
+
+  // ----------------------------------------------------------
+  // IR-13: package.json has type: "module" and check script
+  // ----------------------------------------------------------
+  it('package.json has type: "module" and check script', async () => {
     const tmpDir = await makeTmpDir();
     originalCwd = process.cwd();
     process.chdir(tmpDir);
@@ -91,16 +144,14 @@ describe('initProject success cases', () => {
     const pkgJson = JSON.parse(raw) as Record<string, unknown>;
 
     expect(pkgJson['type']).toBe('module');
-    expect(typeof pkgJson['scripts']).toBe('object');
     const scripts = pkgJson['scripts'] as Record<string, unknown>;
-    expect(typeof scripts['build']).toBe('string');
     expect(typeof scripts['check']).toBe('string');
   });
 
   // ----------------------------------------------------------
-  // Additional: extensions option creates entries in agent.json
+  // IR-13: extensions option uses extensions.mounts format
   // ----------------------------------------------------------
-  it('extensions option adds entries to agent.json extensions record', async () => {
+  it('extensions option adds entries in extensions.mounts format [IR-13]', async () => {
     const tmpDir = await makeTmpDir();
     originalCwd = process.cwd();
     process.chdir(tmpDir);
@@ -110,21 +161,39 @@ describe('initProject success cases', () => {
     });
 
     const raw = await readFile(
-      path.join(tmpDir, 'my-agent', 'agent.json'),
+      path.join(tmpDir, 'my-agent', 'rill-config.json'),
       'utf-8'
     );
-    const agentJson = JSON.parse(raw) as Record<string, unknown>;
-    const extensions = agentJson['extensions'] as Record<string, unknown>;
+    const rillConfig = JSON.parse(raw) as Record<string, unknown>;
+    const extensions = rillConfig['extensions'] as Record<string, unknown>;
 
-    expect(typeof extensions['rill-ext-fetch']).toBe('object');
-    expect(typeof extensions['rill-ext-log']).toBe('object');
-
-    const fetchEntry = extensions['rill-ext-fetch'] as Record<string, unknown>;
-    expect(fetchEntry['package']).toBe('@rcrsr/rill-ext-fetch');
+    expect(typeof extensions['mounts']).toBe('object');
+    const mounts = extensions['mounts'] as Record<string, string>;
+    expect(mounts['rill-ext-fetch']).toBe('@rcrsr/rill-ext-fetch');
+    expect(mounts['rill-ext-log']).toBe('@rcrsr/rill-ext-log');
   });
 
   // ----------------------------------------------------------
-  // Additional: main.rill is created with non-empty content
+  // IR-13: no extensions option produces no extensions field
+  // ----------------------------------------------------------
+  it('omits extensions field when no extensions provided [IR-13]', async () => {
+    const tmpDir = await makeTmpDir();
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+
+    await initProject('my-agent');
+
+    const raw = await readFile(
+      path.join(tmpDir, 'my-agent', 'rill-config.json'),
+      'utf-8'
+    );
+    const rillConfig = JSON.parse(raw) as Record<string, unknown>;
+
+    expect('extensions' in rillConfig).toBe(false);
+  });
+
+  // ----------------------------------------------------------
+  // main.rill is created with non-empty content referencing the project name
   // ----------------------------------------------------------
   it('main.rill is created with non-empty content referencing the project name', async () => {
     const tmpDir = await makeTmpDir();
@@ -143,14 +212,14 @@ describe('initProject success cases', () => {
 });
 
 // ============================================================
-// AC-35 / EC-18: Directory already exists → ComposeError phase 'init'
+// EC-13: Directory already exists → ComposeError phase 'init'
 // ============================================================
 
 describe('initProject error cases', () => {
   // ----------------------------------------------------------
-  // AC-35 / EC-18: Directory exists → ComposeError phase 'init'
+  // EC-13: Directory exists → ComposeError phase 'init'
   // ----------------------------------------------------------
-  it('throws ComposeError phase init when directory already exists [AC-35/EC-18]', async () => {
+  it('throws ComposeError phase init when directory already exists [EC-13]', async () => {
     const tmpDir = await makeTmpDir();
     originalCwd = process.cwd();
     process.chdir(tmpDir);
@@ -165,7 +234,7 @@ describe('initProject error cases', () => {
     );
   });
 
-  it('error message includes the directory name when directory exists [AC-35/EC-18]', async () => {
+  it('error message includes the directory name when directory exists [EC-13]', async () => {
     const tmpDir = await makeTmpDir();
     originalCwd = process.cwd();
     process.chdir(tmpDir);

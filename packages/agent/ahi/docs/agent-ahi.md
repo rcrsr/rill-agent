@@ -67,7 +67,7 @@ Registry mode resolves endpoints eagerly at creation and retries lazily on first
 
 ### Manifest Usage
 
-Declare AHI in `agent.json` and pass config at runtime:
+Declare AHI in `rill-config.json`:
 
 ```json
 {

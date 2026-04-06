@@ -34,10 +34,11 @@ async function callDownstream(
 ): Promise<RillValue> {
   const fn = (ext as Record<string, unknown>)['downstream'] as {
     fn: (
-      args: RillValue[],
+      args: unknown,
       ctx: { metadata: Record<string, string> }
     ) => Promise<RillValue>;
   };
+  // Untyped callable: runtime passes RillValue[] directly; cast required for types
   return fn.fn(args, makeCtx());
 }
 
@@ -295,7 +296,7 @@ describe('AHI error mapping', () => {
 
       const fn = (ext as Record<string, unknown>)['downstream'] as {
         fn: (
-          args: RillValue[],
+          args: unknown,
           ctx: { metadata: Record<string, string> }
         ) => Promise<RillValue>;
       };

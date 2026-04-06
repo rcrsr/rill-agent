@@ -25,19 +25,14 @@ function parseFlag(args: string[], flag: string): string | undefined {
 // ============================================================
 
 async function runBuild(args: string[]): Promise<void> {
-  // Positional: first non-flag arg is manifest path
+  // Positional: first non-flag arg is project directory; defaults to cwd
   const positionals = args.filter((a) => !a.startsWith('-'));
-  const manifestPath = positionals[0];
-
-  if (manifestPath === undefined || manifestPath === '') {
-    process.stderr.write('Error: build requires <manifest-path>\n');
-    process.exit(1);
-  }
+  const projectDir = positionals[0] !== undefined && positionals[0] !== '' ? positionals[0] : process.cwd();
 
   const outputDir = parseFlag(args, '--output');
 
   try {
-    const result = await buildBundle(manifestPath, {
+    const result = await buildBundle(projectDir, {
       ...(outputDir !== undefined ? { outputDir } : {}),
     });
     process.stdout.write(`${result.outputPath}\n`);
@@ -136,7 +131,7 @@ async function main(): Promise<void> {
         ? `Unknown subcommand: ${subcommand}`
         : 'No subcommand provided';
     process.stderr.write(
-      `${cmd}\nUsage: rill-agent-bundle <build|init|check> [options]\n`
+      `${cmd}\nUsage: rill-agent-bundle <build|init|check> [project-dir] [options]\n`
     );
     process.exit(1);
   }

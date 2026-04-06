@@ -1,47 +1,52 @@
-import { existsSync, readFileSync, unlinkSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
-import { pathToFileURL } from 'node:url';
-import { build as esbuild, type BuildFailure } from 'esbuild';
 import {
   type RillValue,
-  type RillStructuralType,
-  type HostFunctionDefinition,
-  type ExtensionResult,
-  hoistExtension,
+  type ApplicationCallable,
+  type ScriptCallable,
   createRuntimeContext,
   parse,
   execute,
   RuntimeError,
   callable,
   isDict,
+  isScriptCallable,
 } from '@rcrsr/rill';
 import {
-  type AgentManifest,
-  type HarnessManifest,
-  type HarnessAgentEntry,
+  parseConfig,
+  parseMainField,
+  loadExtensions,
+  resolveMounts,
+  buildResolvers,
+  introspectHandler,
+  type RillConfigFile,
+} from '@rcrsr/rill-config';
+import {
   type AgentRunner,
   type InProcessRunRequest,
   type InProcessRunResponse,
   type ComposedAgent,
-  type ResolvedExtension,
+  type ExtensionResult,
+  type DeferredExtensionEntry,
+  type DeferredContextEntry,
+  type InputSchema,
+  type AgentCardInput,
+  type SlimHarnessConfig,
   ComposeError,
-  resolveExtensions,
-  extractConfigSchema,
+  ManifestValidationError,
   generateAgentCard,
-  structuralTypeToInputSchema,
-  structuralTypeToOutputSchema,
+  validateDeferredScope,
+  validateSlimHarness,
 } from '@rcrsr/rill-agent-shared';
+import { AgentHostError } from './core/errors.js';
 
 // ============================================================
 // PUBLIC INTERFACES
 // ============================================================
 
 export interface ComposeOptions {
-  readonly basePath?: string | undefined;
   readonly config: Record<string, Record<string, unknown>>;
-  readonly inputShape?: RillStructuralType | undefined;
-  readonly outputShape?: RillStructuralType | undefined;
+  readonly env: Record<string, string | undefined>;
 }
 
 export interface ComposedHarness {
@@ -51,166 +56,45 @@ export interface ComposedHarness {
   dispose(): Promise<void>;
 }
 
+/**
+ * Result of resolving deferred extensions for a single request.
+ * Caller must invoke dispose() after the request completes.
+ */
+export interface ResolvedDeferredResult {
+  /** Resolved extension instances keyed by mount alias. */
+  readonly extensions: Record<string, ExtensionResult>;
+  /** Disposes all resolved instances. Call after request completes. */
+  dispose(): Promise<void>;
+}
+
 // ============================================================
 // INTERNAL HELPERS
 // ============================================================
 
 /**
- * Compile a TypeScript custom function file using esbuild.
- * Returns the compiled ESM file path (caller must clean up).
- * Throws ComposeError on file-not-found or compilation error.
+ * Separate dispose from functions and prefix function names with namespace.
+ * Replaces the removed hoistExtension from @rcrsr/rill v0.18.0.
+ *
+ * @param namespace - Extension namespace (e.g. "fs", "ahi")
+ * @param extension - Extension result from factory
+ * @returns Separated prefixed ApplicationCallable map and dispose handler
  */
-async function compileFunctionFile(srcPath: string): Promise<string> {
-  if (!existsSync(srcPath)) {
-    throw new ComposeError(
-      `Function source not found: ${srcPath}`,
-      'compilation'
-    );
+function hoistExtension(
+  namespace: string,
+  extension: ExtensionResult
+): { functions: Record<string, ApplicationCallable>; dispose?: () => void | Promise<void> } {
+  const { dispose, ...rest } = extension;
+  const functions: Record<string, ApplicationCallable> = {};
+  for (const [name, fn] of Object.entries(rest)) {
+    if (name === 'suspend' || name === 'restore') continue;
+    functions[`${namespace}::${name}`] = fn as ApplicationCallable;
   }
-
-  const tmpFile = path.join(
-    os.tmpdir(),
-    `rill-fn-${Date.now()}-${Math.random().toString(36).slice(2)}.mjs`
-  );
-
-  try {
-    await esbuild({
-      entryPoints: [srcPath],
-      bundle: true,
-      format: 'esm',
-      platform: 'node',
-      outfile: tmpFile,
-      logLevel: 'silent',
-    });
-  } catch (err) {
-    // esbuild throws BuildFailure with .errors array on compilation error
-    const failure = err as BuildFailure;
-    if (Array.isArray(failure.errors) && failure.errors.length > 0) {
-      const first = failure.errors[0]!;
-      const file = first.location?.file ?? srcPath;
-      const line = first.location?.line ?? 0;
-      const msg = first.text;
-      throw new ComposeError(
-        `Compilation error in ${file}:${line}: ${msg}`,
-        'compilation'
-      );
-    }
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new ComposeError(
-      `Compilation error in ${srcPath}:0: ${msg}`,
-      'compilation'
-    );
+  if (dispose !== undefined) {
+    return { functions, dispose };
   }
-
-  return tmpFile;
+  return { functions };
 }
 
-/**
- * Load custom host functions from manifest.functions.
- * Keys are "app::name" → .ts source path.
- * Returns a Record<string, HostFunctionDefinition> keyed without "app::" prefix.
- */
-async function loadCustomFunctions(
-  functions: Record<string, string>,
-  basePath: string
-): Promise<Record<string, HostFunctionDefinition>> {
-  const result: Record<string, HostFunctionDefinition> = {};
-
-  for (const [qualifiedName, relSrcPath] of Object.entries(functions)) {
-    const srcPath = path.resolve(basePath, relSrcPath);
-    const tmpFile = await compileFunctionFile(srcPath);
-
-    let mod: unknown;
-    try {
-      mod = await import(pathToFileURL(tmpFile).href);
-    } finally {
-      try {
-        unlinkSync(tmpFile);
-      } catch {
-        // Best-effort cleanup
-      }
-    }
-
-    // Extract all HostFunctionDefinition values from the module
-    if (mod !== null && typeof mod === 'object') {
-      for (const [exportName, exportValue] of Object.entries(
-        mod as Record<string, unknown>
-      )) {
-        if (exportName === 'default') continue;
-        if (typeof exportValue === 'object' && exportValue !== null) {
-          // Strip "app::" prefix for the name key in context registration
-          const fnName = qualifiedName.startsWith('app::')
-            ? qualifiedName.slice('app::'.length)
-            : qualifiedName;
-          result[fnName] = exportValue as HostFunctionDefinition;
-          break;
-        }
-      }
-    }
-  }
-
-  return result;
-}
-
-// ============================================================
-// INTERNAL: INSTANTIATE EXTENSIONS
-// ============================================================
-
-/**
- * Instantiate resolved extensions into ExtensionResult instances.
- * Returns merged functions, per-alias extension results, and dispose handlers.
- * On instantiation failure, disposes already-instantiated extensions before throwing (EC-5).
- */
-async function instantiateExtensions(
-  resolved: Array<
-    ResolvedExtension & { readonly config: Record<string, unknown> }
-  >,
-  alreadyDispose?: Array<() => void | Promise<void>>
-): Promise<{
-  functions: Record<string, HostFunctionDefinition>;
-  extensions: Record<string, ExtensionResult>;
-  disposeHandlers: Array<() => void | Promise<void>>;
-}> {
-  const disposeHandlers: Array<() => void | Promise<void>> = [];
-  let mergedFunctions: Record<string, HostFunctionDefinition> = {};
-  const extensions: Record<string, ExtensionResult> = {};
-
-  for (const ext of resolved) {
-    let instance: ExtensionResult;
-    try {
-      instance = ext.factory(ext.config);
-    } catch (err) {
-      // EC-5: dispose already-instantiated extensions before throwing
-      const toDispose = [
-        ...(alreadyDispose ?? []),
-        ...disposeHandlers,
-      ].reverse();
-      for (const handler of toDispose) {
-        try {
-          await handler();
-        } catch {
-          // Ignore individual dispose errors
-        }
-      }
-      const msg = err instanceof Error ? err.message : String(err);
-      throw new ComposeError(
-        `Extension ${ext.alias} failed to initialize: ${msg}`,
-        'init'
-      );
-    }
-
-    extensions[ext.alias] = instance;
-
-    const hoisted = hoistExtension(ext.namespace, instance);
-    mergedFunctions = { ...mergedFunctions, ...hoisted.functions };
-
-    if (hoisted.dispose !== undefined) {
-      disposeHandlers.push(hoisted.dispose);
-    }
-  }
-
-  return { functions: mergedFunctions, extensions, disposeHandlers };
-}
 
 // ============================================================
 // INTERNAL: BIND HOST
@@ -299,131 +183,531 @@ export function bindHost(
 }
 
 // ============================================================
+// DEFERRED RESOLUTION
+// ============================================================
+
+/** Regex matching @{VAR} placeholders in config template values. */
+const DEFERRED_VAR_RE = /@\{([A-Z_][A-Z0-9_]*)\}/g;
+
+/**
+ * Substitute all @{VAR} placeholders in a string value.
+ * Returns the resolved string. Assumes all required vars are present.
+ */
+function substituteVars(
+  template: string,
+  runtimeConfig: Record<string, string>
+): string {
+  return template.replace(DEFERRED_VAR_RE, (_match, varName: string) => {
+    return runtimeConfig[varName] ?? '';
+  });
+}
+
+/**
+ * Resolve @{VAR} placeholders in a config template.
+ * Returns a new config object with all string values substituted.
+ */
+function resolveConfigTemplate(
+  template: Record<string, unknown>,
+  runtimeConfig: Record<string, string>
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(template)) {
+    result[key] =
+      typeof value === 'string' ? substituteVars(value, runtimeConfig) : value;
+  }
+  return result;
+}
+
+/**
+ * Extract an ExtensionFactory callable from a loaded module object.
+ * Throws AgentHostError('init') if the module has no callable factory.
+ */
+function extractDeferredFactory(
+  module: object,
+  mountAlias: string
+): (config: unknown) => ExtensionResult {
+  const record = module as Record<string, unknown>;
+  if ('default' in record && typeof record['default'] === 'function') {
+    return record['default'] as (config: unknown) => ExtensionResult;
+  }
+  const named = Object.values(record).find((v) => typeof v === 'function');
+  if (named !== undefined) {
+    return named as (config: unknown) => ExtensionResult;
+  }
+  throw new AgentHostError(
+    `Deferred extension ${mountAlias} module does not export a factory`,
+    'init'
+  );
+}
+
+/**
+ * Resolves @{VAR} placeholders in deferred extension configs and instantiates
+ * each extension factory per request. Returns resolved extensions and a
+ * dispose function that cleans up all instances after request completion.
+ *
+ * @throws AgentHostError('init') when a required variable is missing [EC-8]
+ * @throws AgentHostError('init') when an extension factory throws [EC-8]
+ */
+export async function resolveDeferredExtensions(
+  deferred: readonly DeferredExtensionEntry[],
+  runtimeConfig: Record<string, string>
+): Promise<ResolvedDeferredResult> {
+  // Collect all missing required variables across all entries
+  const missingVars: string[] = [];
+  for (const entry of deferred) {
+    for (const varName of entry.requiredVars) {
+      if (!(varName in runtimeConfig) && !missingVars.includes(varName)) {
+        missingVars.push(varName);
+      }
+    }
+  }
+  if (missingVars.length > 0) {
+    throw new AgentHostError(
+      `Missing required runtime variables: ${missingVars.join(', ')}`,
+      'init'
+    );
+  }
+
+  const extensions: Record<string, ExtensionResult> = {};
+  const disposeHandlers: Array<() => void | Promise<void>> = [];
+
+  for (const entry of deferred) {
+    const resolvedConfig = resolveConfigTemplate(
+      entry.configTemplate,
+      runtimeConfig
+    );
+    const factory = extractDeferredFactory(entry.module, entry.mountAlias);
+
+    let instance: ExtensionResult;
+    try {
+      instance = factory(resolvedConfig);
+    } catch (err) {
+      // EC-8: factory throw — dispose already-instantiated instances, then wrap
+      const toDispose = [...disposeHandlers].reverse();
+      for (const handler of toDispose) {
+        try {
+          await handler();
+        } catch {
+          // Ignore individual dispose errors
+        }
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new AgentHostError(
+        `Deferred extension ${entry.mountAlias} failed to initialize: ${msg}`,
+        'init',
+        err,
+        { extensionAlias: entry.mountAlias }
+      );
+    }
+
+    extensions[entry.mountAlias] = instance;
+
+    const hoisted = hoistExtension(entry.mountAlias, instance);
+    if (hoisted.dispose !== undefined) {
+      disposeHandlers.push(hoisted.dispose);
+    }
+  }
+
+  const reverseDispose = [...disposeHandlers].reverse();
+
+  return {
+    extensions,
+    async dispose(): Promise<void> {
+      for (const handler of reverseDispose) {
+        try {
+          await handler();
+        } catch {
+          // Ignore individual dispose errors
+        }
+      }
+    },
+  };
+}
+
+/**
+ * Resolves @{VAR} placeholders in deferred context values per request.
+ * Returns resolved context values to merge into the runtime context.
+ *
+ * @throws AgentHostError('init') when a required variable is missing [EC-9]
+ */
+export function resolveDeferredContext(
+  deferred: readonly DeferredContextEntry[],
+  runtimeConfig: Record<string, string>
+): Record<string, unknown> {
+  // Collect all missing required variables across all entries
+  const missingVars: string[] = [];
+  for (const entry of deferred) {
+    for (const varName of entry.requiredVars) {
+      if (!(varName in runtimeConfig) && !missingVars.includes(varName)) {
+        missingVars.push(varName);
+      }
+    }
+  }
+  if (missingVars.length > 0) {
+    throw new AgentHostError(
+      `Missing required runtime variables: ${missingVars.join(', ')}`,
+      'init'
+    );
+  }
+
+  const result: Record<string, unknown> = {};
+  for (const entry of deferred) {
+    result[entry.key] = substituteVars(entry.template, runtimeConfig);
+  }
+  return result;
+}
+
+// ============================================================
 // COMPOSE AGENT
 // ============================================================
 
 /**
- * Compose an agent from an AgentManifest.
- * Resolves extensions, validates config schemas, compiles custom functions,
- * loads modules, and parses the entry script — returning a ComposedAgent ready
- * to execute.
+ * Returns true if any string value in the flat config object contains an
+ * @{VAR} placeholder.
+ */
+function hasDeferredVars(config: Record<string, unknown>): boolean {
+  const re = /@\{[A-Z_][A-Z0-9_]*\}/;
+  for (const value of Object.values(config)) {
+    if (typeof value === 'string' && re.test(value)) return true;
+  }
+  return false;
+}
+
+/**
+ * Extracts all unique @{VAR} variable names from string values in a flat
+ * config object. Returns an empty array when no deferred vars are present.
+ */
+function extractDeferredVarNames(config: Record<string, unknown>): string[] {
+  const names: string[] = [];
+  for (const value of Object.values(config)) {
+    if (typeof value === 'string') {
+      DEFERRED_VAR_RE.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = DEFERRED_VAR_RE.exec(value)) !== null) {
+        const name = m[1] as string;
+        if (!names.includes(name)) names.push(name);
+      }
+    }
+  }
+  return names;
+}
+
+/**
+ * Maps a rill-config HandlerParam type string to an InputSchema type.
+ * Returns null for 'any' (not representable in InputSchema).
+ */
+function mapHandlerParamType(
+  type: string
+): 'string' | 'number' | 'bool' | 'list' | 'dict' | null {
+  switch (type) {
+    case 'string':
+      return 'string';
+    case 'number':
+      return 'number';
+    case 'bool':
+      return 'bool';
+    case 'list':
+      return 'list';
+    case 'dict':
+      return 'dict';
+    default:
+      return null;
+  }
+}
+
+/**
+ * Builds an InputSchema from handler introspection params.
+ * Returns undefined when all params are untyped (any) or there are no params.
+ */
+function buildInputSchema(
+  params: ReturnType<typeof introspectHandler>['params']
+): InputSchema | undefined {
+  if (params.length === 0) return undefined;
+  const schema: InputSchema = {};
+  for (const param of params) {
+    const mappedType = mapHandlerParamType(param.type);
+    if (mappedType === null) continue;
+    const descriptor: InputSchema[string] = { type: mappedType };
+    if (param.required) descriptor.required = true;
+    if (param.description !== undefined) descriptor.description = param.description;
+    schema[param.name] = descriptor;
+  }
+  return Object.keys(schema).length > 0 ? schema : undefined;
+}
+
+/**
+ * Compose an agent from a project directory containing rill-config.json.
  *
- * @param manifest - Validated agent manifest
- * @param options - Required: basePath (defaults to cwd) and config per extension alias
- * @returns ComposedAgent with context, AST, modules, card, and dispose()
+ * Loads and validates rill-config.json, resolves extensions, introspects the
+ * handler, and returns a ComposedAgent ready for execution.
+ *
+ * @param projectDir - Directory containing rill-config.json and entry .rill file
+ * @param options - env for ${VAR} resolution; config for per-extension overrides
+ * @returns ComposedAgent with context, AST, card, deferred fields, and dispose()
  * @throws ComposeError on any composition failure
  */
 export async function composeAgent(
-  manifest: AgentManifest,
+  projectDir: string,
   options: ComposeOptions
 ): Promise<ComposedAgent> {
-  const basePath = options.basePath ?? process.cwd();
-
-  // Serialize RillStructuralType options to InputSchema/OutputSchema if provided
-  const effectiveInput =
-    options.inputShape !== undefined
-      ? structuralTypeToInputSchema(options.inputShape, [])
-      : manifest.input;
-  const effectiveOutput =
-    options.outputShape !== undefined
-      ? structuralTypeToOutputSchema(options.outputShape)
-      : manifest.output;
-
-  // Step 2: Resolve extensions (handles EC-3, EC-4, EC-5)
-  const resolvedRaw = await resolveExtensions(manifest.extensions, {
-    manifestDir: basePath,
-  });
-
-  // Step 3: Validate config schemas and attach config slices to resolved extensions
-  const missingFields: string[] = [];
-  const resolved = resolvedRaw.map((ext) => {
-    const schema = extractConfigSchema(ext.mod, ext.packageName);
-    const configSlice = options.config[ext.alias] ?? {};
-    for (const [field, descriptor] of Object.entries(schema)) {
-      if (descriptor.required === true && !(field in configSlice)) {
-        missingFields.push(`${ext.alias}.${field}`);
-      }
-    }
-    return { ...ext, config: configSlice };
-  });
-
-  if (missingFields.length > 0) {
+  // Step 1: Read rill-config.json
+  const configPath = path.join(projectDir, 'rill-config.json');
+  let raw: string;
+  try {
+    raw = readFileSync(configPath, 'utf-8');
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
     throw new ComposeError(
-      `Missing required config fields: ${missingFields.join(', ')}`,
+      `rill-config.json not found or unreadable: ${msg}`,
+      'validation'
+    );
+  }
+
+  // Step 2: Parse config — resolves ${VAR} with env, leaves @{VAR} as literals.
+  // Filter undefined values from env (parseConfig requires Record<string, string>).
+  const filteredEnv: Record<string, string> = {};
+  for (const [k, v] of Object.entries(options.env)) {
+    if (v !== undefined) filteredEnv[k] = v;
+  }
+
+  let config: RillConfigFile;
+  try {
+    config = parseConfig(raw, filteredEnv);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new ComposeError(msg, 'validation');
+  }
+
+  // Step 3: Validate @{VAR} scope — must only appear in extensions.config and
+  // context.values (EC-2).
+  const violations = validateDeferredScope(config as Record<string, unknown>);
+  if (violations.length > 0) {
+    throw new ComposeError(
+      `@{VAR} placeholders in disallowed sections: ${violations.join(', ')}`,
+      'validation'
+    );
+  }
+
+  // Step 4: Parse and validate main field — handler suffix is required (EC-2).
+  if (config.main === undefined || config.main.length === 0) {
+    throw new ComposeError('handler mode required', 'validation');
+  }
+  let parsedMain: { filePath: string; handlerName?: string | undefined };
+  try {
+    parsedMain = parseMainField(config.main);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new ComposeError(msg, 'validation');
+  }
+  if (parsedMain.handlerName === undefined) {
+    throw new ComposeError('handler mode required', 'validation');
+  }
+  const handlerName = parsedMain.handlerName;
+
+  // Step 5: Merge per-extension config from file and caller options.
+  // Caller options override file config for the same alias.
+  const extensionMounts = config.extensions?.mounts ?? {};
+  const fileExtConfig = (config.extensions?.config ?? {}) as Record<
+    string,
+    Record<string, unknown>
+  >;
+  const mergedExtConfig: Record<string, Record<string, unknown>> = {};
+  for (const alias of Object.keys(extensionMounts)) {
+    mergedExtConfig[alias] = {
+      ...(fileExtConfig[alias] ?? {}),
+      ...(options.config[alias] ?? {}),
+    };
+  }
+
+  // Step 6: Partition mounts into static (no @{VAR}) and deferred (@{VAR}).
+  const staticMountsRecord: Record<string, string> = {};
+  const deferredMountAliases: string[] = [];
+  for (const [alias, specifier] of Object.entries(extensionMounts)) {
+    const extCfg = mergedExtConfig[alias] ?? {};
+    if (hasDeferredVars(extCfg)) {
+      deferredMountAliases.push(alias);
+    } else {
+      staticMountsRecord[alias] = specifier;
+    }
+  }
+
+  // Step 7: Load static extensions via rill-config loadExtensions (EC-3).
+  let extTree: Record<string, RillValue> = {};
+  let disposes: ReadonlyArray<() => void | Promise<void>> = [];
+  if (Object.keys(staticMountsRecord).length > 0) {
+    const staticMounts = resolveMounts(staticMountsRecord);
+    const staticConfig: Record<string, Record<string, unknown>> = {};
+    for (const alias of Object.keys(staticMountsRecord)) {
+      staticConfig[alias] = mergedExtConfig[alias] ?? {};
+    }
+    try {
+      const loaded = await loadExtensions(staticMounts, staticConfig);
+      extTree = loaded.extTree as Record<string, RillValue>;
+      disposes = loaded.disposes;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new ComposeError(msg, 'resolution');
+    }
+  }
+
+  // Step 8: Build deferred extension entries — import module and validate manifest
+  // at load time but defer factory invocation until runtime (AC-5).
+  const deferredExtensions: DeferredExtensionEntry[] = [];
+  for (const alias of deferredMountAliases) {
+    const specifier = extensionMounts[alias] as string;
+    let mod: object;
+    try {
+      mod = (await import(specifier)) as object;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new ComposeError(`Extension not found: ${specifier} — ${msg}`, 'resolution');
+    }
+    const record = mod as Record<string, unknown>;
+    if (
+      !('extensionManifest' in record) ||
+      record['extensionManifest'] === null ||
+      typeof record['extensionManifest'] !== 'object'
+    ) {
+      throw new ComposeError(
+        `Extension ${specifier} does not export extensionManifest`,
+        'resolution'
+      );
+    }
+    const extCfg = mergedExtConfig[alias] ?? {};
+    deferredExtensions.push({
+      mountAlias: alias,
+      module: mod,
+      manifest: record['extensionManifest'] as object,
+      configTemplate: extCfg,
+      requiredVars: extractDeferredVarNames(extCfg),
+    });
+  }
+
+  // Step 9: Build deferred context entries from context.values with @{VAR}.
+  const deferredContext: DeferredContextEntry[] = [];
+  const contextValues = config.context?.values ?? {};
+  for (const [key, value] of Object.entries(contextValues)) {
+    if (typeof value === 'string' && /@\{[A-Z_][A-Z0-9_]*\}/.test(value)) {
+      deferredContext.push({
+        key,
+        template: value,
+        requiredVars: extractDeferredVarNames({ [key]: value }),
+      });
+    }
+  }
+
+  // Collect all unique runtime variable names from deferred entries.
+  const runtimeVarSet = new Set<string>();
+  for (const entry of deferredExtensions) {
+    for (const v of entry.requiredVars) runtimeVarSet.add(v);
+  }
+  for (const entry of deferredContext) {
+    for (const v of entry.requiredVars) runtimeVarSet.add(v);
+  }
+  const runtimeVariables = [...runtimeVarSet];
+
+  // Step 10: Build resolvers from loaded extension tree, static context values,
+  // and module directory mappings.
+  const staticContextValues: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(contextValues)) {
+    // Exclude deferred context values from the static resolver config.
+    if (typeof value !== 'string' || !/@\{[A-Z_][A-Z0-9_]*\}/.test(value)) {
+      staticContextValues[key] = value;
+    }
+  }
+  const resolverConfig = buildResolvers({
+    extTree,
+    contextValues: staticContextValues,
+    modulesConfig: (config.modules ?? {}) as Record<string, string>,
+    configDir: projectDir,
+  });
+
+  // Step 11: Create RuntimeContext with resolvers and host options.
+  const hostOpts = config.host ?? {};
+  const context = createRuntimeContext({
+    ...(hostOpts.timeout !== undefined ? { timeout: hostOpts.timeout } : {}),
+    ...(hostOpts.maxCallStackDepth !== undefined
+      ? { maxCallStackDepth: hostOpts.maxCallStackDepth }
+      : {}),
+    resolvers: resolverConfig.resolvers,
+    configurations: resolverConfig.configurations,
+    parseSource: parse,
+  });
+
+  // Step 12: Read and parse entry file.
+  const entryFilePath = path.resolve(projectDir, parsedMain.filePath);
+  if (!existsSync(entryFilePath)) {
+    throw new ComposeError(`Entry file not found: ${entryFilePath}`, 'resolution');
+  }
+  let entrySource: string;
+  try {
+    entrySource = readFileSync(entryFilePath, 'utf-8');
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new ComposeError(`Failed to read entry file ${entryFilePath}: ${msg}`, 'resolution');
+  }
+  let ast: ReturnType<typeof parse>;
+  try {
+    ast = parse(entrySource);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new ComposeError(`Parse error in ${entryFilePath}: ${msg}`, 'resolution');
+  }
+
+  // Step 13: Execute the entry script to populate handler variables.
+  try {
+    await execute(ast, context);
+  } catch (err) {
+    // Preserve rill error codes (e.g. RILL-R002) when wrapping RuntimeError.
+    const prefix =
+      err instanceof RuntimeError ? `${err.errorId}: ` : '';
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new ComposeError(
+      `Execution error in ${entryFilePath}: ${prefix}${msg}`,
       'resolution'
     );
   }
 
-  // Steps 4–6: Detect namespace collisions (delegated to resolveExtensions above),
-  // hoist each extension and collect functions
-  const { functions, extensions, disposeHandlers } =
-    await instantiateExtensions(resolved);
-  let mergedFunctions = functions;
-
-  // Compile and merge custom functions (EC-6, EC-7)
-  if (Object.keys(manifest.functions).length > 0) {
-    const customFns = await loadCustomFunctions(manifest.functions, basePath);
-    mergedFunctions = { ...mergedFunctions, ...customFns };
-  }
-
-  // Step 7: Create runtime context
-  const runtimeOptions: Parameters<typeof createRuntimeContext>[0] = {
-    functions: mergedFunctions,
-  };
-  if (manifest.host !== undefined) {
-    if (manifest.host.timeout !== undefined) {
-      runtimeOptions.timeout = manifest.host.timeout;
-    }
-    runtimeOptions.maxCallStackDepth = manifest.host.maxCallStackDepth;
-    runtimeOptions.requireDescriptions = manifest.host.requireDescriptions;
-  }
-  const context = createRuntimeContext(runtimeOptions);
-
-  // Step 8: Load modules
-  const modules: Record<string, Record<string, RillValue>> = {};
-  for (const [alias, relPath] of Object.entries(manifest.modules)) {
-    const absPath = path.resolve(basePath, relPath);
-    if (!existsSync(absPath)) {
-      throw new ComposeError(
-        `Module file not found: ${alias} -> ${absPath}`,
-        'compilation'
-      );
-    }
-    const source = readFileSync(absPath, 'utf-8');
-    const moduleAst = parse(source);
-    await execute(moduleAst, context);
-    modules[alias] = Object.fromEntries(context.variables);
-  }
-
-  // Step 9: Parse entry file
-  const entryAbsPath = path.resolve(basePath, manifest.entry);
-  if (!existsSync(entryAbsPath)) {
+  // Step 14: Extract the named handler callable for introspection.
+  const handlerValue = context.variables.get(handlerName);
+  if (handlerValue === undefined || !isScriptCallable(handlerValue)) {
     throw new ComposeError(
-      `Entry file not found: ${entryAbsPath}`,
-      'compilation'
+      `Handler '${handlerName}' not found or not a callable in ${entryFilePath}`,
+      'resolution'
     );
   }
-  const entrySource = readFileSync(entryAbsPath, 'utf-8');
-  const ast = parse(entrySource);
+  const handlerCallable: ScriptCallable = handlerValue;
 
-  const manifestWithShapes: AgentManifest = {
-    ...manifest,
-    ...(effectiveInput !== undefined ? { input: effectiveInput } : {}),
-    ...(effectiveOutput !== undefined ? { output: effectiveOutput } : {}),
+  // Step 15: Introspect the handler for description and parameter metadata.
+  const introspection = introspectHandler(handlerCallable);
+
+  // Step 16: Build agent card from introspection results.
+  const inputSchema = buildInputSchema(introspection.params);
+  const cardInput: AgentCardInput = {
+    name: config.name ?? path.basename(projectDir),
+    version: config.version ?? '0.0.0',
+    runtimeVariables,
+    ...(introspection.description !== undefined
+      ? { description: introspection.description }
+      : {}),
+    ...(inputSchema !== undefined ? { input: inputSchema } : {}),
   };
-  const card = generateAgentCard(manifestWithShapes);
+  const card = generateAgentCard(cardInput);
 
-  // Step 10: dispose() in reverse declaration order
-  const reverseDispose = [...disposeHandlers].reverse();
+  // Step 17: Build dispose handler — call disposes in reverse order.
+  const capturedDisposes = [...disposes].reverse();
 
   return {
     context,
     ast,
-    modules,
+    modules: {},
     card,
-    extensions,
+    extensions: {},
+    deferredExtensions,
+    deferredContext,
+    runtimeVariables,
     async dispose(): Promise<void> {
-      for (const handler of reverseDispose) {
+      for (const handler of capturedDisposes) {
         try {
           await handler();
         } catch {
@@ -439,99 +723,51 @@ export async function composeAgent(
 // ============================================================
 
 /**
- * Builds a synthetic AgentManifest from a HarnessAgentEntry for card generation.
- * Uses placeholder values for required manifest fields not present in the entry.
- */
-function buildSyntheticManifest(entry: HarnessAgentEntry): AgentManifest {
-  return {
-    name: entry.name,
-    version: '0.0.0',
-    runtime: '@rcrsr/rill@*',
-    entry: entry.entry,
-    modules: entry.modules ?? {},
-    extensions: entry.extensions ?? {},
-    functions: {},
-    assets: [],
-    skills: [],
-    ...(entry.input !== undefined ? { input: entry.input } : {}),
-    ...(entry.output !== undefined ? { output: entry.output } : {}),
-  };
-}
-
-/**
- * Compose a harness from a HarnessManifest.
- * Instantiates shared extensions once, then composes each agent with merged
- * shared + per-agent functions. Returns a ComposedHarness ready to bind to a host.
+ * Compose a harness from a directory containing harness.json.
+ * Reads and validates harness.json, then composes each agent independently
+ * by calling composeAgent() per agent directory.
  *
- * @param manifest - Validated harness manifest
- * @param options - Required: basePath (defaults to cwd) and config per extension alias
+ * @param harnessDir - Directory containing harness.json
+ * @param options - env for ${VAR} resolution; config for per-extension overrides
  * @returns ComposedHarness with agents map, sharedExtensions, bindHost(), and dispose()
- * @throws ComposeError on any composition failure (EC-5)
+ * @throws ManifestValidationError when harness.json is missing or malformed (EC-4)
+ * @throws ComposeError when an agent directory is missing rill-config.json (EC-5)
+ * @throws ComposeError propagated from composeAgent() for per-agent failures (EC-6)
  */
 export async function composeHarness(
-  manifest: HarnessManifest,
+  harnessDir: string,
   options: ComposeOptions
 ): Promise<ComposedHarness> {
-  const basePath = options.basePath ?? process.cwd();
-
-  // Step 3: Resolve shared extensions, validate config schemas, attach config slices
-  const resolvedSharedRaw = await resolveExtensions(manifest.shared, {
-    manifestDir: basePath,
-  });
-
-  const sharedMissingFields: string[] = [];
-  const resolvedShared = resolvedSharedRaw.map((ext) => {
-    const schema = extractConfigSchema(ext.mod, ext.packageName);
-    const configSlice = options.config[ext.alias] ?? {};
-    for (const [field, descriptor] of Object.entries(schema)) {
-      if (descriptor.required === true && !(field in configSlice)) {
-        sharedMissingFields.push(`${ext.alias}.${field}`);
-      }
-    }
-    return { ...ext, config: configSlice };
-  });
-
-  if (sharedMissingFields.length > 0) {
-    throw new ComposeError(
-      `Missing required config fields: ${sharedMissingFields.join(', ')}`,
-      'resolution'
+  // Step 1: Read harness.json
+  const harnessPath = path.join(harnessDir, 'harness.json');
+  let raw: unknown;
+  try {
+    const src = readFileSync(harnessPath, 'utf-8');
+    raw = JSON.parse(src) as unknown;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new ManifestValidationError(
+      `harness.json not found or unreadable: ${msg}`,
+      [{ path: 'manifest', message: msg }],
+      'manifest'
     );
   }
 
-  const {
-    functions: sharedFunctions,
-    extensions: sharedExtensions,
-    disposeHandlers: sharedDisposeHandlers,
-  } = await instantiateExtensions(resolvedShared);
+  // Step 2: Validate harness.json against slim harness schema (EC-4)
+  const harnessConfig: SlimHarnessConfig = validateSlimHarness(raw);
 
-  // Step 4: Compose each agent
+  // Step 3: Compose each agent independently
   const agents = new Map<string, ComposedAgent>();
   const agentDisposeHandlers: Array<() => Promise<void>> = [];
 
-  for (const agentEntry of manifest.agents) {
-    // Step 4a: Resolve and instantiate per-agent extensions
-    const perAgentExtDefs = agentEntry.extensions ?? {};
+  for (const agentEntry of harnessConfig.agents) {
+    const agentDir = path.resolve(harnessDir, agentEntry.path);
 
-    const resolvedPerAgentRaw = await resolveExtensions(perAgentExtDefs, {
-      manifestDir: basePath,
-    });
-
-    const perAgentMissingFields: string[] = [];
-    const resolvedPerAgent = resolvedPerAgentRaw.map((ext) => {
-      const schema = extractConfigSchema(ext.mod, ext.packageName);
-      const configSlice = options.config[ext.alias] ?? {};
-      for (const [field, descriptor] of Object.entries(schema)) {
-        if (descriptor.required === true && !(field in configSlice)) {
-          perAgentMissingFields.push(`${ext.alias}.${field}`);
-        }
-      }
-      return { ...ext, config: configSlice };
-    });
-
-    if (perAgentMissingFields.length > 0) {
-      // EC-5: dispose already-instantiated shared extensions before throwing
-      const toDispose = [...sharedDisposeHandlers].reverse();
-      for (const handler of toDispose) {
+    // EC-5: check rill-config.json exists before calling composeAgent
+    const configPath = path.join(agentDir, 'rill-config.json');
+    if (!existsSync(configPath)) {
+      // Dispose already-composed agents before throwing
+      for (const handler of [...agentDisposeHandlers].reverse()) {
         try {
           await handler();
         } catch {
@@ -539,108 +775,29 @@ export async function composeHarness(
         }
       }
       throw new ComposeError(
-        `Missing required config fields: ${perAgentMissingFields.join(', ')}`,
-        'resolution'
+        `Agent '${agentEntry.name}' directory missing rill-config.json: ${agentDir}`,
+        'validation'
       );
     }
 
-    const {
-      functions: perAgentFunctions,
-      extensions: perAgentExtensions,
-      disposeHandlers: perAgentExtDisposeHandlers,
-    } = await instantiateExtensions(resolvedPerAgent, sharedDisposeHandlers);
-
-    // Step 4b: Merge shared + per-agent functions; per-agent overrides shared
-    const mergedFunctions: Record<string, HostFunctionDefinition> = {
-      ...sharedFunctions,
-      ...perAgentFunctions,
-    };
-
-    // Step 4c: Parse entry .rill file and load modules
-    const entryAbsPath = path.resolve(basePath, agentEntry.entry);
-    if (!existsSync(entryAbsPath)) {
-      // EC-5: dispose already-instantiated before throwing
-      const toDispose = [
-        ...[...perAgentExtDisposeHandlers].reverse(),
-        ...[...sharedDisposeHandlers].reverse(),
-      ];
-      for (const handler of toDispose) {
+    // EC-6: propagate ComposeError from composeAgent
+    let composed: ComposedAgent;
+    try {
+      composed = await composeAgent(agentDir, options);
+    } catch (err) {
+      // Dispose already-composed agents before re-throwing
+      for (const handler of [...agentDisposeHandlers].reverse()) {
         try {
           await handler();
         } catch {
           // Ignore individual dispose errors
         }
       }
-      throw new ComposeError(
-        `Entry file not found: ${entryAbsPath}`,
-        'compilation'
-      );
-    }
-    const entrySource = readFileSync(entryAbsPath, 'utf-8');
-    const ast = parse(entrySource);
-
-    // Step 4d: Create RuntimeContext with merged function map
-    const context = createRuntimeContext({ functions: mergedFunctions });
-
-    // Load modules
-    const modules: Record<string, Record<string, RillValue>> = {};
-    for (const [alias, relPath] of Object.entries(agentEntry.modules ?? {})) {
-      const absPath = path.resolve(basePath, relPath);
-      if (!existsSync(absPath)) {
-        // EC-5: dispose already-instantiated before throwing
-        const toDispose = [
-          ...[...perAgentExtDisposeHandlers].reverse(),
-          ...[...sharedDisposeHandlers].reverse(),
-        ];
-        for (const handler of toDispose) {
-          try {
-            await handler();
-          } catch {
-            // Ignore individual dispose errors
-          }
-        }
-        throw new ComposeError(
-          `Module file not found: ${alias} -> ${absPath}`,
-          'compilation'
-        );
-      }
-      const source = readFileSync(absPath, 'utf-8');
-      const moduleAst = parse(source);
-      await execute(moduleAst, context);
-      modules[alias] = Object.fromEntries(context.variables);
+      throw err;
     }
 
-    // Step 4e: Generate AgentCard from agent-level fields
-    const syntheticManifest = buildSyntheticManifest(agentEntry);
-    const card = generateAgentCard(syntheticManifest);
-
-    // Step 4f: Construct ComposedAgent
-    const allExtensions: Record<string, ExtensionResult> = {
-      ...sharedExtensions,
-      ...perAgentExtensions,
-    };
-
-    const reversePerAgentDispose = [...perAgentExtDisposeHandlers].reverse();
-    const agentDispose = async (): Promise<void> => {
-      for (const handler of reversePerAgentDispose) {
-        try {
-          await handler();
-        } catch {
-          // Ignore individual dispose errors
-        }
-      }
-    };
-
-    agentDisposeHandlers.push(agentDispose);
-
-    agents.set(agentEntry.name, {
-      context,
-      ast,
-      modules,
-      card,
-      extensions: allExtensions,
-      dispose: agentDispose,
-    });
+    agents.set(agentEntry.name, composed);
+    agentDisposeHandlers.push(composed.dispose);
   }
 
   // Build ComposedHarness
@@ -648,10 +805,9 @@ export async function composeHarness(
 
   return {
     agents,
-    sharedExtensions,
+    sharedExtensions: {},
 
     bindHost(host: AgentRunner): void {
-      // AC-28: no-op after dispose()
       if (disposed) return;
       bindHost(agents, host);
     },
@@ -660,18 +816,7 @@ export async function composeHarness(
       if (disposed) return;
       disposed = true;
 
-      // Dispose per-agent extensions first (one agent at a time)
-      for (const agentDispose of agentDisposeHandlers) {
-        try {
-          await agentDispose();
-        } catch {
-          // Ignore individual dispose errors
-        }
-      }
-
-      // Then dispose shared extensions in reverse declaration order
-      const reverseSharedDispose = [...sharedDisposeHandlers].reverse();
-      for (const handler of reverseSharedDispose) {
+      for (const handler of [...agentDisposeHandlers].reverse()) {
         try {
           await handler();
         } catch {

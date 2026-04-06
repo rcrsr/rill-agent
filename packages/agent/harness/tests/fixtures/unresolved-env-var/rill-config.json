@@ -1,0 +1,5 @@
+{
+  "name": "${UNDEFINED_VAR}",
+  "version": "0.0.1",
+  "main": "handler.rill:run"
+}

@@ -7,14 +7,14 @@
 ## CLI
 
 ```bash
-rill-agent-run <bundle-dir> [agent-name] [--param key=value]... [--timeout <ms>] [--config <file-or-json>] [--log-level silent|info|debug]
+rill-agent-run [bundle-dir] [agent-name] [--param key=value]... [--timeout <ms>] [--config <file-or-json>] [--log-level silent|info|debug]
 ```
 
 ### Arguments
 
 | Argument | Description |
 |----------|-------------|
-| `bundle-dir` | Path to the bundle directory produced by `rill-agent-bundle build` |
+| `bundle-dir` | Path to the bundle directory produced by `rill-agent-bundle build` (default: current directory) |
 | `agent-name` | Name of the agent to execute within the bundle |
 
 ### Options
@@ -33,6 +33,7 @@ rill-agent-run dist/ classifier --param text="hello world"
 rill-agent-run dist/ summarizer --param url=https://example.com --timeout 5000
 rill-agent-run dist/ my-agent --config config.json
 rill-agent-run dist/ my-agent --config '{"llm":{"api_key":"${GROQ_API_KEY}","model":"llama-4"}}'
+rill-agent-run my-agent --config config.json   # bundle-dir defaults to current directory
 ```
 
 ## Input Sources
@@ -129,6 +130,36 @@ console.log(result.result);
 console.log(`Completed in ${result.durationMs}ms`);
 ```
 
+### loadBundle(bundleDir, agentName?)
+
+```typescript
+async function loadBundle(
+  bundleDir: string,
+  agentName?: string
+): Promise<LoadedBundle>
+```
+
+Reads `bundle.json` from `bundleDir` and validates the `configVersion` field. Throws if `configVersion` is absent or unrecognized:
+
+```
+Bundle format outdated; rebuild with current bundle tool
+```
+
+When `agentName` is provided, resolves and returns the single agent entry. When omitted, returns all agents in the bundle.
+
+### loadConfig(value, env)
+
+```typescript
+function loadConfig(
+  value: string,
+  env: Record<string, string | undefined>
+): Record<string, Record<string, unknown>>
+```
+
+Parses a config value (file path or inline JSON string) and interpolates `${VAR}` patterns using `parseConfig()` from `@rcrsr/rill-config`. The `env` parameter provides the variable map for interpolation. Pass `process.env` for environment variable resolution.
+
+Returns the parsed config object keyed by extension alias.
+
 ## Config
 
 The `--config` flag accepts a file path or inline JSON string.
@@ -144,11 +175,11 @@ rill-agent-run dist/ my-agent --config '{"llm": {"api_key": "${GROQ_API_KEY}"}}'
 
 Config is keyed by extension alias. Each value is the config object passed to that extension.
 
-`${VAR}` patterns in config values are interpolated against `process.env` after JSON parsing. Unset variables are retained as-is — they are not replaced with empty strings.
+`${VAR}` patterns in config values are interpolated using `parseConfig()` from `@rcrsr/rill-config`. The CLI passes `process.env` as the interpolation environment. Unset variables cause `parseConfig()` to throw with a descriptive error listing the missing variable names.
 
 When `--config` is omitted, config defaults to `{}`.
 
 ## See Also
 
-- [Agent Bundle](agent-bundle.md) — Build bundle directories from agent.json manifests
+- [Agent Bundle](agent-bundle.md) — Build bundle directories from rill-config.json projects
 - [Agent Harness](agent-harness.md) — Production HTTP server for long-running rill agents

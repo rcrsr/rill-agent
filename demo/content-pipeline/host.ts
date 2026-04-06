@@ -1,35 +1,19 @@
-import { readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   composeHarness,
   createAgentHost,
   type LogLevel,
 } from '@rcrsr/rill-agent-harness';
-import {
-  validateHarnessManifest,
-  interpolateConfigDeep,
-} from '@rcrsr/rill-agent-shared';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const raw = JSON.parse(readFileSync(join(__dirname, 'harness.json'), 'utf-8'));
-const manifest = validateHarnessManifest(raw);
-
-const rawConfig = JSON.parse(
-  readFileSync(join(__dirname, 'config.json'), 'utf-8')
-);
-const config = interpolateConfigDeep(
-  rawConfig,
-  process.env as Record<string, string>
-);
-
-const harness = await composeHarness(manifest, {
-  basePath: __dirname,
-  config,
+const harness = await composeHarness(__dirname, {
+  config: {},
+  env: process.env,
 });
 
-const port = manifest.host?.port ?? 4002;
+const port = 4002;
 const logLevel = (process.env.LOG_LEVEL ?? 'info') as LogLevel;
 const host = createAgentHost(harness.agents, { port, logLevel });
 

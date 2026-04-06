@@ -4,15 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "rill-agent-bundle build harness.json",
-    "check": "rill-agent-bundle check --platform node dist/",
+    "build": "rill-agent-bundle build agents/classifier --output dist/classifier && rill-agent-bundle build agents/summarizer --output dist/summarizer && rill-agent-bundle build agents/orchestrator --output dist/orchestrator",
+    "check": "rill-agent-bundle check --platform node dist/classifier && rill-agent-bundle check --platform node dist/summarizer && rill-agent-bundle check --platform node dist/orchestrator",
     "start": "tsx host.ts",
     "dev": "tsx host.ts"
   },
   "dependencies": {
     "@rcrsr/rill-agent-harness": "workspace:^",
     "@rcrsr/rill-agent-shared": "workspace:^",
-    "@rcrsr/rill-ext-openai": "^0.9.0",
+    "@rcrsr/rill-ext-openai": "^0.18.0",
     "@rcrsr/rill-agent-ext-ahi": "workspace:^"
   },
   "devDependencies": {

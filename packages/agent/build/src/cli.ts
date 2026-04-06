@@ -40,20 +40,12 @@ async function main(): Promise<void> {
 
   const harnessType = parseFlag(args, '--harness');
   const outputPath = parseFlag(args, '--output');
-  const bundleDir = positionals[0];
+  const bundleDir = positionals[0] !== undefined && positionals[0] !== '' ? positionals[0] : process.cwd();
 
   // --harness is required
   if (harnessType === undefined || harnessType === '') {
     process.stderr.write(
-      'Error: --harness is required\nUsage: rill-agent-build --harness <type> [--output <path>] <bundle-dir>\nValid harness types: http, stdio, gateway, worker\n'
-    );
-    process.exit(1);
-  }
-
-  // bundle-dir is required
-  if (bundleDir === undefined || bundleDir === '') {
-    process.stderr.write(
-      'Error: bundle-dir is required\nUsage: rill-agent-build --harness <type> [--output <path>] <bundle-dir>\n'
+      'Error: --harness is required\nUsage: rill-agent-build --harness <type> [--output <path>] [bundle-dir]\nValid harness types: http, stdio, gateway, worker\n'
     );
     process.exit(1);
   }

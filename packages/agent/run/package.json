@@ -1,6 +1,6 @@
 {
   "name": "@rcrsr/rill-agent-run",
-  "version": "0.9.0",
+  "version": "0.18.4",
   "type": "module",
   "bin": {
     "rill-agent-run": "./dist/cli.js"
@@ -13,9 +13,10 @@
     "check": "pnpm run build && pnpm run test && pnpm run lint"
   },
   "dependencies": {
-    "@rcrsr/rill": "^0.9.0",
+    "@rcrsr/rill": "^0.18.4",
     "@rcrsr/rill-agent-bundle": "workspace:^",
-    "@rcrsr/rill-agent-shared": "workspace:^"
+    "@rcrsr/rill-agent-shared": "workspace:^",
+    "@rcrsr/rill-config": "^0.18.4"
   },
   "devDependencies": {
     "@rcrsr/rill-agent-harness": "workspace:^"

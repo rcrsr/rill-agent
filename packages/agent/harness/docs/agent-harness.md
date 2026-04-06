@@ -7,38 +7,34 @@
 ## Quick Start
 
 ```typescript
-import { readFileSync } from 'node:fs';
-import { validateManifest } from '@rcrsr/rill-agent-shared';
 import { composeAgent, createAgentHost } from '@rcrsr/rill-agent-harness';
 
-const json = JSON.parse(readFileSync('./agent.json', 'utf-8'));
-const manifest = validateManifest(json);
-const agent = await composeAgent(manifest, {
-  basePath: import.meta.dirname,
+const agent = await composeAgent('./my-agent', {
   config: {},
+  env: process.env as Record<string, string>,
 });
 const host = createAgentHost(agent);
 
 await host.listen(3000);
 ```
 
-`config` is required. It holds extension configuration keyed by extension alias. Pass an empty object when the agent uses no extensions. Resolve environment variables before passing config — `composeAgent` does not interpolate `${VAR}` placeholders.
+`composeAgent` reads `rill-config.json` from the project directory. Pass `env` for `${VAR}` substitution at compose time. Pass `config` for per-extension config overrides (keyed by extension alias).
 
 ## Multi-Agent Mode
 
 `createAgentHost` accepts a `Map<string, ComposedAgent>` to run multiple agents in a single process.
 
 ```typescript
-import { validateManifest } from '@rcrsr/rill-agent-shared';
-import { composeAgent, createAgentHost } from '@rcrsr/rill-agent-harness';
+import { composeAgent, composeHarness, createAgentHost } from '@rcrsr/rill-agent-harness';
 
-const agentA = await composeAgent(validateManifest(manifestA), {
-  basePath: import.meta.dirname,
+// Option A: compose agents individually
+const agentA = await composeAgent('./agents/agent-a', {
   config: {},
+  env: process.env as Record<string, string>,
 });
-const agentB = await composeAgent(validateManifest(manifestB), {
-  basePath: import.meta.dirname,
+const agentB = await composeAgent('./agents/agent-b', {
   config: {},
+  env: process.env as Record<string, string>,
 });
 
 const agents = new Map([
@@ -47,6 +43,18 @@ const agents = new Map([
 ]);
 
 const host = createAgentHost(agents, { maxConcurrentSessions: 20 });
+await host.listen(3000);
+```
+
+```typescript
+// Option B: compose from harness.json
+import { composeHarness, createAgentHost } from '@rcrsr/rill-agent-harness';
+
+const harness = await composeHarness('./my-harness', {
+  config: {},
+  env: process.env as Record<string, string>,
+});
+const host = createAgentHost(harness.agents, { maxConcurrentSessions: 20 });
 await host.listen(3000);
 ```
 
@@ -63,6 +71,129 @@ export function createAgentHost(agents: Map<string, ComposedAgent>, options?: Ag
 In multi-agent mode, each agent's routes mount under `/:agentName/`. Process-level endpoints (`/healthz`, `/readyz`, `/metrics`, `/stop`) remain flat with no prefix.
 
 `GET /readyz` returns HTTP 503 until all agents have finished composing. After all agents are ready, it returns HTTP 200.
+
+## composeAgent
+
+```typescript
+async function composeAgent(
+  projectDir: string,
+  options: ComposeOptions
+): Promise<ComposedAgent>
+```
+
+Reads `rill-config.json` from `projectDir`, resolves extensions, introspects the handler, and returns a `ComposedAgent` ready for execution.
+
+### ComposeOptions
+
+```typescript
+interface ComposeOptions {
+  readonly config: Record<string, Record<string, unknown>>;
+  readonly env: Record<string, string | undefined>;
+}
+```
+
+| Option | Description |
+|--------|-------------|
+| `env` | Environment variable map for `${VAR}` substitution in `rill-config.json` |
+| `config` | Per-extension config overrides keyed by alias; merged with file config, caller wins |
+
+The `basePath`, `inputShape`, and `outputShape` options from the pre-migration API have been removed. Entry file paths and input/output schemas are now derived from `rill-config.json` at compose time via handler introspection.
+
+### Compose Steps
+
+1. Read and parse `rill-config.json`, substituting `${VAR}` with `env`.
+2. Validate that `@{VAR}` placeholders appear only in `extensions.config` and `context.values`.
+3. Partition extensions into static (no `@{VAR}`) and deferred (`@{VAR}` present in config).
+4. Load static extensions immediately via `@rcrsr/rill-config`.
+5. Import deferred extension modules without invoking factories (factory runs per request).
+6. Collect deferred context values from `context.values`.
+7. Build `runtimeVariables` as the union of all `@{VAR}` names.
+8. Parse and execute the entry `.rill` file.
+9. Introspect the named handler for description and parameter metadata.
+10. Build `AgentCard` from introspection results.
+
+## composeHarness
+
+```typescript
+async function composeHarness(
+  harnessDir: string,
+  options: ComposeOptions
+): Promise<ComposedHarness>
+```
+
+Reads `harness.json` from `harnessDir`, validates it with `validateSlimHarness`, and calls `composeAgent` for each agent directory listed in the config.
+
+### harness.json Format
+
+```json
+{
+  "agents": [
+    { "name": "agent-a", "path": "./agents/agent-a" },
+    { "name": "agent-b", "path": "./agents/agent-b", "maxConcurrency": 5 }
+  ],
+  "concurrency": 20,
+  "deploy": { "port": 3000 }
+}
+```
+
+Each `path` is relative to the harness directory. `composeHarness` resolves each path and calls `composeAgent` with the same `ComposeOptions`.
+
+### ComposedHarness
+
+```typescript
+interface ComposedHarness {
+  readonly agents: Map<string, ComposedAgent>;
+  readonly sharedExtensions: Record<string, ExtensionResult>;
+  bindHost(host: AgentRunner): void;
+  dispose(): Promise<void>;
+}
+```
+
+Pass `harness.agents` directly to `createAgentHost`. Call `dispose()` on shutdown.
+
+## Deferred Extension Lifecycle
+
+Extensions whose config contains `@{VAR}` placeholders are not instantiated at compose time. The factory runs per request, after `RunRequest.runtimeConfig` supplies the variable values.
+
+### resolveDeferredExtensions
+
+```typescript
+async function resolveDeferredExtensions(
+  deferred: readonly DeferredExtensionEntry[],
+  runtimeConfig: Record<string, string>
+): Promise<ResolvedDeferredResult>
+```
+
+Substitutes `@{VAR}` placeholders in each extension's `configTemplate` using `runtimeConfig`, then invokes each factory. Returns an object with `extensions` (keyed by alias) and a `dispose()` method. The harness calls `dispose()` after each request completes.
+
+Throws `AgentHostError('init')` when:
+- A required variable is absent from `runtimeConfig`.
+- An extension factory throws during instantiation.
+
+### resolveDeferredContext
+
+```typescript
+function resolveDeferredContext(
+  deferred: readonly DeferredContextEntry[],
+  runtimeConfig: Record<string, string>
+): Record<string, unknown>
+```
+
+Substitutes `@{VAR}` placeholders in deferred context value templates. Returns resolved context values to merge into the runtime context for the request.
+
+Throws `AgentHostError('init')` when a required variable is absent from `runtimeConfig`.
+
+### Request Lifecycle with Deferred Fields
+
+When a `RunRequest` arrives with a non-empty `runtimeConfig`:
+
+1. `resolveDeferredExtensions` instantiates deferred extensions with substituted config.
+2. `resolveDeferredContext` resolves deferred context values.
+3. The harness merges resolved extensions and context values into the request's runtime context.
+4. The agent handler executes.
+5. The harness calls `dispose()` on resolved deferred extensions.
+
+When `runtimeVariables` is empty on the `ComposedAgent`, step 1 and 2 are skipped.
 
 ## Lifecycle
 
@@ -148,6 +279,7 @@ interface AgentCard {
   readonly skills: readonly AgentSkill[];
   readonly defaultInputModes: readonly string[];
   readonly defaultOutputModes: readonly string[];
+  readonly runtimeVariables: readonly string[];
 }
 ```
 
@@ -161,6 +293,7 @@ interface AgentCard {
 | `skills` | `AgentSkill[]` | List of named capabilities the agent exposes |
 | `defaultInputModes` | `string[]` | MIME types accepted by default (e.g. `"application/json"`) |
 | `defaultOutputModes` | `string[]` | MIME types returned by default (e.g. `"application/json"`) |
+| `runtimeVariables` | `string[]` | `@{VAR}` names the agent requires in `RunRequest.runtimeConfig` |
 
 Example response:
 
@@ -173,7 +306,8 @@ Example response:
   "capabilities": { "streaming": false, "pushNotifications": false },
   "skills": [],
   "defaultInputModes": ["application/json"],
-  "defaultOutputModes": ["application/json"]
+  "defaultOutputModes": ["application/json"],
+  "runtimeVariables": ["TENANT_ID"]
 }
 ```
 
@@ -230,75 +364,12 @@ Validation error response body:
 
 Behavioral constraints: validation runs before session creation; `fields` lists params in manifest declaration order; defaults inject before execution; extra params pass through.
 
-## Structural Type I/O Contracts
-
-A `RillStructuralType` value from a closure's `^input` accessor can define agent input and output schema. Pass it to `composeAgent` via `inputShape` or `outputShape`. The harness serializes the structural type to the same `InputParamDescriptor` and `OutputSchema` format used by the manifest `input` and `output` fields.
-
-The existing dict-based manifest format still works. `inputShape` and `outputShape` are additive options that override the manifest `input`/`output` fields when provided.
-
-### Serialization Mapping
-
-| Source | Manifest field |
-|--------|----------------|
-| Param type `kind` | `type` |
-| `CallableParam.defaultValue: null` | `required: true` |
-| `CallableParam.defaultValue` present | `required` omitted |
-| `CallableParam.annotations.description` | `description` |
-| `CallableParam.annotations.enum` | `enum` |
-| `dict` or `list` kind | `fields` (recursive, output schema only) |
-
-### Defining Input Schema with a Closure
-
-```rill
-|query: string, ^("Maximum results to return") limit: number = 0, filters: dict| { 0 } => $schema_fn
-$schema_fn.^input => $input_schema
-```
-
-`query` maps to `{ type: "string", required: true }`. `limit` is optional (default `0`) with a description annotation. `filters` is a dict. For output schema with field-level recursion, use `structuralTypeToOutputSchema()`.
-
-### Passing Structural Type to composeAgent
-
-Extract the structural type value from the rill execution result, then pass it to `composeAgent`:
-
-```typescript
-import { parse, execute, createRuntimeContext } from '@rcrsr/rill';
-import type { RillStructuralType } from '@rcrsr/rill';
-import { composeAgent } from '@rcrsr/rill-agent-harness';
-import { validateManifest } from '@rcrsr/rill-agent-shared';
-
-const ctx = createRuntimeContext({ functions: {} });
-const result = await execute(parse(schemaScript), ctx);
-const inputShape = result.variables['input_schema'] as RillStructuralType;
-
-const manifest = validateManifest(JSON.parse(readFileSync('./agent.json', 'utf-8')));
-const agent = await composeAgent(manifest, {
-  basePath: import.meta.dirname,
-  config: {},
-  inputShape,
-});
-```
-
-`composeAgent` serializes `inputShape` to `InputSchema` and merges it into the manifest before generating the agent card. The manifest `input` field is ignored when `inputShape` is provided.
-
-### Validation Behavior
-
-Structural type-derived params validate the same way as manifest-declared params. See [POST /run Param Validation](#post-run-param-validation) for the full validation table — behavior is identical regardless of whether the schema came from the manifest or a structural type.
-
-### Error: Non-Representable Types (EC-9)
-
-Closure or tuple type params cannot be serialized to the manifest format. `composeAgent` throws a `RuntimeError` (`RILL-R004`) when either type appears in the structural type.
-
-```text
-# Error: type 'closure' not representable in manifest
-```
-
-Use `string`, `number`, `bool`, `list`, or nested dicts (`dict`) for all agent I/O fields.
-
 ## Invocation Model
 
 ```typescript
 interface RunRequest {
   readonly params?: Record<string, unknown>;
+  readonly correlationId?: string | undefined;
   readonly sessionId?: string | undefined;
   readonly timeout?: number | undefined;
   readonly trigger?: 'http' | 'queue' | 'cron' | 'agent' | 'api' | 'manual' | {
@@ -307,6 +378,7 @@ interface RunRequest {
     sessionId: string;
   };
   readonly callback?: string | undefined;
+  readonly runtimeConfig?: Record<string, string> | undefined;
 }
 
 interface RunResponse {
@@ -319,6 +391,26 @@ interface RunResponse {
 ```
 
 `POST /run` returns `state: "running"` when execution exceeds `responseTimeout`. The session continues in the background. Use `GET /sessions/{id}/stream` to receive completion events.
+
+### runtimeConfig Field
+
+`runtimeConfig` supplies per-request values for `@{VAR}` declarations. When the `ComposedAgent.runtimeVariables` array is non-empty, the host uses `runtimeConfig` to:
+
+1. Instantiate deferred extensions whose config templates contain `@{VAR}` placeholders.
+2. Resolve deferred context values before execution.
+
+```typescript
+const response = await fetch('http://localhost:3000/run', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    params: { query: 'summarize this' },
+    runtimeConfig: { TENANT_ID: 'acme', LLM_KEY: 'sk-...' },
+  }),
+});
+```
+
+When `runtimeVariables` is empty on the agent card, `runtimeConfig` is ignored. When `runtimeVariables` is non-empty and `runtimeConfig` is absent or missing a required key, the host returns HTTP 400.
 
 ### RunRequest Trigger Field
 
@@ -492,5 +584,5 @@ Every request propagates the `X-Correlation-ID` header value into the session re
 - [Host Integration](integration-host.md) — Embedding rill directly in applications without an HTTP layer
 - [Host API Reference](ref-host-api.md) — Complete TypeScript API exports for `@rcrsr/rill`
 - [Developing Extensions](integration-extensions.md) — Writing reusable host function packages
-- [Agent Bundle](agent-bundle.md) — Manifest format, validateManifest, and composeAgent API
+- [Agent Bundle](agent-bundle.md) — Manifest format and composeAgent API
 - [Creating Rill Apps](guide-make.md) — Bootstrap new rill projects with `rill-agent-bundle init`

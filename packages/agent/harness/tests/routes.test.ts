@@ -16,11 +16,14 @@
  *   AC-23  GET /readyz when phase=init → 503
  *   AC-24  GET /healthz during stopped phase → 503
  *   AC-33  SSE late connect receives buffered done event
+ *   EC-7   Missing runtimeConfig keys → HTTP 400 with required list
+ *   EC-8   Deferred factory throw → HTTP 500 with extension name
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Hono } from 'hono';
 import type { AgentCard } from '../src/index.js';
+import { AgentHostError } from '../src/index.js';
 import { registerRoutes } from '../src/http/routes.js';
 import type { RouteHost, SseStore } from '../src/http/routes.js';
 import type {
@@ -393,6 +396,61 @@ describe('registerRoutes', () => {
 
       expect(res.status).toBe(500);
       expect(await jsonBody(res)).toMatchObject({ error: 'internal error' });
+    });
+
+    it('returns 400 with required list when host throws AgentHostError with requiredVars (EC-7)', async () => {
+      const host = makeHost({
+        run: async (): Promise<RunResponse> => {
+          throw new AgentHostError(
+            'Missing required runtime variables: API_KEY, TOKEN',
+            'init',
+            undefined,
+            { requiredVars: ['API_KEY', 'TOKEN'] }
+          );
+        },
+      });
+      const app = makeApp(host);
+
+      const res = await app.request('/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(res.status).toBe(400);
+      const body = await jsonBody(res);
+      expect(body).toMatchObject({
+        error: 'missing runtime variables',
+        required: ['API_KEY', 'TOKEN'],
+      });
+    });
+
+    it('returns 500 with extension name when host throws AgentHostError with extensionAlias (EC-8)', async () => {
+      const cause = new Error('connection refused');
+      const host = makeHost({
+        run: async (): Promise<RunResponse> => {
+          throw new AgentHostError(
+            'Deferred extension myext failed to initialize: connection refused',
+            'init',
+            cause,
+            { extensionAlias: 'myext' }
+          );
+        },
+      });
+      const app = makeApp(host);
+
+      const res = await app.request('/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(res.status).toBe(500);
+      const body = await jsonBody(res);
+      expect(body).toMatchObject({
+        error: 'deferred extension failed',
+        extension: 'myext',
+      });
     });
   });
 

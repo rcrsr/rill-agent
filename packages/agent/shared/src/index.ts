@@ -1,21 +1,13 @@
 export type {
-  AgentManifest,
-  HarnessManifest,
-  HarnessAgentEntry,
-  ManifestExtension,
-  ManifestHostOptions,
-  ManifestDeployOptions,
-  InputParamDescriptor,
   InputSchema,
   OutputSchema,
-  BuildTarget,
   AgentSkill,
+  SlimHarnessAgent,
+  SlimHarnessConfig,
 } from './schema.js';
 
 export {
-  validateManifest,
-  validateHarnessManifest,
-  detectManifestType,
+  validateSlimHarness,
   structuralTypeToInputSchema,
   structuralTypeToOutputSchema,
 } from './schema.js';
@@ -23,16 +15,18 @@ export {
 export type { ComposePhase, ManifestIssue } from './errors.js';
 export { ComposeError, ManifestValidationError } from './errors.js';
 
-export type { AgentCard, AgentCapabilities } from './card.js';
+export type { AgentCard, AgentCapabilities, AgentCardInput } from './card.js';
 export { generateAgentCard } from './card.js';
 
-export type { ComposedAgent } from './composed-agent.js';
+export type {
+  ComposedAgent,
+  ExtensionResult,
+  DeferredExtensionEntry,
+  DeferredContextEntry,
+} from './composed-agent.js';
 
-export type { InterpolationResult } from './interpolate.js';
-export { interpolateEnv, interpolateConfigDeep } from './interpolate.js';
-
-export type { ResolvedExtension, ResolveOptions } from './resolve.js';
-export { resolveExtensions, extractConfigSchema } from './resolve.js';
+export type { InterpolationResult, ConfigInterpolationResult } from './interpolate.js';
+export { interpolateEnv, interpolateConfigDeep, validateDeferredScope } from './interpolate.js';
 
 export type {
   RunRequest,

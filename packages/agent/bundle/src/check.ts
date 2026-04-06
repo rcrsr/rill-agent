@@ -365,11 +365,31 @@ export async function checkPlatform(
     return { compatible: true, issues: [] };
   }
 
-  // Collect unique extension package names across all agents
+  // Collect unique extension package names across all agents.
+  // Read from each agent's rill-config.json (via configPath) since
+  // BundleAgentEntry no longer embeds extension metadata.
   const packageNames = new Set<string>();
   for (const agentEntry of Object.values(manifest.agents)) {
-    for (const ext of Object.values(agentEntry.extensions ?? {})) {
-      packageNames.add(ext.package);
+    const agentConfigPath = join(bundlePath, agentEntry.configPath);
+    if (existsSync(agentConfigPath)) {
+      try {
+        const agentConfig = JSON.parse(
+          readFileSync(agentConfigPath, 'utf8')
+        ) as Record<string, unknown>;
+        const extsBlock = agentConfig['extensions'] as
+          | Record<string, unknown>
+          | undefined;
+        const mounts = extsBlock?.['mounts'] as
+          | Record<string, string>
+          | undefined;
+        if (mounts !== undefined) {
+          for (const mountSpecifier of Object.values(mounts)) {
+            packageNames.add(mountSpecifier);
+          }
+        }
+      } catch {
+        // Skip unreadable agent configs
+      }
     }
   }
 

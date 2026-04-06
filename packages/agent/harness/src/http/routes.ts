@@ -10,6 +10,7 @@ import type { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import type { InputSchema } from '@rcrsr/rill-agent-shared';
 import type { AgentCard } from '../host.js';
+import { AgentHostError } from '../core/errors.js';
 import type {
   LifecyclePhase,
   RunRequest,
@@ -200,6 +201,32 @@ export function registerRoutes(
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       c.header('X-Correlation-ID', correlationId);
+      // EC-7: Missing required runtime variables → 400
+      if (
+        err instanceof AgentHostError &&
+        err.requiredVars !== undefined
+      ) {
+        return c.json(
+          { error: 'missing runtime variables', required: err.requiredVars },
+          400
+        );
+      }
+      // EC-8: Deferred extension factory threw → 500 with extension name
+      if (
+        err instanceof AgentHostError &&
+        err.extensionAlias !== undefined
+      ) {
+        const cause =
+          err.cause instanceof Error ? err.cause.message : String(err.cause ?? '');
+        return c.json(
+          {
+            error: 'deferred extension failed',
+            extension: err.extensionAlias,
+            cause,
+          },
+          500
+        );
+      }
       if (message === 'session limit reached') {
         return c.json({ error: 'session limit reached' }, 429);
       }

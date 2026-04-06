@@ -20,33 +20,33 @@ const BUNDLES_BASE = path.join(PKG_ROOT, '.test-bundles');
 // RILL SCRIPT FIXTURES
 // ============================================================
 
-/** Returns the string "hello world" */
-const HELLO_SCRIPT = `"hello world"`;
+/** Returns the string "hello world" via a handler callable named $run */
+const HELLO_SCRIPT = `|params: dict = [:]| "hello world" => $run\n"hello world"`;
 
-/** Reads $name param and returns a greeting via string interpolation */
-const GREET_SCRIPT = `"hello {$name}"`;
+/** Reads $name param and returns a greeting via string interpolation. */
+const GREET_SCRIPT = `|params: dict = [:]| "hello {$name}" => $run\n"hello {$name}"`;
+// Note: $name is a free variable accessed from runtime context variables
+// (set via request.params). The last expression uses $name directly so the
+// result changes per request.
 
 /** Returns an empty string */
-const EMPTY_SCRIPT = `""`;
+const EMPTY_SCRIPT = `|params: dict = [:]| "" => $run\n""`;
 
-/** Triggers a runtime type error: cannot add number to string */
-const ERROR_SCRIPT = `1 + "bad"`;
+/**
+ * Triggers a runtime type error (RILL-R002) during composeAgent.
+ * The bare expression on the last line executes at compose time and throws.
+ */
+const ERROR_SCRIPT = `|params: dict = [:]| (1 + "bad") => $run\n1 + "bad"`;
 
 // ============================================================
-// MINIMAL AGENT MANIFEST TEMPLATE
+// MINIMAL RILL-CONFIG TEMPLATE
 // ============================================================
 
-function makeManifest(name: string): Record<string, unknown> {
+function makeRillConfig(name: string): Record<string, unknown> {
   return {
     name,
     version: '0.1.0',
-    runtime: '@rcrsr/rill@*',
-    entry: 'main.rill',
-    extensions: {},
-    modules: {},
-    functions: {},
-    assets: [],
-    skills: [],
+    main: 'main.rill:run',
   };
 }
 
@@ -91,13 +91,13 @@ async function makeBundle(
   const bundleDir = await makeTmpDir(BUNDLES_BASE);
 
   await writeFile(
-    path.join(fixtureDir, 'agent.json'),
-    JSON.stringify(makeManifest(agentName), null, 2),
+    path.join(fixtureDir, 'rill-config.json'),
+    JSON.stringify(makeRillConfig(agentName), null, 2),
     'utf-8'
   );
   await writeFile(path.join(fixtureDir, 'main.rill'), script, 'utf-8');
 
-  await buildBundle(path.join(fixtureDir, 'agent.json'), {
+  await buildBundle(fixtureDir, {
     outputDir: bundleDir,
   });
 
@@ -131,6 +131,7 @@ describe('runAgent success', () => {
       params: { name: 'Alice' },
     });
 
+    expect(res.error).toBeUndefined();
     expect(res.exitCode).toBe(0);
     expect(res.result).toBe('hello Alice');
   });

@@ -37,7 +37,7 @@ function getFreePort(): Promise<number> {
 }
 
 /**
- * Build a valid bundle.json manifest string.
+ * Build a valid bundle.json manifest string using the new DS-7 BundleAgentEntry shape.
  */
 function makeBundleManifest(agentName: string, version = '1.0.0'): string {
   return JSON.stringify({
@@ -45,28 +45,24 @@ function makeBundleManifest(agentName: string, version = '1.0.0'): string {
     version,
     built: new Date().toISOString(),
     checksum: 'sha256:deadbeef',
-    rillVersion: '0.8.0',
+    rillVersion: '0.18.0',
+    configVersion: '2',
     agents: {
       [agentName]: {
-        entry: 'agent.js',
-        modules: {},
-        extensions: {},
-        card: {
-          name: agentName,
-          description: `${agentName} test agent`,
-          version,
-          url: 'http://localhost',
-          capabilities: {
-            streaming: false,
-            pushNotifications: false,
-            stateTransitionHistory: false,
-          },
-          skills: [],
-          defaultInputModes: ['application/json'],
-          defaultOutputModes: ['application/json'],
-        },
+        configPath: `agents/${agentName}/rill-config.json`,
       },
     },
+  });
+}
+
+/**
+ * Build a valid rill-config.json string for a single agent.
+ */
+function makeRillConfig(agentName: string, version = '1.0.0'): string {
+  return JSON.stringify({
+    name: agentName,
+    version,
+    main: 'entry.rill:run',
   });
 }
 
@@ -107,7 +103,7 @@ rl.once('line', (line) => {
 `.trim();
 
 /**
- * Write a bundle directory with bundle.json and harness.js.
+ * Write a bundle directory with bundle.json, harness.js, and per-agent rill-config.json.
  */
 function writeBundle(
   bundlesDir: string,
@@ -121,6 +117,12 @@ function writeBundle(
     makeBundleManifest(agentName)
   );
   fs.writeFileSync(path.join(bundleDir, 'harness.js'), harnessContent);
+  const agentDir = path.join(bundleDir, 'agents', agentName);
+  fs.mkdirSync(agentDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(agentDir, 'rill-config.json'),
+    makeRillConfig(agentName)
+  );
 }
 
 // ============================================================

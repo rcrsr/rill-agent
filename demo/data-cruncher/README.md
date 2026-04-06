@@ -15,36 +15,35 @@ pnpm run -r build
 
 ```bash
 cd demo/data-cruncher
-pnpm build   # rill-agent-bundle build agent.json
-pnpm start   # pipes JSON params to rill-agent-run with --config
+pnpm build   # rill-agent-bundle build
+pnpm start   # pipes JSON params to rill-agent-run
 ```
 
 Or run directly:
 
 ```bash
-echo '{"numbers":[4,7,2,9,1,8,3]}' | rill-agent-run dist/ demo-agent --config config.json
+echo '{"numbers":[4,7,2,9,1,8,3]}' | rill-agent-run dist/ demo-agent
 ```
 
 Returns computed statistics: count, sum, mean, min, max, variance, above_mean, squared, and a persistent run counter.
 
-## Runtime configuration
+## Configuration
 
-Extension config is supplied at runtime via `--config`, not embedded in the manifest.
-
-`config.json` provides the `kv` extension its store path:
+Extension config is embedded in `rill-config.json` under `extensions.config`. The `kv` extension receives its store path at load time:
 
 ```json
 {
-  "kv": {
-    "store": "./data/state.json"
+  "extensions": {
+    "mounts": {
+      "kv": { "package": "@rcrsr/rill/ext/kv" }
+    },
+    "config": {
+      "kv": {
+        "store": "./data/state.json"
+      }
+    }
   }
 }
-```
-
-Pass inline JSON instead of a file:
-
-```bash
-echo '{"numbers":[1,2,3]}' | rill-agent-run dist/ demo-agent --config '{"kv":{"store":"./data/state.json"}}'
 ```
 
 ## Verify bundle
@@ -55,8 +54,8 @@ pnpm check   # rill-agent-bundle check --platform node dist/
 
 ## What it demonstrates
 
-- **Runtime extension config**: `--config` supplies extension settings at run time
-- **Manifest-driven composition**: `rill-agent-bundle` builds the agent from `agent.json` into `dist/`
+- **Embedded extension config**: `rill-config.json` contains extension settings inline
+- **Configuration-driven composition**: `rill-agent-bundle` builds the agent from `rill-config.json`
 - **CLI execution**: `rill-agent-run` executes the bundle as a one-shot CLI command
 - **Builtin extension loading**: The `kv` extension loads through the named-export pipeline
 - **Pipe-based data processing**: `fold`, `map`, `filter` operators in `main.rill`
@@ -65,7 +64,7 @@ pnpm check   # rill-agent-bundle check --platform node dist/
 
 ```
 dist/
-  bundle.json                  # Bundle manifest
+  bundle.json                  # Bundle metadata
   handlers.js                  # Compiled handler entry
   agents/
     demo-agent/

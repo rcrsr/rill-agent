@@ -1,0 +1,8 @@
+{
+  "name": "at-var-modules-agent",
+  "version": "0.0.1",
+  "main": "handler.rill:run",
+  "modules": {
+    "helpers": "@{HELPERS_PATH}"
+  }
+}

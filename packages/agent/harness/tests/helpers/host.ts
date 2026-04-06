@@ -11,12 +11,12 @@ import type { ComposedAgent } from '../../src/index.js';
 import type { AgentHost, AgentHostOptions } from '../../src/index.js';
 import { createAgentHost } from '../../src/index.js';
 
-// Absolute path to the minimal fixture script — resolved once at module load.
-// Using an absolute path ensures composeAgent() finds the file regardless of
-// what process.cwd() is at test time.
-const FIXTURE_DIR = path.resolve(
+// Absolute path to the simple-agent fixture directory — resolved once at
+// module load. Using an absolute path ensures composeAgent() finds the
+// rill-config.json regardless of process.cwd() at test time.
+const SIMPLE_AGENT_DIR = path.resolve(
   fileURLToPath(import.meta.url),
-  '../../fixtures'
+  '../../fixtures/simple-agent'
 );
 
 // ============================================================
@@ -25,22 +25,11 @@ const FIXTURE_DIR = path.resolve(
 
 /**
  * Returns a minimal ComposedAgent for testing by calling composeAgent()
- * with a local manifest literal and the fixture directory as basePath.
+ * with the simple-agent fixture directory (contains rill-config.json and
+ * handler.rill with a no-op handler).
  */
 export async function mockComposedAgent(): Promise<ComposedAgent> {
-  return composeAgent(
-    {
-      name: 'test-agent',
-      version: '0.0.1',
-      runtime: '@rcrsr/rill@*',
-      entry: 'minimal.rill',
-      modules: {},
-      extensions: {},
-      functions: {},
-      assets: [],
-    },
-    { basePath: FIXTURE_DIR, config: {} }
-  );
+  return composeAgent(SIMPLE_AGENT_DIR, { config: {}, env: {} });
 }
 
 // ============================================================

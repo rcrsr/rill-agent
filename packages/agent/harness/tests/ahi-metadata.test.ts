@@ -11,10 +11,10 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { parse, createRuntimeContext, hoistExtension } from '@rcrsr/rill';
-import type { HostFunctionDefinition } from '@rcrsr/rill';
+import { parse, createRuntimeContext } from '@rcrsr/rill';
+import type { ApplicationCallable } from '@rcrsr/rill';
 import { createAhiExtension } from '@rcrsr/rill-agent-ext-ahi';
-import type { ComposedAgent, AgentHost } from '../src/index.js';
+import type { ComposedAgent, AgentHost, ExtensionResult } from '../src/index.js';
 import { createAgentHost } from '../src/index.js';
 
 // ============================================================
@@ -51,14 +51,33 @@ function stubFetchCapturingHeaders(): { headers: Record<string, string> } {
 }
 
 /**
+ * Prefix all ApplicationCallable entries in an ExtensionResult with namespace::.
+ * Replaces the removed hoistExtension from @rcrsr/rill v0.18.0.
+ */
+function prefixExtension(
+  namespace: string,
+  ext: ExtensionResult
+): Record<string, ApplicationCallable> {
+  const { dispose: _dispose, suspend: _suspend, restore: _restore, ...fns } = ext;
+  const result: Record<string, ApplicationCallable> = {};
+  for (const [name, fn] of Object.entries(fns)) {
+    result[`${namespace}::${name}`] = fn;
+  }
+  return result;
+}
+
+/**
  * Build a ComposedAgent that calls `ahi::downstream` with AHI functions
  * registered on the runtime context.
  */
 function makeAhiAgent(
-  ahiFunctions: Record<string, HostFunctionDefinition>
+  ahiFunctions: Record<string, ApplicationCallable>
 ): ComposedAgent {
   const ast = parse('1 -> ahi::downstream');
-  const context = createRuntimeContext({ functions: ahiFunctions });
+  const context = createRuntimeContext({});
+  for (const [name, fn] of Object.entries(ahiFunctions)) {
+    context.functions.set(name, fn);
+  }
 
   return {
     ast,
@@ -88,13 +107,12 @@ describe('AHI extension forwards X-Correlation-ID (AC-3)', () => {
     // Arrange: stub fetch to capture outgoing headers
     const captured = stubFetchCapturingHeaders();
 
-    // Extract functions from AHI extension result via hoistExtension.
-    // The factory returns unprefixed keys; hoistExtension adds the "ahi::" namespace.
+    // Extract functions from AHI extension result and prefix with namespace.
+    // The factory returns unprefixed keys; prefixExtension adds the "ahi::" namespace.
     const ahiExt = createAhiExtension({
       agents: { downstream: { url: 'http://downstream:8080' } },
     });
-    const hoisted = hoistExtension('ahi', ahiExt);
-    const ahiFunctions = hoisted.functions;
+    const ahiFunctions = prefixExtension('ahi', ahiExt);
 
     const agent = makeAhiAgent(ahiFunctions);
 

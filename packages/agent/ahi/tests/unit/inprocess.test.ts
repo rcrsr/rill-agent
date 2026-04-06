@@ -90,8 +90,11 @@ describe('createInProcessFunction', () => {
     const { runner, calls } = makeRunner({ state: 'completed', result: 'ok' });
     const def = createInProcessFunction(runner, 'classifier', 30000);
 
-    // Act
-    await def.fn([{ target: 'hello' } as unknown as RillValue], makeCtx());
+    // Act — untyped callable receives args as array (params: undefined skips marshalArgs)
+    await def.fn(
+      [{ target: 'hello' } as unknown as RillValue] as unknown as Record<string, RillValue>,
+      makeCtx()
+    );
 
     // Assert
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -110,7 +113,7 @@ describe('createInProcessFunction', () => {
     });
 
     // Act
-    await def.fn([], ctx);
+    await def.fn([] as unknown as Record<string, RillValue>, ctx);
 
     // Assert
     expect(calls).toHaveLength(1);
@@ -124,7 +127,7 @@ describe('createInProcessFunction', () => {
     const ctx = makeCtx({ agentName: 'agent-a', sessionId: 'sess-42' });
 
     // Act
-    await def.fn([], ctx);
+    await def.fn([] as unknown as Record<string, RillValue>, ctx);
 
     // Assert
     const trigger = calls[0]!.input.trigger as {
@@ -146,7 +149,7 @@ describe('createInProcessFunction', () => {
     const def = createInProcessFunction(runner, 'classifier', 30000);
 
     // Act + Assert
-    const thrown = await def.fn([], makeCtx()).catch((e: unknown) => e);
+    const thrown = await def.fn([] as unknown as Record<string, RillValue>, makeCtx()).catch((e: unknown) => e);
     expect(thrown).toBeInstanceOf(RuntimeError);
     expect((thrown as RuntimeError).errorId).toBe('RILL-R032');
   });
@@ -158,7 +161,7 @@ describe('createInProcessFunction', () => {
     const def = createInProcessFunction(runner, 'classifier', 30000);
 
     // Act + Assert
-    const thrown = await def.fn([], makeCtx()).catch((e: unknown) => e);
+    const thrown = await def.fn([] as unknown as Record<string, RillValue>, makeCtx()).catch((e: unknown) => e);
     expect(thrown).toBeInstanceOf(RuntimeError);
     expect((thrown as RuntimeError).errorId).toBe('RILL-R032');
   });
@@ -169,7 +172,7 @@ describe('createInProcessFunction', () => {
     const def = createInProcessFunction(runner, 'classifier', 30000);
 
     // Act + Assert
-    const thrown = await def.fn([], makeCtx()).catch((e: unknown) => e);
+    const thrown = await def.fn([] as unknown as Record<string, RillValue>, makeCtx()).catch((e: unknown) => e);
     expect(thrown).toBeInstanceOf(RuntimeError);
     expect((thrown as RuntimeError).errorId).toBe('RILL-R029');
   });
@@ -180,7 +183,7 @@ describe('createInProcessFunction', () => {
     const def = createInProcessFunction(runner, 'classifier', 30000);
 
     // Act
-    const result = await def.fn([], makeCtx());
+    const result = await def.fn([] as unknown as Record<string, RillValue>, makeCtx());
 
     // Assert
     expect(result).toBe('hello');
@@ -192,7 +195,7 @@ describe('createInProcessFunction', () => {
     const def = createInProcessFunction(runner, 'classifier', 30000);
 
     // Act
-    const result = await def.fn([], makeCtx());
+    const result = await def.fn([] as unknown as Record<string, RillValue>, makeCtx());
 
     // Assert
     expect(result).toBeNull();
@@ -205,7 +208,7 @@ describe('createInProcessFunction', () => {
     const dictArg = { label: 'test', score: 0.9 } as unknown as RillValue;
 
     // Act
-    await def.fn([dictArg], makeCtx());
+    await def.fn([dictArg] as unknown as Record<string, RillValue>, makeCtx());
 
     // Assert
     expect(calls[0]!.input.params).toEqual({ label: 'test', score: 0.9 });
@@ -218,7 +221,7 @@ describe('createInProcessFunction', () => {
     const def = createInProcessFunction(runner, 'classifier', 30000);
 
     // Act + Assert
-    await expect(def.fn([], makeCtx())).rejects.toThrow('connection refused');
+    await expect(def.fn([] as unknown as Record<string, RillValue>, makeCtx())).rejects.toThrow('connection refused');
   });
 });
 

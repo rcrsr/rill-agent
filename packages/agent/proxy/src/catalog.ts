@@ -13,6 +13,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import type { AgentCard } from '@rcrsr/rill-agent-shared';
+import { generateAgentCard } from '@rcrsr/rill-agent-shared';
 import type {
   BundleAgentEntry,
   BundleManifest,
@@ -57,15 +58,15 @@ function checksumBundleJson(contents: string): string {
 }
 
 /**
- * Extract AHI target names from a BundleAgentEntry's extensions map.
- * Any extension whose package is the AHI package contributes its namespace
- * alias as a dependency name.
+ * Extract AHI target names from a rill-config.json extensions mounts map.
+ * Any mount whose package specifier is the AHI package contributes its
+ * namespace alias as a dependency name.
  */
 function extractAhiDependencies(
-  extensions: Record<string, { package: string }>
+  mounts: Record<string, string>
 ): string[] {
-  return Object.entries(extensions)
-    .filter(([, ext]) => ext.package === AHI_PACKAGE)
+  return Object.entries(mounts)
+    .filter(([, specifier]) => specifier === AHI_PACKAGE)
     .map(([alias]) => alias);
 }
 
@@ -107,8 +108,39 @@ function scanBundleDir(bundleDir: string): CatalogEntry[] {
   const entries: CatalogEntry[] = [];
 
   for (const [agentName, agentEntry] of Object.entries(manifest.agents)) {
-    const card = agentEntry.card;
-    const dependencies = extractAhiDependencies(agentEntry.extensions ?? {});
+    const rillConfigPath = path.join(bundleDir, agentEntry.configPath);
+
+    let card: AgentCard;
+    let dependencies: string[];
+
+    try {
+      const rillConfigRaw = readFileSync(rillConfigPath, 'utf-8');
+      // Parse without interpolation — catalog scan must not fail on ${VAR} placeholders
+      const rillConfig = JSON.parse(rillConfigRaw) as {
+        name?: string;
+        version?: string;
+        description?: string;
+        extensions?: { mounts?: Record<string, string | { package: string }> };
+      };
+      card = generateAgentCard({
+        name: rillConfig.name ?? agentName,
+        version: rillConfig.version ?? manifest.version,
+        description: rillConfig.description,
+        runtimeVariables: [],
+      });
+      // Normalize mounts: handle both string and { package: string } forms
+      const rawMounts = rillConfig.extensions?.mounts ?? {};
+      const normalizedMounts: Record<string, string> = {};
+      for (const [alias, spec] of Object.entries(rawMounts)) {
+        normalizedMounts[alias] = typeof spec === 'string' ? spec : spec.package;
+      }
+      dependencies = extractAhiDependencies(normalizedMounts);
+    } catch {
+      process.stderr.write(
+        `[catalog] skipping agent ${agentName} in ${bundleDir}: failed to read rill-config.json at ${rillConfigPath}\n`
+      );
+      continue;
+    }
 
     entries.push({
       name: agentName,

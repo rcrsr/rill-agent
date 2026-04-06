@@ -14,27 +14,27 @@ pnpm run -r build
 Set your Groq API key:
 
 ```bash
-export GROQ_API_KEY="gsk_..."
+export OPENAI_API_KEY="gsk_..."
 ```
 
 ## Build and start
 
 ```bash
 cd demo/feedback-analyzer
-pnpm build   # rill-agent-bundle build agent.json
-pnpm start   # rill-agent-run dist/ feedback-analyzer --config config.json
+pnpm build   # rill-agent-bundle build
+pnpm start   # rill-agent-run dist/ feedback-analyzer
 ```
 
 Or run directly:
 
 ```bash
-rill-agent-run dist/ feedback-analyzer --config config.json --param feedback='The onboarding was confusing and I almost gave up twice.'
+rill-agent-run dist/ feedback-analyzer --param feedback='The onboarding was confusing and I almost gave up twice.'
 ```
 
 Or pipe input via stdin:
 
 ```bash
-echo '{"feedback":"The onboarding was confusing and I almost gave up twice."}' | rill-agent-run dist/ feedback-analyzer --config config.json
+echo '{"feedback":"The onboarding was confusing and I almost gave up twice."}' | rill-agent-run dist/ feedback-analyzer
 ```
 
 Example output:
@@ -50,31 +50,28 @@ Example output:
 }
 ```
 
-## Runtime configuration
+## Configuration
 
-Extension config is supplied at runtime via `--config`, not embedded in the manifest.
-
-`config.json` provides the `llm` extension its API credentials and model:
+Extension config is embedded in `rill-config.json` under `extensions.config`:
 
 ```json
 {
-  "llm": {
-    "api_key": "${GROQ_API_KEY}",
-    "model": "openai/gpt-oss-20b",
-    "base_url": "https://api.groq.com/openai/v1"
+  "extensions": {
+    "mounts": {
+      "llm": { "package": "@rcrsr/rill-ext-openai" }
+    },
+    "config": {
+      "llm": {
+        "api_key": "${OPENAI_API_KEY}",
+        "model": "openai/gpt-oss-20b",
+        "base_url": "https://api.groq.com/openai/v1"
+      }
+    }
   }
 }
 ```
 
-`${GROQ_API_KEY}` interpolates from `process.env` at runtime. Export the variable before running.
-
-Pass inline JSON instead of a file:
-
-```bash
-rill-agent-run dist/ feedback-analyzer \
-  --config '{"llm":{"api_key":"'"$GROQ_API_KEY"'","model":"llama-3.3-70b-versatile","base_url":"https://api.groq.com/openai/v1"}}' \
-  --param feedback='Great product!'
-```
+`${OPENAI_API_KEY}` interpolates from the environment at load time. Export the variable before running.
 
 ## Verify bundle
 
@@ -84,18 +81,18 @@ pnpm check   # rill-agent-bundle check --platform node dist/
 
 ## What it demonstrates
 
-- **Runtime extension config**: `--config` supplies API keys and model settings at run time
-- **Environment interpolation**: `${GROQ_API_KEY}` resolves from `process.env` in config values
-- **Structured output**: `llm::generate()` extracts typed fields (sentiment, issues, urgency, category) from free text
+- **Embedded extension config**: API keys and model settings live in `rill-config.json`
+- **Environment interpolation**: `${OPENAI_API_KEY}` resolves from the environment
+- **Structured output**: `llm::generate()` extracts typed fields from free text
 - **Response drafting**: `llm::message()` drafts an empathetic reply using the extracted analysis
-- **Manifest-driven composition**: `rill-agent-bundle` builds the agent from `agent.json` into `dist/`
+- **Configuration-driven composition**: `rill-agent-bundle` builds from `rill-config.json`
 - **CLI execution**: `rill-agent-run` executes the bundle as a one-shot CLI command
 
 ## Build output
 
 ```
 dist/
-  bundle.json                  # Bundle manifest
+  bundle.json                  # Bundle metadata
   handlers.js                  # Compiled handler entry
   agents/
     feedback-analyzer/

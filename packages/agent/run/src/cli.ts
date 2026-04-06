@@ -83,16 +83,8 @@ async function main(): Promise<void> {
     (_, i) => !flagsWithValues.has(i) && !args[i]!.startsWith('-')
   );
 
-  const bundleDir = positionals[0];
+  const bundleDir = positionals[0] !== undefined && positionals[0] !== '' ? positionals[0] : process.cwd();
   const agentName = positionals[1];
-
-  // bundle-dir is required
-  if (bundleDir === undefined || bundleDir === '') {
-    process.stderr.write(
-      'Error: bundle-dir is required\nUsage: rill-agent-run <bundle-dir> [agent-name] [--param key=value]... [--timeout <ms>] [--config <path|json>] [--log-level silent|info|debug]\n'
-    );
-    process.exit(1);
-  }
 
   // Parse --timeout flag
   let timeout: number | undefined;
@@ -109,7 +101,7 @@ async function main(): Promise<void> {
   const configStr = parseFlag(args, '--config');
   if (configStr !== undefined) {
     try {
-      config = loadConfig(configStr);
+      config = loadConfig(configStr, process.env);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       process.stderr.write(`Error: ${msg}\n`);
