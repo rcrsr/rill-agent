@@ -204,9 +204,6 @@ importers:
       '@rcrsr/rill-agent-shared':
         specifier: workspace:^
         version: link:../shared
-      '@rcrsr/rill-config':
-        specifier: ^0.18.4
-        version: 0.18.4(@rcrsr/rill@0.18.4)
       hono:
         specifier: ^4.12.10
         version: 4.12.10

@@ -18,7 +18,6 @@ import type {
   BundleAgentEntry,
   BundleManifest,
 } from '@rcrsr/rill-agent-bundle';
-import { parseConfig } from '@rcrsr/rill-config';
 
 // ============================================================
 // PUBLIC TYPES
@@ -116,14 +115,26 @@ function scanBundleDir(bundleDir: string): CatalogEntry[] {
 
     try {
       const rillConfigRaw = readFileSync(rillConfigPath, 'utf-8');
-      const rillConfig = parseConfig(rillConfigRaw, {});
+      // Parse without interpolation — catalog scan must not fail on ${VAR} placeholders
+      const rillConfig = JSON.parse(rillConfigRaw) as {
+        name?: string;
+        version?: string;
+        description?: string;
+        extensions?: { mounts?: Record<string, string | { package: string }> };
+      };
       card = generateAgentCard({
         name: rillConfig.name ?? agentName,
         version: rillConfig.version ?? manifest.version,
         description: rillConfig.description,
         runtimeVariables: [],
       });
-      dependencies = extractAhiDependencies(rillConfig.extensions?.mounts ?? {});
+      // Normalize mounts: handle both string and { package: string } forms
+      const rawMounts = rillConfig.extensions?.mounts ?? {};
+      const normalizedMounts: Record<string, string> = {};
+      for (const [alias, spec] of Object.entries(rawMounts)) {
+        normalizedMounts[alias] = typeof spec === 'string' ? spec : spec.package;
+      }
+      dependencies = extractAhiDependencies(normalizedMounts);
     } catch {
       process.stderr.write(
         `[catalog] skipping agent ${agentName} in ${bundleDir}: failed to read rill-config.json at ${rillConfigPath}\n`

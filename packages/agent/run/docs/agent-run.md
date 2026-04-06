@@ -175,7 +175,7 @@ rill-agent-run dist/ my-agent --config '{"llm": {"api_key": "${GROQ_API_KEY}"}}'
 
 Config is keyed by extension alias. Each value is the config object passed to that extension.
 
-`${VAR}` patterns in config values are interpolated using `parseConfig()` from `@rcrsr/rill-config`. The CLI passes `process.env` as the interpolation environment. Unset variables are retained as-is — they are not replaced with empty strings.
+`${VAR}` patterns in config values are interpolated using `parseConfig()` from `@rcrsr/rill-config`. The CLI passes `process.env` as the interpolation environment. Unset variables cause `parseConfig()` to throw with a descriptive error listing the missing variable names.
 
 When `--config` is omitted, config defaults to `{}`.
 

@@ -78,16 +78,20 @@ Extension config is embedded in each agent's `rill-config.json` under `extension
 
 ## Build output
 
+Each agent builds to its own subdirectory under `dist/`:
+
 ```
 dist/
-  bundle.json
-  handlers.js
-  agents/
-    classifier/scripts/classify.rill
-    summarizer/scripts/summarize.rill
-    orchestrator/scripts/orchestrate.rill
-  .well-known/
-    classifier/agent-card.json
-    summarizer/agent-card.json
-    orchestrator/agent-card.json
+  classifier/
+    bundle.json
+    handlers.js
+    agents/classifier/...
+  summarizer/
+    bundle.json
+    handlers.js
+    agents/summarizer/...
+  orchestrator/
+    bundle.json
+    handlers.js
+    agents/orchestrator/...
 ```

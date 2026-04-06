@@ -295,7 +295,8 @@ export async function resolveDeferredExtensions(
       throw new AgentHostError(
         `Deferred extension ${entry.mountAlias} failed to initialize: ${msg}`,
         'init',
-        err
+        err,
+        { extensionAlias: entry.mountAlias }
       );
     }
 

@@ -274,21 +274,8 @@ export function createAgentHost(
             runtimeConfig
           );
         } catch (err) {
-          // EC-8: Wrap with extensionAlias if we can identify it
-          if (err instanceof AgentHostError) {
-            // Extract the mount alias from the message if present
-            const match =
-              /^Deferred extension (\S+) failed to initialize:/.exec(
-                err.message
-              );
-            const alias = match?.[1];
-            if (alias !== undefined) {
-              const cause = err.cause ?? err;
-              throw new AgentHostError(err.message, 'init', cause, {
-                extensionAlias: alias,
-              });
-            }
-          }
+          // EC-8: resolveDeferredExtensions throws AgentHostError with
+          // extensionAlias already set — re-throw as-is
           throw err;
         }
         deferredDispose = resolved.dispose;
@@ -519,7 +506,7 @@ export function createAgentHost(
       .finally(() => {
         // AC-6: Dispose deferred extensions after execution completes
         if (deferredDispose !== undefined) {
-          void deferredDispose();
+          void deferredDispose().catch(() => undefined);
         }
       });
 

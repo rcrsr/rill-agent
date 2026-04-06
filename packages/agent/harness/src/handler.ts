@@ -138,11 +138,7 @@ export function createAgentHandler(agent: ComposedAgent): AgentHandler {
           } catch (err) {
             // EC-8: Deferred extension factory threw — return 500 with extension name
             if (err instanceof AgentHostError) {
-              const match =
-                /^Deferred extension (\S+) failed to initialize:/.exec(
-                  err.message
-                );
-              const alias = match?.[1] ?? 'unknown';
+              const alias = err.extensionAlias ?? 'unknown';
               const causeMsg =
                 err.cause instanceof Error
                   ? err.cause.message
