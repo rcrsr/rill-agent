@@ -60,16 +60,3 @@ jobs:
 
       - name: Run checks
         run: pnpm -r run check
-
-  ci-gate:
-    if: always()
-    needs: [changes, check]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Evaluate results
-        run: |
-          if [[ "${{ needs.check.result }}" == "failure" || "${{ needs.check.result }}" == "cancelled" ]]; then
-            echo "CI failed"
-            exit 1
-          fi
-          echo "CI passed (check: ${{ needs.check.result }})"
