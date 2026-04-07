@@ -18,7 +18,7 @@ export interface InitContext {
 }
 
 export interface RunRequest {
-  readonly params: Record<string, unknown>;
+  readonly params?: Record<string, unknown> | undefined;
   readonly timeout?: number | undefined;
 }
 

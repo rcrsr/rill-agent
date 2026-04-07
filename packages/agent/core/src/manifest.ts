@@ -48,15 +48,27 @@ async function loadMultiAgent(
   >;
 
   const defaultAgent = typeof raw['default'] === 'string' ? raw['default'] : '';
-  const agentsConfig = raw['agents'] as Record<string, string> | undefined;
+  const agentsConfig = raw['agents'];
 
-  if (agentsConfig === undefined || typeof agentsConfig !== 'object') {
+  if (
+    agentsConfig === undefined ||
+    agentsConfig === null ||
+    typeof agentsConfig !== 'object' ||
+    Array.isArray(agentsConfig)
+  ) {
     throw new Error('manifest.json must have an "agents" object');
   }
 
   const agents = new Map<string, AgentHandler>();
 
-  for (const [name, relPath] of Object.entries(agentsConfig)) {
+  for (const [name, relPath] of Object.entries(
+    agentsConfig as Record<string, unknown>
+  )) {
+    if (typeof relPath !== 'string' || relPath === '') {
+      throw new Error(
+        `Agent "${name}" in manifest.json must have a non-empty string path`
+      );
+    }
     const handlerPath = path.resolve(dir, relPath, 'handler.js');
     if (!existsSync(handlerPath)) {
       throw new Error(

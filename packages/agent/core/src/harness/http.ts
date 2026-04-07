@@ -26,15 +26,19 @@ function validateParams(
 
   for (const param of desc.params) {
     const value = params[param.name];
-    if (param.required && value === undefined) {
+    if (param.required && (value === undefined || value === null)) {
       return `Missing required parameter: ${param.name}`;
     }
-    if (value !== undefined && param.type !== 'any') {
+    if (value !== undefined && value !== null && param.type !== 'any') {
       const actual = typeof value;
       const expected = param.type === 'dict' ? 'object' : param.type;
       if (expected === 'list') {
         if (!Array.isArray(value)) {
           return `Parameter "${param.name}" must be a list, got ${actual}`;
+        }
+      } else if (expected === 'object') {
+        if (actual !== 'object' || value === null || Array.isArray(value)) {
+          return `Parameter "${param.name}" must be a dict, got ${Array.isArray(value) ? 'list' : actual}`;
         }
       } else if (actual !== expected) {
         return `Parameter "${param.name}" must be ${param.type}, got ${actual}`;
@@ -75,7 +79,22 @@ export function httpHarness(router: AgentRouter): HttpHarness {
   // Run named agent
   app.post('/agents/:name/run', async (c) => {
     const name = c.req.param('name');
-    const body = (await c.req.json()) as Record<string, unknown>;
+
+    let body: Record<string, unknown>;
+    try {
+      const parsed: unknown = await c.req.json();
+      if (
+        parsed === null ||
+        typeof parsed !== 'object' ||
+        Array.isArray(parsed)
+      ) {
+        return c.json({ error: 'Request body must be a JSON object' }, 400);
+      }
+      body = parsed as Record<string, unknown>;
+    } catch {
+      return c.json({ error: 'Invalid JSON in request body' }, 400);
+    }
+
     const params = (body['params'] as Record<string, unknown>) ?? {};
 
     const validationError = validateParams(params, name, router);
@@ -104,7 +123,21 @@ export function httpHarness(router: AgentRouter): HttpHarness {
 
   // Run default agent
   app.post('/run', async (c) => {
-    const body = (await c.req.json()) as Record<string, unknown>;
+    let body: Record<string, unknown>;
+    try {
+      const parsed: unknown = await c.req.json();
+      if (
+        parsed === null ||
+        typeof parsed !== 'object' ||
+        Array.isArray(parsed)
+      ) {
+        return c.json({ error: 'Request body must be a JSON object' }, 400);
+      }
+      body = parsed as Record<string, unknown>;
+    } catch {
+      return c.json({ error: 'Invalid JSON in request body' }, 400);
+    }
+
     const params = (body['params'] as Record<string, unknown>) ?? {};
     const defaultName = router.defaultAgent();
 

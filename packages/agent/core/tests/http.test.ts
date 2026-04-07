@@ -163,6 +163,82 @@ describe('httpHarness', () => {
     await router.dispose();
   });
 
+  it('returns 400 for malformed JSON body', async () => {
+    const dir = await makeAgent('json-agent');
+    const manifest = await loadManifest(dir);
+    const router = await createRouter(manifest);
+    const harness = httpHarness(router);
+
+    const res = await harness.app.request('/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{not valid json',
+    });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('Invalid JSON');
+
+    await router.dispose();
+  });
+
+  it('returns 400 for non-object JSON body (array)', async () => {
+    const dir = await makeAgent('array-agent');
+    const manifest = await loadManifest(dir);
+    const router = await createRouter(manifest);
+    const harness = httpHarness(router);
+
+    const res = await harness.app.request('/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify([1, 2, 3]),
+    });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('JSON object');
+
+    await router.dispose();
+  });
+
+  it('returns 400 for non-object JSON body (string)', async () => {
+    const dir = await makeAgent('string-agent');
+    const manifest = await loadManifest(dir);
+    const router = await createRouter(manifest);
+    const harness = httpHarness(router);
+
+    const res = await harness.app.request('/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify('just a string'),
+    });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('JSON object');
+
+    await router.dispose();
+  });
+
+  it('returns 400 for null JSON body', async () => {
+    const dir = await makeAgent('null-agent');
+    const manifest = await loadManifest(dir);
+    const router = await createRouter(manifest);
+    const harness = httpHarness(router);
+
+    const res = await harness.app.request('/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(null),
+    });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('JSON object');
+
+    await router.dispose();
+  });
+
   it('returns 404 for unknown agent', async () => {
     const dir = await makeAgent('known-agent');
     const manifest = await loadManifest(dir);

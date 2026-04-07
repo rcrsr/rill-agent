@@ -33,13 +33,15 @@ export async function createRouter(
     return run(agentName, request);
   };
 
-  // Step 3: Initialize all agents
-  for (const handler of manifest.agents.values()) {
-    await handler.init({
-      globalVars: options?.globalVars,
-      ahiResolver,
-    });
-  }
+  // Step 3: Initialize all agents concurrently
+  await Promise.all(
+    Array.from(manifest.agents.values()).map((handler) =>
+      handler.init({
+        globalVars: options?.globalVars,
+        ahiResolver,
+      })
+    )
+  );
 
   // Step 4: Build router
   async function run(
@@ -54,7 +56,11 @@ export async function createRouter(
         `Agent "${resolvedName}" not found. Available: ${available}`
       );
     }
-    return handler.execute(request);
+    const normalized: RunRequest = {
+      ...request,
+      params: request.params ?? {},
+    };
+    return handler.execute(normalized);
   }
 
   function describe(agentName: string): HandlerDescription | null {

@@ -18,8 +18,8 @@ import {
   RuntimeError,
   toCallable,
   structureToTypeValue,
-} from "@rcrsr/rill";
-import { XMLParser } from "fast-xml-parser";
+} from '@rcrsr/rill';
+import { XMLParser } from 'fast-xml-parser';
 
 // ---------------------------------------------------------------------------
 // Config
@@ -50,26 +50,26 @@ interface FeedItem {
 
 /** dict(title: string, link: string, description: string, pub_date: string, source: string) */
 const ITEM_DICT_STRUCTURE: TypeStructure = {
-  kind: "dict",
+  kind: 'dict',
   fields: {
-    title: { type: { kind: "string" } },
-    link: { type: { kind: "string" } },
-    description: { type: { kind: "string" } },
-    pub_date: { type: { kind: "string" } },
-    source: { type: { kind: "string" } },
+    title: { type: { kind: 'string' } },
+    link: { type: { kind: 'string' } },
+    description: { type: { kind: 'string' } },
+    pub_date: { type: { kind: 'string' } },
+    source: { type: { kind: 'string' } },
   },
 };
 
 /** list(dict(...)) */
 const ITEM_LIST_STRUCTURE: TypeStructure = {
-  kind: "list",
+  kind: 'list',
   element: ITEM_DICT_STRUCTURE,
 };
 
 /** list(string) */
 const STRING_LIST_STRUCTURE: TypeStructure = {
-  kind: "list",
-  element: { kind: "string" },
+  kind: 'list',
+  element: { kind: 'string' },
 };
 
 // ---------------------------------------------------------------------------
@@ -78,7 +78,7 @@ const STRING_LIST_STRUCTURE: TypeStructure = {
 
 const parser = new XMLParser({
   ignoreAttributes: false,
-  attributeNamePrefix: "@_",
+  attributeNamePrefix: '@_',
   htmlEntities: true,
   processEntities: false,
 });
@@ -89,10 +89,10 @@ const parser = new XMLParser({
 
 /** Strip HTML tags, collapse whitespace, and truncate to maxLen characters. */
 function cleanDescription(raw: unknown, maxLen: number = 500): string {
-  if (raw == null) return "";
+  if (raw == null) return '';
   const text = String(raw)
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
   return text.length > maxLen ? text.slice(0, maxLen) : text;
 }
@@ -122,10 +122,10 @@ function parseXml(xml: string, feedUrl: string, maxItems: number): FeedItem[] {
     // RSS 2.0
     const items = toArray(doc.rss?.channel?.item);
     return items.slice(0, maxItems).map((item: Record<string, unknown>) => ({
-      title: String(item.title ?? ""),
-      link: String(item.link ?? ""),
+      title: String(item.title ?? ''),
+      link: String(item.link ?? ''),
       description: cleanDescription(item.description),
-      pub_date: String(item.pubDate ?? ""),
+      pub_date: String(item.pubDate ?? ''),
       source,
     }));
   }
@@ -135,29 +135,42 @@ function parseXml(xml: string, feedUrl: string, maxItems: number): FeedItem[] {
     const entries = toArray(doc.feed?.entry);
     return entries.slice(0, maxItems).map((entry: Record<string, unknown>) => {
       // Atom link can be an object with @_href or a plain string
-      let link = "";
+      let link = '';
       const rawLink = entry.link;
-      if (typeof rawLink === "string") {
+      if (typeof rawLink === 'string') {
         link = rawLink;
       } else if (Array.isArray(rawLink)) {
         // Pick the first alternate or the first entry
         const alt = rawLink.find(
-          (l: Record<string, unknown>) =>
-            l["@_rel"] === "alternate" || l["@_rel"] == null,
+          (l: unknown) =>
+            l != null &&
+            typeof l === 'object' &&
+            ((l as Record<string, unknown>)['@_rel'] === 'alternate' ||
+              (l as Record<string, unknown>)['@_rel'] == null)
         );
-        link = String((alt ?? rawLink[0])?.["@_href"] ?? "");
-      } else if (rawLink != null && typeof rawLink === "object") {
-        link = String((rawLink as Record<string, unknown>)["@_href"] ?? "");
+        const resolved = alt ?? rawLink[0];
+        link =
+          typeof resolved === 'string'
+            ? resolved
+            : String(
+                (resolved as Record<string, unknown> | undefined)?.['@_href'] ??
+                  ''
+              );
+      } else if (rawLink != null && typeof rawLink === 'object') {
+        link = String((rawLink as Record<string, unknown>)['@_href'] ?? '');
       }
 
       const description =
-        entry.summary ?? entry.content ?? (entry as Record<string, unknown>)["content:encoded"] ?? "";
+        entry.summary ??
+        entry.content ??
+        (entry as Record<string, unknown>)['content:encoded'] ??
+        '';
 
       return {
-        title: String(entry.title ?? ""),
+        title: String(entry.title ?? ''),
         link,
         description: cleanDescription(description),
-        pub_date: String(entry.updated ?? entry.published ?? ""),
+        pub_date: String(entry.updated ?? entry.published ?? ''),
         source,
       };
     });
@@ -195,11 +208,11 @@ function itemToRillDict(item: FeedItem): Record<string, RillValue> {
 async function fetchFeed(
   url: string,
   timeout: number,
-  maxItems: number,
+  maxItems: number
 ): Promise<FeedItem[]> {
   const response = await fetch(url, {
     signal: AbortSignal.timeout(timeout),
-    headers: { "User-Agent": "rill-ext-rss/0.1.0" },
+    headers: { 'User-Agent': 'rill-ext-rss/0.1.0' },
   });
   if (!response.ok) {
     throw new Error(`HTTP ${response.status} for ${url}`);
@@ -217,16 +230,17 @@ function createExtension(config: ExtensionConfig): ExtensionFactoryResult {
   const feeds: string[] = Array.isArray(config.feeds) ? config.feeds : [];
   if (feeds.length === 0) {
     throw new RuntimeError(
-      "RILL-R004",
-      "rss: feeds list is empty; configure at least one feed URL",
+      'RILL-R004',
+      'rss: feeds list is empty; configure at least one feed URL'
     );
   }
   const timeout: number =
-    typeof config.timeout === "number" && config.timeout > 0
+    typeof config.timeout === 'number' && config.timeout > 0
       ? config.timeout
       : 15000;
   const maxItems: number =
-    typeof config.max_items_per_feed === "number" && config.max_items_per_feed > 0
+    typeof config.max_items_per_feed === 'number' &&
+    config.max_items_per_feed > 0
       ? config.max_items_per_feed
       : 20;
 
@@ -237,25 +251,25 @@ function createExtension(config: ExtensionConfig): ExtensionFactoryResult {
     params: [] as readonly RillParam[],
     fn: async (): Promise<RillValue> => {
       const results = await Promise.allSettled(
-        feeds.map((url) => fetchFeed(url, timeout, maxItems)),
+        feeds.map((url) => fetchFeed(url, timeout, maxItems))
       );
 
       const allItems: FeedItem[] = [];
       for (let i = 0; i < results.length; i++) {
         const result = results[i];
-        if (result.status === "fulfilled") {
+        if (result.status === 'fulfilled') {
           allItems.push(...result.value);
         } else {
           // Log warning and continue
-          console.warn(
-            `rss: failed to fetch ${feeds[i]}: ${result.reason}`,
-          );
+          console.warn(`rss: failed to fetch ${feeds[i]}: ${result.reason}`);
         }
       }
 
       return sortByDate(allItems).map(itemToRillDict) as RillValue;
     },
-    annotations: { description: "Fetch and parse all configured RSS/Atom feeds" },
+    annotations: {
+      description: 'Fetch and parse all configured RSS/Atom feeds',
+    },
     returnType: structureToTypeValue(ITEM_LIST_STRUCTURE),
   };
 
@@ -265,10 +279,10 @@ function createExtension(config: ExtensionConfig): ExtensionFactoryResult {
   const fetchOneDef: RillFunction = {
     params: [
       {
-        name: "url",
-        type: { kind: "string" } as TypeStructure,
+        name: 'url',
+        type: { kind: 'string' } as TypeStructure,
         defaultValue: undefined,
-        annotations: { description: "RSS or Atom feed URL to fetch" },
+        annotations: { description: 'RSS or Atom feed URL to fetch' },
       },
     ] as readonly RillParam[],
     fn: async (args): Promise<RillValue> => {
@@ -276,7 +290,7 @@ function createExtension(config: ExtensionConfig): ExtensionFactoryResult {
       const items = await fetchFeed(url, timeout, maxItems);
       return sortByDate(items).map(itemToRillDict) as RillValue;
     },
-    annotations: { description: "Fetch and parse a single RSS/Atom feed URL" },
+    annotations: { description: 'Fetch and parse a single RSS/Atom feed URL' },
     returnType: structureToTypeValue(ITEM_LIST_STRUCTURE),
   };
 
@@ -288,7 +302,7 @@ function createExtension(config: ExtensionConfig): ExtensionFactoryResult {
     fn: (): RillValue => {
       return [...feeds] as RillValue;
     },
-    annotations: { description: "Return the list of configured feed URLs" },
+    annotations: { description: 'Return the list of configured feed URLs' },
     returnType: structureToTypeValue(STRING_LIST_STRUCTURE),
   };
 
@@ -311,7 +325,7 @@ function createExtension(config: ExtensionConfig): ExtensionFactoryResult {
 export const configSchema: ExtensionConfigSchema = {};
 
 export const extensionManifest: ExtensionManifest = {
-  factory: createExtension as ExtensionManifest["factory"],
+  factory: createExtension as ExtensionManifest['factory'],
   configSchema,
-  version: "0.1.0",
+  version: '0.1.0',
 };
