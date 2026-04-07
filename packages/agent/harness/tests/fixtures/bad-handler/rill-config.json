@@ -1,5 +1,0 @@
-{
-  "name": "bad-handler-agent",
-  "version": "0.0.1",
-  "main": "handler.rill:run"
-}
