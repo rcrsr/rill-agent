@@ -1,0 +1,35 @@
+# Agentic News Digest — fetch RSS feeds and summarize with LLM
+
+^("Summarize top agentic coding news into a markdown digest") || {
+  use<ext:ai> => $ai
+  use<ext:rss> => $rss
+
+  # Fetch all feeds, keep items with non-empty titles, take top 10
+  $rss.fetch_all()
+    -> filter |item| { $item.title -> !.empty }
+    -> slice<:10> => $top
+
+  $top.len => $total
+
+  # Summarize each article with structured output
+  $top -> enumerate -> each |entry| {
+    $entry.index + 1 => $num
+    $num -> :>string => $n
+    $entry.value => $article
+    $article.title => $title
+    $article.description => $desc
+
+    "Summarizing {$n}/{$total}: {$title}" -> log
+
+    $ai.generate("Summarize this article in 2-3 sentences for developers. State what happened, who is involved, and why it matters.\n\nTitle: {$title}\nDescription: {$desc}", dict(summary: string)) -> .data.summary => $summary
+
+    dict[title: $title, link: $article.link, source: $article.source, summary: $summary]
+  } => $items
+
+  # Build markdown digest
+  $items -> enumerate -> fold("# Agentic News Digest\n") |item| {
+    $item.index + 1 -> :>string => $pos
+    $item.value => $entry
+    "{$@}\n## {$pos}. {$entry.title}\n**Source:** {$entry.source}\n\n{$entry.summary}\n\n[Read more]({$entry.link})\n\n---\n"
+  }
+}:string => $digest

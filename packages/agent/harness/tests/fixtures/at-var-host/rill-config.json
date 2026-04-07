@@ -1,8 +1,0 @@
-{
-  "name": "at-var-host-agent",
-  "version": "0.0.1",
-  "main": "handler.rill:run",
-  "host": {
-    "timeout": "@{TIMEOUT}"
-  }
-}
