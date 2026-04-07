@@ -45,7 +45,11 @@ export interface AgentManifest {
 }
 
 export interface AgentRouter {
-  run(agentName: string, request: RunRequest): Promise<RunResponse>;
+  run(
+    agentName: string,
+    request: RunRequest,
+    context?: RunContext
+  ): Promise<RunResponse>;
   describe(agentName: string): HandlerDescription | null;
   agents(): string[];
   defaultAgent(): string;

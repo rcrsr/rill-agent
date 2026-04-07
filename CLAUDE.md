@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Monorepo Structure
 
-pnpm workspace monorepo containing the agent framework for the [rill](https://github.com/rcrsr/rill) language runtime. All 8 packages under `packages/agent/` share a synchronized version.
+pnpm workspace monorepo containing the agent framework for the [rill](https://github.com/rcrsr/rill) language runtime. All 9 packages under `packages/agent/` share a synchronized version.
 
 | Package | NPM Name | Role |
 |---------|----------|------|
@@ -12,6 +12,7 @@ pnpm workspace monorepo containing the agent framework for the [rill](https://gi
 | `agent/harness` | `@rcrsr/rill-agent-harness` | HTTP server (Hono), lifecycle, metrics (prom-client), SSE |
 | `agent/bundle` | `@rcrsr/rill-agent-bundle` | Manifest-to-bundle build tool (CLI) |
 | `agent/build` | `@rcrsr/rill-agent-build` | Harness entry point code generator (CLI) |
+| `agent/foundry` | `@rcrsr/rill-agent-foundry` | Foundry Responses API protocol adapter |
 | `agent/run` | `@rcrsr/rill-agent-run` | CLI runner for agent bundles |
 | `agent/proxy` | `@rcrsr/rill-agent-proxy` | Multi-agent routing proxy (CLI) |
 | `agent/registry` | `@rcrsr/rill-agent-registry` | Service registry client |
@@ -52,13 +53,14 @@ shared ← harness ← bundle ← run
 shared ← build              ← proxy
 shared ← registry (peer)
 shared ← ahi
+core ← foundry (peer)
 registry ← ahi
 registry ← harness (optional)
 harness ← proxy
 bundle ← proxy
 ```
 
-All packages consume `@rcrsr/rill` from npm as a direct dependency (not peer), except `ahi` which uses it as a peer dependency.
+All packages consume `@rcrsr/rill` from npm as a direct dependency (not peer), except `ahi` and `foundry` which use it as a peer dependency.
 
 ### Composition Pipeline
 
