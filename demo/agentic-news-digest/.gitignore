@@ -1,0 +1,6 @@
+node_modules/
+dist/
+bundle/
+.env
+*.tsbuildinfo
+transcript/

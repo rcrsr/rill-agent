@@ -1,0 +1,33 @@
+{
+  "name": "agentic-news-digest",
+  "version": "0.1.0",
+  "main": "main.rill:digest",
+  "extensions": {
+    "mounts": {
+      "ai": "@rcrsr/rill-ext-openai",
+      "rss": "./dist/extensions/ext-rss.js"
+    },
+    "config": {
+      "ai": {
+        "api_key": "${GROQ_API_KEY}",
+        "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+        "base_url": "https://api.groq.com/openai/v1",
+        "temperature": 0.3,
+        "max_tokens": 200
+      },
+      "rss": {
+        "feeds": [
+          "https://hnrss.org/frontpage?q=AI+OR+agent+OR+LLM+OR+agentic",
+          "https://simonwillison.net/atom/entries/",
+          "https://blog.langchain.dev/rss/",
+          "https://www.latent.space/feed",
+          "https://buttondown.com/ainews/rss",
+          "https://lilianweng.github.io/index.xml",
+          "https://huggingface.co/blog/feed.xml"
+        ],
+        "timeout": 15000,
+        "max_items_per_feed": 20
+      }
+    }
+  }
+}
