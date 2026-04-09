@@ -277,8 +277,11 @@ describe('createFoundryHarness — handler execution failure', () => {
       })
     );
 
+    expect(response.status).toBe(200);
     const text = await response.text();
     expect(text).toContain('event: error');
+    expect(text).toContain('"code":"SERVER_ERROR"');
+    expect(text).toContain('streaming handler failure');
   });
 });
 

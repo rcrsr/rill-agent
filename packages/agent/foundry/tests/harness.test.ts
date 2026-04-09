@@ -8,6 +8,7 @@ import {
   type MockInstance,
 } from 'vitest';
 import type { AgentRouter, RunContext, RunRequest } from '@rcrsr/rill-agent';
+import { trace, type Span } from '@opentelemetry/api';
 import { createFoundryHarness } from '../src/harness.js';
 
 // ============================================================
@@ -84,6 +85,7 @@ const ENV_KEYS = [
   'FOUNDRY_AGENT_VERSION',
   'FOUNDRY_PROJECT_ENDPOINT',
   'FOUNDRY_AGENT_DEBUG_ERRORS',
+  'OTEL_EXPORTER_OTLP_ENDPOINT',
 ];
 
 const savedEnv: Record<string, string | undefined> = {};
@@ -530,5 +532,69 @@ describe('createFoundryHarness', () => {
         'FOUNDRY_TEMPERATURE',
       ]).toContain(key);
     }
+  });
+
+  // Telemetry: spans are created for /responses requests when OTEL is configured
+  it('creates foundry.agent.run span for sync /responses request', async () => {
+    const capturedSpans: Array<{
+      name: string;
+      attributes: Record<string, unknown>;
+      span: Span;
+    }> = [];
+    const mockTracer = {
+      startSpan: (
+        name: string,
+        options?: { attributes?: Record<string, unknown> }
+      ) => {
+        const entry = {
+          name,
+          attributes: { ...(options?.attributes ?? {}) },
+          span: {} as Span,
+        };
+        const span: Span = {
+          setAttribute: vi.fn((key: string, value: unknown) => {
+            entry.attributes[key] = value;
+            return span;
+          }),
+          setStatus: vi.fn().mockReturnThis(),
+          end: vi.fn(),
+          spanContext: () => ({
+            traceId: '0'.repeat(32),
+            spanId: '0'.repeat(16),
+            traceFlags: 0,
+          }),
+          isRecording: () => true,
+          recordException: vi.fn(),
+          updateName: vi.fn().mockReturnThis(),
+          addEvent: vi.fn().mockReturnThis(),
+          addLink: vi.fn().mockReturnThis(),
+          addLinks: vi.fn().mockReturnThis(),
+          setAttributes: vi.fn().mockReturnThis(),
+        };
+        entry.span = span;
+        capturedSpans.push(entry);
+        return span;
+      },
+      startActiveSpan: vi.fn(),
+    };
+
+    const getTracerSpy = vi
+      .spyOn(trace, 'getTracer')
+      .mockReturnValue(
+        mockTracer as unknown as ReturnType<typeof trace.getTracer>
+      );
+
+    const harness = createFoundryHarness(makeMockRouter());
+    await harness.app.request('/responses', jsonRequest({ input: 'hello' }));
+
+    expect(getTracerSpy).toHaveBeenCalledWith('rill-foundry-harness');
+    expect(capturedSpans.length).toBe(1);
+    const entry = capturedSpans[0]!;
+    expect(entry.name).toBe('foundry.agent.run');
+    expect(entry.attributes['foundry.agent.name']).toBe('default');
+    expect(entry.attributes['foundry.agent.state']).toBe('completed');
+    expect(entry.span.end).toHaveBeenCalled();
+
+    getTracerSpy.mockRestore();
   });
 });
