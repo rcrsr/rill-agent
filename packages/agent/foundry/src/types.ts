@@ -80,7 +80,7 @@ export interface CreateResponse {
  * A single text part in an output message content array.
  */
 export interface OutputContentPart {
-  readonly type: 'output_text';
+  readonly type: 'text';
   readonly text: string;
   readonly annotations: [];
 }
@@ -106,6 +106,10 @@ export interface FoundryResponse {
   readonly status: 'completed' | 'failed';
   readonly output: OutputItem[];
   readonly error: { readonly code: string; readonly message: string } | null;
+  readonly metadata: Record<string, string>;
+  readonly temperature: number;
+  readonly top_p: number;
+  readonly user: string;
 }
 
 /**
@@ -186,4 +190,5 @@ export interface FoundryHarnessOptions {
   readonly agentName?: string | undefined;
   readonly agentVersion?: string | undefined;
   readonly debugErrors?: boolean | undefined;
+  readonly forceSync?: boolean | undefined;
 }

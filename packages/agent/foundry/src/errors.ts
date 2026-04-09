@@ -19,8 +19,7 @@ export class InputError extends Error {
 
 /**
  * Error thrown when managed identity credential acquisition fails at startup.
- * Triggers a non-zero process exit. Error code: CREDENTIAL_FAILURE.
- * EC-6: Failed to acquire token for scope https://ai.azure.com/.default
+ * Triggers a non-zero process exit.
  */
 export class CredentialError extends Error {
   constructor(message: string) {

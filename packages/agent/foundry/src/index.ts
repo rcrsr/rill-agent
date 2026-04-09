@@ -32,7 +32,8 @@ export { CapacityError, CredentialError, InputError } from './errors.js';
 // ID GENERATION
 // ============================================================
 
-export { generateId } from './id.js';
+export type { IdGenerator } from './id.js';
+export { createIdGenerator, generateId } from './id.js';
 
 // ============================================================
 // INPUT EXTRACTION
@@ -73,6 +74,13 @@ export {
   createConversationsClient,
   PersistenceError,
 } from './conversations.js';
+
+// ============================================================
+// TELEMETRY
+// ============================================================
+
+export type { TelemetryOptions } from './telemetry.js';
+export { initTelemetry, getTracer, shutdownTelemetry } from './telemetry.js';
 
 // ============================================================
 // FOUNDRY HARNESS

@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { serve, type ServerType } from '@hono/node-server';
+import { SpanStatusCode } from '@opentelemetry/api';
 import { DefaultAzureCredential } from '@azure/identity';
 import type { AgentRouter, RunContext, RunRequest } from '@rcrsr/rill-agent';
 import type {
@@ -10,14 +11,15 @@ import type {
 } from './types.js';
 import { CapacityError, CredentialError, InputError } from './errors.js';
 import { extractInput } from './extract.js';
-import { generateId } from './id.js';
+import { createIdGenerator, generateId } from './id.js';
 import { buildErrorResponse, buildSyncResponse } from './response.js';
 import { createSessionManager } from './session.js';
-import { streamFoundryResponse } from './stream.js';
+import { createFoundryStreamResponse } from './stream.js';
 import {
   createConversationsClient,
   PersistenceError,
 } from './conversations.js';
+import { getTracer, initTelemetry, shutdownTelemetry } from './telemetry.js';
 
 // ============================================================
 // TYPES
@@ -106,7 +108,7 @@ function resolvePort(options?: FoundryHarnessOptions): number {
 
 /**
  * Resolve the conversationId from the request body field.
- * Accepts string or {id: string} object per AC-46.
+ * Accepts string or {id: string} object.
  */
 function resolveConversationId(
   conversation: CreateResponse['conversation']
@@ -129,12 +131,10 @@ function resolveConversationId(
  *
  * Routes:
  *   POST /responses  — main Foundry Responses endpoint
- *   POST /runs       — alias for /responses (AC-5)
- *   GET  /readiness  — 503 before init, 200 after (AC-6, AC-7)
- *   GET  /liveness   — always 200 (AC-8)
- *   GET  /metrics    — FoundryMetrics JSON (AC-26)
- *
- * Throws synchronously when the port configuration is invalid (EC-2).
+ *   POST /runs       — alias for /responses
+ *   GET  /readiness  — 503 before init, 200 after
+ *   GET  /liveness   — always 200
+ *   GET  /metrics    — FoundryMetrics JSON
  */
 export function createFoundryHarness(
   router: AgentRouter,
@@ -144,9 +144,16 @@ export function createFoundryHarness(
   const debugErrors =
     options?.debugErrors ??
     process.env['FOUNDRY_AGENT_DEBUG_ERRORS'] === 'true';
+  const forceSync =
+    options?.forceSync ?? process.env['FOUNDRY_AGENT_FORCE_SYNC'] === 'true';
   const agentName = options?.agentName ?? process.env['FOUNDRY_AGENT_NAME'];
   const agentVersion =
     options?.agentVersion ?? process.env['FOUNDRY_AGENT_VERSION'];
+
+  initTelemetry({
+    agentName: agentName ?? router.defaultAgent(),
+    agentVersion,
+  });
 
   const sessions = createSessionManager();
 
@@ -169,12 +176,22 @@ export function createFoundryHarness(
   // MIDDLEWARE — agent metadata header
   // ============================================================
 
+  const metadataHeader = JSON.stringify({
+    package: {
+      name: 'azure-ai-agentserver-core',
+      version: '1.0.0b17',
+    },
+    runtime: {
+      python_version: '3.11.0',
+      platform: 'Linux',
+      host_name: '',
+      replica_name: '',
+    },
+  });
+
   app.use('*', async (c, next) => {
     await next();
-    const meta: Record<string, string> = {};
-    if (agentName !== undefined) meta['name'] = agentName;
-    if (agentVersion !== undefined) meta['version'] = agentVersion;
-    c.res.headers.set('x-aml-foundry-agents-metadata', JSON.stringify(meta));
+    c.res.headers.set('x-aml-foundry-agents-metadata', metadataHeader);
   });
 
   // ============================================================
@@ -271,7 +288,7 @@ export function createFoundryHarness(
     // Resolve agent name early so validation can use it
     const agentName_ = extracted.targetAgent ?? router.defaultAgent();
 
-    // Validate params against handler description (AC-31, AC-32)
+    // Validate params against handler description.
     const validationError = validateParams(
       extracted.params,
       agentName_,
@@ -307,9 +324,23 @@ export function createFoundryHarness(
       );
     }
 
-    const responseId = generateId('resp_');
+    // Use response_id from request metadata (assigned by Foundry gateway)
+    // or generate one for direct/test callers.
+    const idGen = createIdGenerator(
+      (body.metadata as Record<string, unknown> | undefined)?.[
+        'response_id'
+      ] as string | undefined,
+      conversationId
+    );
+    const responseId = idGen.responseId;
 
-    // Build session vars from headers + body fields (AC-13, AC-14)
+    // Session and invocation IDs for sidecar stream correlation.
+    const invocationId =
+      c.req.header('x-agent-invocation-id') ?? generateId('inv_');
+    const agentSessionId =
+      c.req.query('session') ?? c.req.header('x-agent-session-id') ?? sessionId;
+
+    // Build session vars from headers + body fields.
     const sessionVars: Record<string, string> = {};
     const oid = c.req.header('x-aml-oid');
     if (oid !== undefined) sessionVars['AZURE_OID'] = oid;
@@ -329,33 +360,70 @@ export function createFoundryHarness(
       params: extracted.params,
     };
 
-    // Streaming path
-    if (body.stream === true) {
-      // For streaming we need an async iterable that yields chunks.
-      // router.run() is not natively streaming, so we wrap the single
-      // result as a one-element iterable.
-      async function* makeStream(): AsyncIterable<{ value?: unknown }> {
-        try {
-          const result = await router.run(agentName_, runRequest, runContext);
-          yield { value: result.result };
-        } finally {
-          sessions.release(sessionId);
-        }
-      }
+    // Streaming path.
+    if (body.stream === true && !forceSync) {
+      const tracer = getTracer();
+      const span = tracer.startSpan('foundry.agent.run', {
+        attributes: {
+          'foundry.agent.name': agentName_,
+          'foundry.response_id': responseId,
+          'foundry.stream': true,
+        },
+      });
 
-      return streamFoundryResponse(c, responseId, makeStream(), {
+      const resultPromise = router
+        .run(agentName_, runRequest, runContext)
+        .then((result) => {
+          span.setAttribute('foundry.agent.state', result.state);
+          span.end();
+          sessions.release(sessionId);
+
+          if (result.result === null || result.result === undefined) return '';
+          if (typeof result.result === 'string') return result.result;
+          return JSON.stringify(result.result);
+        })
+        .catch((err) => {
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: err instanceof Error ? err.message : String(err),
+          });
+          span.end();
+          sessions.release(sessionId);
+          throw err;
+        });
+
+      return createFoundryStreamResponse(responseId, {
+        resultPromise,
+        idGenerator: idGen,
         onError: (_err) => {
           errorCount++;
         },
+        sessionId: agentSessionId,
+        invocationId,
+        metadataHeader,
       });
     }
 
     // Synchronous path
     try {
       let result: Awaited<ReturnType<typeof router.run>>;
+      const tracer = getTracer();
+      const span = tracer.startSpan('foundry.agent.run', {
+        attributes: {
+          'foundry.agent.name': agentName_,
+          'foundry.response_id': responseId,
+          'foundry.stream': false,
+        },
+      });
       try {
         result = await router.run(agentName_, runRequest, runContext);
+        span.setAttribute('foundry.agent.state', result.state);
       } catch (err) {
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: err instanceof Error ? err.message : String(err),
+        });
+        span.end();
         errorCount++;
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.includes('not found')) {
@@ -366,12 +434,12 @@ export function createFoundryHarness(
           500
         );
       }
+      span.end();
 
       const response = buildSyncResponse(result, responseId);
 
-      // Conversations persistence (AC-18, AC-19)
-      // store defaults to true per spec
-      const shouldStore = body.store !== false;
+      // Conversations persistence.
+      const shouldStore = body.store === true;
       if (
         shouldStore &&
         conversationId !== undefined &&
@@ -441,6 +509,12 @@ export function createFoundryHarness(
       server = serve({ fetch: app.fetch, port }, () => {
         resolve();
       });
+      // Disable server timeouts for long-running SSE streams.
+      const srv = server as unknown as Record<string, unknown>;
+      srv['requestTimeout'] = 0;
+      srv['headersTimeout'] = 0;
+      srv['keepAliveTimeout'] = 0;
+      srv['timeout'] = 0;
     });
   }
 
@@ -449,6 +523,7 @@ export function createFoundryHarness(
       server.close();
       server = undefined;
     }
+    await shutdownTelemetry();
   }
 
   function metrics(): FoundryMetrics {

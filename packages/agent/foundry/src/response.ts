@@ -63,7 +63,7 @@ export function buildSyncResponse(
         status: 'completed',
         content: [
           {
-            type: 'output_text',
+            type: 'text',
             text,
             annotations: [],
           },
@@ -71,6 +71,10 @@ export function buildSyncResponse(
       },
     ],
     error: status === 'failed' ? { code: 'SERVER_ERROR', message: text } : null,
+    metadata: {},
+    temperature: 0,
+    top_p: 0,
+    user: '',
   };
 }
 
