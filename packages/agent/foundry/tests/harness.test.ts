@@ -322,8 +322,8 @@ describe('createFoundryHarness', () => {
     }
   });
 
-  // AC-23: Metadata header uses env var overrides
-  it('includes agent name and version in metadata header from env vars', async () => {
+  // Metadata header matches Python SDK format (package + runtime only).
+  it('metadata header contains package and runtime but not name/version', async () => {
     process.env['FOUNDRY_AGENT_NAME'] = 'my-agent';
     process.env['FOUNDRY_AGENT_VERSION'] = '2.0.0';
 
@@ -332,12 +332,11 @@ describe('createFoundryHarness', () => {
 
     const metaRaw = res.headers.get('x-aml-foundry-agents-metadata');
     expect(metaRaw).not.toBeNull();
-    const meta = JSON.parse(metaRaw ?? '{}') as {
-      name: string;
-      version: string;
-    };
-    expect(meta.name).toBe('my-agent');
-    expect(meta.version).toBe('2.0.0');
+    const meta = JSON.parse(metaRaw ?? '{}') as Record<string, unknown>;
+    expect(meta['package']).toBeDefined();
+    expect(meta['runtime']).toBeDefined();
+    expect(meta['name']).toBeUndefined();
+    expect(meta['version']).toBeUndefined();
   });
 
   // AC-26: GET /metrics returns JSON with expected fields

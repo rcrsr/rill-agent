@@ -371,16 +371,108 @@ export function createFoundryHarness(
         },
       });
 
-      const resultPromise = router
-        .run(agentName_, runRequest, runContext)
+      // Build a push-based async iterable: the handler calls onChunk
+      // for each stream chunk, which pushes into a buffer consumed by
+      // the SSE writer.
+      let pushChunk: (chunk: string) => void;
+      let endChunks: () => void;
+      let failChunks: (err: unknown) => void;
+      const chunkBuffer: string[] = [];
+      let done = false;
+      let waiting: ((value: IteratorResult<string>) => void) | undefined;
+
+      pushChunk = (chunk: string) => {
+        if (waiting !== undefined) {
+          const resolve = waiting;
+          waiting = undefined;
+          resolve({ value: chunk, done: false });
+        } else {
+          chunkBuffer.push(chunk);
+        }
+      };
+
+      endChunks = () => {
+        done = true;
+        if (waiting !== undefined) {
+          const resolve = waiting;
+          waiting = undefined;
+          resolve({ value: undefined as unknown as string, done: true });
+        }
+      };
+
+      let pendingError: unknown;
+      let rejectWaiting: ((err: unknown) => void) | undefined;
+
+      failChunks = (err: unknown) => {
+        pendingError = err;
+        done = true;
+        if (rejectWaiting !== undefined) {
+          const reject = rejectWaiting;
+          rejectWaiting = undefined;
+          waiting = undefined;
+          reject(err);
+        }
+      };
+
+      const chunks: AsyncIterable<string> = {
+        [Symbol.asyncIterator]() {
+          return {
+            next(): Promise<IteratorResult<string>> {
+              if (chunkBuffer.length > 0) {
+                return Promise.resolve({
+                  value: chunkBuffer.shift()!,
+                  done: false,
+                });
+              }
+              if (done) {
+                if (pendingError !== undefined) {
+                  return Promise.reject(pendingError);
+                }
+                return Promise.resolve({
+                  value: undefined as unknown as string,
+                  done: true,
+                });
+              }
+              return new Promise((resolve, reject) => {
+                waiting = resolve;
+                rejectWaiting = reject;
+              });
+            },
+          };
+        },
+      };
+
+      // The onChunk callback converts handler chunks to strings and
+      // pushes them into the async iterable consumed by the SSE stream.
+      const onChunk = async (chunk: unknown): Promise<void> => {
+        const text = typeof chunk === 'string' ? chunk : JSON.stringify(chunk);
+        pushChunk(text);
+      };
+
+      const streamContext: RunContext = { ...runContext, onChunk };
+
+      // Start the agent run. When it completes (or errors), signal the
+      // chunk iterable so the SSE stream can finalize.
+      router
+        .run(agentName_, runRequest, streamContext)
         .then((result) => {
           span.setAttribute('foundry.agent.state', result.state);
           span.end();
           sessions.release(sessionId);
 
-          if (result.result === null || result.result === undefined) return '';
-          if (typeof result.result === 'string') return result.result;
-          return JSON.stringify(result.result);
+          // If the handler did not stream (no onChunk support), emit
+          // the flat result as a single chunk.
+          if (!result.streamed) {
+            if (result.result !== null && result.result !== undefined) {
+              const text =
+                typeof result.result === 'string'
+                  ? result.result
+                  : JSON.stringify(result.result);
+              if (text !== '') pushChunk(text);
+            }
+          }
+
+          endChunks();
         })
         .catch((err) => {
           span.setStatus({
@@ -389,11 +481,11 @@ export function createFoundryHarness(
           });
           span.end();
           sessions.release(sessionId);
-          throw err;
+          failChunks(err);
         });
 
       return createFoundryStreamResponse(responseId, {
-        resultPromise,
+        chunks,
         idGenerator: idGen,
         onError: (_err) => {
           errorCount++;

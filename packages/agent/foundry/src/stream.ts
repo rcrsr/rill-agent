@@ -69,8 +69,10 @@ function sseHeaders(options?: StreamOptions): Record<string, string> {
 // ============================================================
 
 export interface StreamResponseOptions extends StreamOptions {
-  /** Promise that resolves with the agent result text. */
-  readonly resultPromise: Promise<string>;
+  /** Promise that resolves with the agent result text (flat mode). */
+  readonly resultPromise?: Promise<string> | undefined;
+  /** Async iterable of text chunks for real-time delta streaming. */
+  readonly chunks?: AsyncIterable<string> | undefined;
   /** Called when the agent promise rejects. */
   readonly onError?: ((err: unknown) => void) | undefined;
 }
@@ -103,77 +105,113 @@ export function createFoundryStreamResponse(
     return encoder.encode(sseChunk(event, JSON.stringify(payload)));
   }
 
+  function emitDeltas(
+    controller: ReadableStreamDefaultController<Uint8Array>,
+    fullText: string
+  ): void {
+    const tokens = fullText.split(' ');
+    for (let i = 0; i < tokens.length; i++) {
+      const piece = i === tokens.length - 1 ? tokens[i]! : tokens[i] + ' ';
+      controller.enqueue(
+        ev('response.output_text.delta', {
+          type: 'response.output_text.delta',
+          delta: piece,
+        })
+      );
+    }
+  }
+
+  function emitCompletion(
+    controller: ReadableStreamDefaultController<Uint8Array>,
+    fullText: string
+  ): void {
+    controller.enqueue(
+      ev('response.output_text.done', {
+        type: 'response.output_text.done',
+        text: fullText,
+      })
+    );
+    controller.enqueue(
+      ev('response.completed', {
+        type: 'response.completed',
+        response: {
+          object: 'response',
+          id: responseId,
+          status: 'completed',
+          created_at: Math.floor(Date.now() / 1000),
+          output: [],
+        },
+      })
+    );
+    closed = true;
+    controller.close();
+  }
+
+  function emitError(
+    controller: ReadableStreamDefaultController<Uint8Array>,
+    err: unknown
+  ): void {
+    clearKeepAlive();
+    options.onError?.(err);
+    const message = err instanceof Error ? err.message : String(err);
+    controller.enqueue(
+      encoder.encode(
+        sseChunk(
+          'error',
+          JSON.stringify({
+            type: 'error',
+            sequence_number: seq++,
+            code: 'SERVER_ERROR',
+            message,
+            param: '',
+          })
+        )
+      )
+    );
+    closed = true;
+    controller.close();
+  }
+
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
-      // Keep-alive: SSE comments every 15s matching Python SDK's KEEP_ALIVE_INTERVAL
       keepAliveTimer = setInterval(() => {
         if (!closed) {
           controller.enqueue(encoder.encode(': keep-alive\n\n'));
         }
       }, 15_000);
 
-      options.resultPromise
-        .then((resultText) => {
-          if (closed) return;
-          clearKeepAlive();
-
-          // Emit word-by-word deltas matching Python server.py pattern
-          const tokens = resultText.split(' ');
-          for (let i = 0; i < tokens.length; i++) {
-            const piece =
-              i === tokens.length - 1 ? tokens[i]! : tokens[i] + ' ';
+      if (options.chunks !== undefined) {
+        // Chunk streaming: emit each chunk as a delta event in real time.
+        (async () => {
+          let fullText = '';
+          for await (const chunk of options.chunks!) {
+            if (closed) break;
+            fullText += chunk;
             controller.enqueue(
               ev('response.output_text.delta', {
                 type: 'response.output_text.delta',
-                delta: piece,
+                delta: chunk,
               })
             );
           }
-
-          controller.enqueue(
-            ev('response.output_text.done', {
-              type: 'response.output_text.done',
-              text: resultText,
-            })
-          );
-
-          controller.enqueue(
-            ev('response.completed', {
-              type: 'response.completed',
-              response: {
-                object: 'response',
-                id: responseId,
-                status: 'completed',
-                created_at: Math.floor(Date.now() / 1000),
-                output: [],
-              },
-            })
-          );
-
-          closed = true;
-          controller.close();
-        })
-        .catch((err) => {
+          if (closed) return;
           clearKeepAlive();
-          options.onError?.(err);
-          const message = err instanceof Error ? err.message : String(err);
-          controller.enqueue(
-            encoder.encode(
-              sseChunk(
-                'error',
-                JSON.stringify({
-                  type: 'error',
-                  sequence_number: seq++,
-                  code: 'SERVER_ERROR',
-                  message,
-                  param: '',
-                })
-              )
-            )
-          );
-          closed = true;
-          controller.close();
-        });
+          emitCompletion(controller, fullText);
+        })().catch((err) => emitError(controller, err));
+      } else if (options.resultPromise !== undefined) {
+        // Flat mode: wait for full text, then emit word-by-word deltas.
+        options.resultPromise
+          .then((resultText) => {
+            if (closed) return;
+            clearKeepAlive();
+            emitDeltas(controller, resultText);
+            emitCompletion(controller, resultText);
+          })
+          .catch((err) => emitError(controller, err));
+      } else {
+        clearKeepAlive();
+        emitCompletion(controller, '');
+      }
     },
 
     cancel() {

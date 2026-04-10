@@ -23,14 +23,19 @@
     "check": "pnpm run build && pnpm run test && pnpm run lint"
   },
   "peerDependencies": {
+    "@opentelemetry/api": "^1.9.0",
     "@rcrsr/rill-agent": "workspace:^"
   },
   "dependencies": {
     "@azure/identity": "^4.10.0",
     "@hono/node-server": "^1.19.12",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.57.0",
+    "@opentelemetry/resources": "^1.30.0",
+    "@opentelemetry/sdk-node": "^0.57.0",
     "hono": "^4.12.10"
   },
   "devDependencies": {
+    "@opentelemetry/api": "^1.9.0",
     "@rcrsr/rill-agent": "workspace:^"
   },
   "files": [
