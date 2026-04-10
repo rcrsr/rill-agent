@@ -17,36 +17,26 @@ Agent framework for [rill](https://github.com/rcrsr/rill). Production HTTP serve
 
 ## Packages
 
-### Core
+All packages are published under `@rcrsr/` on npm and share a synchronized version.
 
-| Package | npm | Description |
-|---------|-----|-------------|
-| [`rill-agent-shared`](packages/agent/shared/docs/agent-shared.md) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent-shared)](https://www.npmjs.com/package/@rcrsr/rill-agent-shared) | Types, validation, card generation |
-| [`rill-agent-harness`](packages/agent/harness/docs/agent-harness.md) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent-harness)](https://www.npmjs.com/package/@rcrsr/rill-agent-harness) | HTTP server with lifecycle and metrics |
-
-### Build
-
-| Package | npm | Description |
-|---------|-----|-------------|
-| [`rill-agent-bundle`](packages/agent/bundle/docs/agent-bundle.md) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent-bundle)](https://www.npmjs.com/package/@rcrsr/rill-agent-bundle) | Manifest-to-bundle build tool |
-| [`rill-agent-build`](packages/agent/build/docs/agent-build.md) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent-build)](https://www.npmjs.com/package/@rcrsr/rill-agent-build) | Harness entry point generator |
-| [`rill-agent-run`](packages/agent/run/docs/agent-run.md) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent-run)](https://www.npmjs.com/package/@rcrsr/rill-agent-run) | CLI entry point for bundles |
-
-### Infrastructure
-
-| Package | npm | Description |
-|---------|-----|-------------|
-| [`rill-agent-proxy`](packages/agent/proxy/docs/agent-proxy.md) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent-proxy)](https://www.npmjs.com/package/@rcrsr/rill-agent-proxy) | Multi-agent routing proxy |
-| [`rill-agent-registry`](packages/agent/registry/) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent-registry)](https://www.npmjs.com/package/@rcrsr/rill-agent-registry) | Service registry client |
-| [`rill-agent-ext-ahi`](packages/agent/ahi/) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent-ext-ahi)](https://www.npmjs.com/package/@rcrsr/rill-agent-ext-ahi) | Agent-to-agent invocation |
+| Category | Package | npm | Docs | Description |
+|----------|---------|-----|------|-------------|
+| **Runtime** | [`rill-agent`](packages/agent/core) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent)](https://www.npmjs.com/package/@rcrsr/rill-agent) | [docs](packages/agent/core/docs/agent-core.md) | Manifest loader, router, HTTP harness |
+| | [`rill-agent-shared`](packages/agent/shared) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent-shared)](https://www.npmjs.com/package/@rcrsr/rill-agent-shared) | [docs](packages/agent/shared/docs/agent-shared.md) | Types, validation, card generation |
+| **Hosting** | [`rill-agent-foundry`](packages/agent/foundry) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent-foundry)](https://www.npmjs.com/package/@rcrsr/rill-agent-foundry) | [docs](packages/agent/foundry/docs/agent-foundry.md) | Azure Foundry Responses API harness |
+| **Infrastructure** | [`rill-agent-registry`](packages/agent/registry) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent-registry)](https://www.npmjs.com/package/@rcrsr/rill-agent-registry) | [docs](packages/agent/registry/docs/agent-registry.md) | Service registry client |
+| | [`rill-agent-ext-ahi`](packages/agent/ahi) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent-ext-ahi)](https://www.npmjs.com/package/@rcrsr/rill-agent-ext-ahi) | [docs](packages/agent/ahi/docs/agent-ahi.md) | Agent-to-agent invocation |
 
 ## Usage
 
-```bash
-npx @rcrsr/rill-agent-bundle init my-agent --extensions anthropic
-cd my-agent
-pnpm install
-pnpm run build
+```typescript
+import { loadManifest, createRouter } from '@rcrsr/rill-agent';
+import { httpHarness } from '@rcrsr/rill-agent/http';
+
+const manifest = await loadManifest('./build');
+const router = await createRouter(manifest);
+const harness = httpHarness(router);
+await harness.listen(3000);
 ```
 
 ## Versioning
@@ -60,15 +50,6 @@ pnpm install
 pnpm -r build
 pnpm -r test
 ```
-
-## Demo Apps
-
-The `demo/` directory contains example agents:
-
-- `content-pipeline` — Multi-agent classifier, summarizer, orchestrator
-- `data-cruncher` — Single-agent data processing
-- `feedback-analyzer` — Feedback classification and routing
-- `tool-calling` — Tool use patterns
 
 ## Related
 

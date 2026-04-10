@@ -266,6 +266,76 @@ describe('createRouter', () => {
     await router.dispose();
   });
 
+  it('forwards context.sessionVars to handler.execute (AC-15)', async () => {
+    const dir = await makeTmpDir();
+    // Handler captures the second argument to execute and returns sessionVars
+    await writeFile(
+      path.join(dir, 'handler.js'),
+      `
+let capturedContext = undefined;
+export function describe() { return { name: 'ctx-agent', params: [] }; }
+export async function init() {}
+export async function execute(request, context) {
+  capturedContext = context;
+  return { state: 'completed', result: context?.sessionVars?.KEY ?? 'none' };
+}
+export async function dispose() {}
+`,
+      'utf-8'
+    );
+
+    const manifest = await loadManifest(dir);
+    const router = await createRouter(manifest);
+
+    const response = await router.run(
+      'ctx-agent',
+      { params: {} },
+      { sessionVars: { KEY: 'val' } }
+    );
+
+    expect(response.state).toBe('completed');
+    expect(response.result).toBe('val');
+
+    await router.dispose();
+  });
+
+  it('run() without context still succeeds (AC-16)', async () => {
+    const dir = await makeTmpDir();
+    await writeFile(
+      path.join(dir, 'handler.js'),
+      handlerSource('no-ctx-agent', 'ok'),
+      'utf-8'
+    );
+
+    const manifest = await loadManifest(dir);
+    const router = await createRouter(manifest);
+
+    const response = await router.run('no-ctx-agent', { params: {} });
+
+    expect(response.state).toBe('completed');
+    expect(response.result).toBe('ok');
+
+    await router.dispose();
+  });
+
+  it('throws correct message for unknown agent (EC-1)', async () => {
+    const dir = await makeTmpDir();
+    await writeFile(
+      path.join(dir, 'handler.js'),
+      handlerSource('only-agent'),
+      'utf-8'
+    );
+
+    const manifest = await loadManifest(dir);
+    const router = await createRouter(manifest);
+
+    await expect(router.run('missing', { params: {} })).rejects.toThrow(
+      'Agent "missing" not found. Available: only-agent'
+    );
+
+    await router.dispose();
+  });
+
   it('passes globalVars to init context', async () => {
     const dir = await makeTmpDir();
     // Handler that captures init context and returns it via execute

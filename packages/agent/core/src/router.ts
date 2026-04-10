@@ -2,6 +2,7 @@ import type {
   AgentManifest,
   AgentRouter,
   HandlerDescription,
+  RunContext,
   RunRequest,
   RunResponse,
 } from './types.js';
@@ -26,6 +27,8 @@ export async function createRouter(
   }
 
   // Step 2: Create AHI resolver (references the router's own run function)
+  // Note: AHI calls are agent-to-agent and do not carry the caller's session
+  // variables, so context is intentionally not forwarded here.
   const ahiResolver = async (
     agentName: string,
     request: RunRequest
@@ -46,7 +49,8 @@ export async function createRouter(
   // Step 4: Build router
   async function run(
     agentName: string,
-    request: RunRequest
+    request: RunRequest,
+    context?: RunContext
   ): Promise<RunResponse> {
     const resolvedName = agentName === '' ? manifest.defaultAgent : agentName;
     const handler = manifest.agents.get(resolvedName);
@@ -60,7 +64,7 @@ export async function createRouter(
       ...request,
       params: request.params ?? {},
     };
-    return handler.execute(normalized);
+    return handler.execute(normalized, context);
   }
 
   function describe(agentName: string): HandlerDescription | null {

@@ -23,6 +23,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `@rcrsr/rill-agent` core package with router, manifest loading, HTTP harness, and type definitions
 - `pnpm.onlyBuiltDependencies` for esbuild in root package.json
+- `@rcrsr/rill-agent-foundry` package for Azure AI Foundry Responses API protocol support with session management and SSE streaming
+- `context` parameter to `AgentRouter.run()` for session variable forwarding across requests
+- `onChunk` callback in `RunContext` for incremental stream chunk delivery from handler to harness
+- `streamed` flag in `RunResponse` to signal handler used chunk streaming instead of flat result
+
+### Fixed
+
+- Foundry harness streams rill stream closures incrementally instead of collecting chunks into an array before emitting SSE deltas
 
 ### Removed
 
