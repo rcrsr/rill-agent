@@ -42,34 +42,6 @@ importers:
         specifier: ^4.1.2
         version: 4.1.2(@opentelemetry/api@1.9.1)(@types/node@25.5.2)(vite@7.3.1(@types/node@25.5.2)(tsx@4.21.0))
 
-  demo/agentic-news-digest:
-    dependencies:
-      '@rcrsr/rill':
-        specifier: ~0.18.5
-        version: 0.18.5
-      '@rcrsr/rill-ext-openai':
-        specifier: ~0.18.4
-        version: 0.18.4(@rcrsr/rill@0.18.5)(zod@4.3.6)
-      fast-xml-parser:
-        specifier: ^4.5.0
-        version: 4.5.6
-    devDependencies:
-      '@rcrsr/rill-agent':
-        specifier: workspace:^
-        version: link:../../packages/agent/core
-      '@rcrsr/rill-agent-foundry':
-        specifier: workspace:^
-        version: link:../../packages/agent/foundry
-      '@rcrsr/rill-cli':
-        specifier: ~0.18.12
-        version: 0.18.12(@rcrsr/rill-config@0.18.5(@rcrsr/rill@0.18.5))(@rcrsr/rill@0.18.5)
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.17
-      typescript:
-        specifier: ^6.0.2
-        version: 6.0.2
-
   packages/agent/ahi:
     dependencies:
       '@rcrsr/rill-agent-registry':
@@ -764,31 +736,8 @@ packages:
   '@protobufjs/utf8@1.1.0':
     resolution: {integrity: sha512-Vvn3zZrhQZkkBE8LSuW3em98c0FwgO4nxzv6OdSxPKJIEKY2bGbHn+mhGIPerzI4twdxaP8/0+06HBpwf345Lw==}
 
-  '@rcrsr/rill-cli@0.18.12':
-    resolution: {integrity: sha512-QynPlvEh/EDtTRvc3NspUQTvhPXxHNqA52aKJIYU1ZzCspNlu+F8+fwnvpsZFXOxCa1ZEEa5ghcCJJqtKDpTmg==}
-    engines: {node: '>=20.0.0'}
-    hasBin: true
-    peerDependencies:
-      '@rcrsr/rill': ~0.18.5
-      '@rcrsr/rill-config': ~0.18.5
-
-  '@rcrsr/rill-config@0.18.5':
-    resolution: {integrity: sha512-rHXT9/mi9h4ykcwdxhKn+8RgN4vx0EDGmVk9SMECaFFllnGl6ZrSGfYS0R6jb6bdJzOLDuJo1fRSNNyjZma7qw==}
-    engines: {node: '>=20.0.0'}
-    peerDependencies:
-      '@rcrsr/rill': ~0.18.0
-
-  '@rcrsr/rill-ext-openai@0.18.4':
-    resolution: {integrity: sha512-G5LfuGVaEFpgHkrSRw2m7OjEFafvj297ux3nbXHrQ5vmpfoqOGjKxQOjny49ZoVD+ewIf70ZoVaEHp6GWXpczQ==}
-    peerDependencies:
-      '@rcrsr/rill': ~0.18.4
-
   '@rcrsr/rill@0.18.4':
     resolution: {integrity: sha512-Ns8o9VWGVZUvLwplvxtuWxIYZ7vkoei5kqvBFt8jfhXOwTCQOWIjCEAd4uA0jqQVZCH+k+KP6tNfRYTyFLqSLw==}
-    engines: {node: '>=20.0.0'}
-
-  '@rcrsr/rill@0.18.5':
-    resolution: {integrity: sha512-SzvIeycMg2Q8Uaso/fuLd7b19+vqvmVVrZdIjjDHuGrZCo4FitscjgFthS5KXri5R/qofPcAStFi/LduwwZgyw==}
     engines: {node: '>=20.0.0'}
 
   '@rollup/rollup-android-arm-eabi@4.60.1':
@@ -946,9 +895,6 @@ packages:
 
   '@types/json-schema@7.0.15':
     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
-
-  '@types/node@22.19.17':
-    resolution: {integrity: sha512-wGdMcf+vPYM6jikpS/qhg6WiqSV/OhG+jeeHT/KlVqxYfD40iYJf9/AE1uQxVWFvU7MipKRkRv8NSHiCGgPr8Q==}
 
   '@types/node@25.5.2':
     resolution: {integrity: sha512-tO4ZIRKNC+MDWV4qKVZe3Ql/woTnmHDr5JD8UI5hn2pwBrHEwOEMZK7WlNb5RKB6EoJ02gwmQS9OrjuFnZYdpg==}
@@ -1146,10 +1092,6 @@ packages:
     resolution: {integrity: sha512-N+MeXYoqr3pOgn8xfyRPREN7gHakLYjhsHhWGT3fWAiL4IkAt0iDw14QiiEm2bE30c5XX5q0FtAA3CK5f9/BUg==}
     engines: {node: '>=12'}
 
-  dotenv@17.4.1:
-    resolution: {integrity: sha512-k8DaKGP6r1G30Lx8V4+pCsLzKr8vLmV2paqEj1Y55GdAgJuIqpRp5FfajGF8KtwMxCz9qJc6wUIJnm053d/WCw==}
-    engines: {node: '>=12'}
-
   ecdsa-sig-formatter@1.0.11:
     resolution: {integrity: sha512-nagl3RYrbNv6kQkeJIpt6NJZy8twLB/2vtz6yN9Z4vRKHN4/QZJIEbqohALSgwKdnksuY3k5Addp5lg8sVoVcQ==}
 
@@ -1234,10 +1176,6 @@ packages:
 
   fast-levenshtein@2.0.6:
     resolution: {integrity: sha512-DCXu6Ifhqcks7TZKY3Hxp3y6qphY5SJZmrWMDrKcERSOXWQdMhU9Ig/PYrzyw/ul9jOIyh0N4M0tbC5hodg8dw==}
-
-  fast-xml-parser@4.5.6:
-    resolution: {integrity: sha512-Yd4vkROfJf8AuJrDIVMVmYfULKmIJszVsMv7Vo71aocsKgFxpdlpSHXSaInvyYfgw2PRuObQSW2GFpVMUjxu9A==}
-    hasBin: true
 
   fdir@6.5.0:
     resolution: {integrity: sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg==}
@@ -1435,18 +1373,6 @@ packages:
     resolution: {integrity: sha512-YgBpdJHPyQ2UE5x+hlSXcnejzAvD0b22U2OuAP+8OnlJT+PjWPxtgmGqKKc+RgTM63U9gN0YzrYc71R2WT/hTA==}
     engines: {node: '>=18'}
 
-  openai@6.33.0:
-    resolution: {integrity: sha512-xAYN1W3YsDXJWA5F277135YfkEk6H7D3D6vWwRhJ3OEkzRgcyK8z/P5P9Gyi/wB4N8kK9kM5ZjprfvyHagKmpw==}
-    hasBin: true
-    peerDependencies:
-      ws: ^8.18.0
-      zod: ^3.25 || ^4.0
-    peerDependenciesMeta:
-      ws:
-        optional: true
-      zod:
-        optional: true
-
   optionator@0.9.4:
     resolution: {integrity: sha512-6IpQ7mKUxRcZNLIObR0hz7lxsapSSIYNZJwXPGeF0mTVqGKFIXj1DQcMoT22S3ROcLyY/rz0PWaWZ9ayWmad9g==}
     engines: {node: '>= 0.8.0'}
@@ -1566,9 +1492,6 @@ packages:
     resolution: {integrity: sha512-Y38VPSHcqkFrCpFnQ9vuSXmquuv5oXOKpGeT6aGrr3o3Gc9AlVa6JBfUSOCnbxGGZF+/0ooI7KrPuUSztUdU5A==}
     engines: {node: '>=8'}
 
-  strnum@1.1.2:
-    resolution: {integrity: sha512-vrN+B7DBIoTTZjnPNewwhx6cBA/H+IS7rfW68n7XxC1y7uoiGQBxaKzqucGUgavX15dJgiGztLJ8vxuEzwqBdA==}
-
   supports-preserve-symlinks-flag@1.0.0:
     resolution: {integrity: sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w==}
     engines: {node: '>= 0.4'}
@@ -1616,9 +1539,6 @@ packages:
     resolution: {integrity: sha512-bGdAIrZ0wiGDo5l8c++HWtbaNCWTS4UTv7RaTH/ThVIgjkveJt83m74bBHMJkuCbslY8ixgLBVZJIOiQlQTjfQ==}
     engines: {node: '>=14.17'}
     hasBin: true
-
-  undici-types@6.21.0:
-    resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
   undici-types@7.18.2:
     resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==}
@@ -2306,29 +2226,7 @@ snapshots:
 
   '@protobufjs/utf8@1.1.0': {}
 
-  '@rcrsr/rill-cli@0.18.12(@rcrsr/rill-config@0.18.5(@rcrsr/rill@0.18.5))(@rcrsr/rill@0.18.5)':
-    dependencies:
-      '@rcrsr/rill': 0.18.5
-      '@rcrsr/rill-config': 0.18.5(@rcrsr/rill@0.18.5)
-      dotenv: 17.4.1
-      esbuild: 0.28.0
-
-  '@rcrsr/rill-config@0.18.5(@rcrsr/rill@0.18.5)':
-    dependencies:
-      '@rcrsr/rill': 0.18.5
-      semver: 7.7.4
-
-  '@rcrsr/rill-ext-openai@0.18.4(@rcrsr/rill@0.18.5)(zod@4.3.6)':
-    dependencies:
-      '@rcrsr/rill': 0.18.5
-      openai: 6.33.0(zod@4.3.6)
-    transitivePeerDependencies:
-      - ws
-      - zod
-
   '@rcrsr/rill@0.18.4': {}
-
-  '@rcrsr/rill@0.18.5': {}
 
   '@rollup/rollup-android-arm-eabi@4.60.1':
     optional: true
@@ -2419,10 +2317,6 @@ snapshots:
   '@types/estree@1.0.8': {}
 
   '@types/json-schema@7.0.15': {}
-
-  '@types/node@22.19.17':
-    dependencies:
-      undici-types: 6.21.0
 
   '@types/node@25.5.2':
     dependencies:
@@ -2648,8 +2542,6 @@ snapshots:
 
   define-lazy-prop@3.0.0: {}
 
-  dotenv@17.4.1: {}
-
   ecdsa-sig-formatter@1.0.11:
     dependencies:
       safe-buffer: 5.2.1
@@ -2795,10 +2687,6 @@ snapshots:
   fast-json-stable-stringify@2.1.0: {}
 
   fast-levenshtein@2.0.6: {}
-
-  fast-xml-parser@4.5.6:
-    dependencies:
-      strnum: 1.1.2
 
   fdir@6.5.0(picomatch@4.0.4):
     optionalDependencies:
@@ -2980,10 +2868,6 @@ snapshots:
       is-inside-container: 1.0.0
       wsl-utils: 0.1.0
 
-  openai@6.33.0(zod@4.3.6):
-    optionalDependencies:
-      zod: 4.3.6
-
   optionator@0.9.4:
     dependencies:
       deep-is: 0.1.4
@@ -3121,8 +3005,6 @@ snapshots:
     dependencies:
       ansi-regex: 5.0.1
 
-  strnum@1.1.2: {}
-
   supports-preserve-symlinks-flag@1.0.0: {}
 
   tinybench@2.9.0: {}
@@ -3158,8 +3040,6 @@ snapshots:
       prelude-ls: 1.2.1
 
   typescript@6.0.2: {}
-
-  undici-types@6.21.0: {}
 
   undici-types@7.18.2: {}
 
