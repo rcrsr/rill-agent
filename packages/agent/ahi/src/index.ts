@@ -23,18 +23,6 @@ export type ExtensionResult = Record<string, ApplicationCallable> & {
   restore?: (state: unknown) => void;
 };
 
-/** Rill input parameter descriptor used by validateAgentParams. */
-interface InputParamDescriptor {
-  type: 'string' | 'number' | 'bool' | 'list' | 'dict';
-  required?: boolean | undefined;
-  description?: string | undefined;
-  enum?: unknown[] | undefined;
-  default?: unknown;
-}
-
-/** Input schema: map of parameter name to descriptor. */
-type InputSchema = Record<string, InputParamDescriptor>;
-
 /** Minimal run request for in-process agent invocation. */
 interface InProcessRunRequest {
   readonly params?: Record<string, unknown> | undefined;
@@ -239,75 +227,6 @@ async function invokeAgent(
     }
   }
 }
-
-// ============================================================
-// INPUT VALIDATION
-// ============================================================
-
-/**
- * Validate a params dict against an InputSchema.
- * Returns a string describing the first failure, or null when valid.
- */
-function validateAgentParams(
-  params: Record<string, RillValue>,
-  inputSchema: InputSchema
-): string | null {
-  for (const [param, descriptor] of Object.entries(inputSchema)) {
-    const provided = Object.prototype.hasOwnProperty.call(params, param);
-    const value = params[param];
-
-    if (descriptor.required === true) {
-      if (!provided || value === null) {
-        return `param "${param}" is required`;
-      }
-    }
-
-    if (provided && value !== null && value !== undefined) {
-      const ok = checkRillType(value, descriptor.type);
-      if (!ok) {
-        const got = rillValueLabel(value);
-        const expected =
-          descriptor.type === 'bool' ? 'boolean' : descriptor.type;
-        return `param "${param}": expected ${expected}, got ${got}`;
-      }
-    }
-  }
-  return null;
-}
-
-/** Returns true when value matches the declared Rill type. */
-function checkRillType(
-  value: RillValue,
-  rillType: 'string' | 'number' | 'bool' | 'list' | 'dict'
-): boolean {
-  switch (rillType) {
-    case 'string':
-      return typeof value === 'string';
-    case 'number':
-      return typeof value === 'number';
-    case 'bool':
-      return typeof value === 'boolean';
-    case 'list':
-      return Array.isArray(value);
-    case 'dict':
-      return (
-        typeof value === 'object' && value !== null && !Array.isArray(value)
-      );
-  }
-}
-
-/** Maps a RillValue to a human-readable type label for error messages. */
-function rillValueLabel(value: RillValue): string {
-  if (typeof value === 'string') return 'string';
-  if (typeof value === 'number') return 'number';
-  if (typeof value === 'boolean') return 'boolean';
-  if (Array.isArray(value)) return 'list';
-  if (typeof value === 'object' && value !== null) return 'dict';
-  return typeof value;
-}
-
-// Silence "unused" lint for internal helpers kept available to future callers.
-void validateAgentParams;
 
 // ============================================================
 // FACTORY
