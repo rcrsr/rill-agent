@@ -1,9 +1,11 @@
 # rill-agent
 
-[![CI](https://github.com/rcrsr/rill-agent/actions/workflows/pr-check.yml/badge.svg?branch=main)](https://github.com/rcrsr/rill-agent/actions/workflows/pr-check.yml?query=branch%3Amain)
+[![CI](https://github.com/rcrsr/rill-agent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/rcrsr/rill-agent/actions/workflows/ci.yml?query=branch%3Amain)
 [![License](https://img.shields.io/github/license/rcrsr/rill-agent)](https://github.com/rcrsr/rill-agent/blob/main/LICENSE)
 
-Agent framework for [rill](https://github.com/rcrsr/rill). Production HTTP server, build tools, bundle system, and multi-agent proxy.
+Host framework that turns compiled [rill](https://github.com/rcrsr/rill) scripts into callable agents. A rill script becomes an `AgentHandler` exposing `describe`, `init`, `execute`, and `dispose`. The runtime loads one or more handlers from a manifest, builds a router that wires up agent-to-agent invocation, and serves the router over HTTP or the Azure AI Foundry Responses API.
+
+Use this repo when you have a rill script and want to run it as a long-lived service with parameter validation, session state, streaming responses, and observability. Single-agent and multi-agent deployments use the same router. Co-located agents call each other in-process; remote agents resolve via static URLs or the registry client.
 
 ## Documentation
 
