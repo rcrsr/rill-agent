@@ -1,0 +1,57 @@
+# rill Agent Framework Index
+
+> Discovery index for the rill agent framework packages in this repository. Each entry lists the npm package, a summary, and a relative path to full documentation. The framework hosts compiled rill agents behind HTTP harnesses and supports agent-to-agent invocation.
+
+## How the pipeline fits together
+
+```
+manifest -> router -> harness -> serve
+```
+
+1. `loadManifest(dir)` auto-detects single-agent, nested single-agent, or multi-agent layouts and imports each `handler.js`.
+2. `createRouter(manifest, options?)` calls `describe()` on every handler, builds an AHI resolver, and runs `init()` concurrently.
+3. A harness wraps the router in a Hono server. Choose `httpHarness` for plain HTTP or `createFoundryHarness` for the Azure AI Foundry Responses API.
+
+## Core (1 package, 2 entry points)
+
+Manifest loader, `AgentRouter`, and Hono HTTP harness. Self-contained with only `hono` and `@hono/node-server` as runtime dependencies.
+
+| Package | Entry | Docs |
+|---------|-------|------|
+| `@rcrsr/rill-agent` | main (`loadManifest`, `createRouter`, types) | [agent-core.md](packages/agent/core/docs/agent-core.md) |
+| `@rcrsr/rill-agent/http` | HTTP harness (`httpHarness`) | [agent-core.md](packages/agent/core/docs/agent-core.md) |
+
+Exports: `loadManifest`, `createRouter`, `httpHarness`, `AgentHandler`, `AgentManifest`, `AgentRouter`, `HandlerDescription`, `InitContext`, `RunRequest`
+
+HTTP routes: `GET /agents`, `POST /agents/:name/run`, `POST /run`
+
+## Foundry (1 package, 10+ exports)
+
+Azure-hosted harness factory implementing the Foundry Responses API. Wraps an `AgentRouter` in a Hono server with synchronous and streaming responses, Azure AI Conversations session persistence, OpenTelemetry tracing, and Entra ID authentication.
+
+| Package | Docs |
+|---------|------|
+| `@rcrsr/rill-agent-foundry` | [agent-foundry.md](packages/agent/foundry/docs/agent-foundry.md) |
+
+Exports: `createFoundryHarness`, `FoundryHarness`, `FoundryHarnessOptions`, `FoundryMetrics`, `createSessionManager`, `createConversationsClient`, `createIdGenerator`, `extractInput`, `buildSyncResponse`, `buildErrorResponse`, `generateToolDefinitions`, `streamFoundryResponse`
+
+Deployment guide: [deploy-foundry-agent.md](packages/agent/foundry/docs/deploy-foundry-agent.md)
+
+## AHI — Agent Host Interface (1 package)
+
+rill extension that lets an agent call other agents by name. Registers `ahi::<agentName>` functions in the runtime context. Co-located agents skip HTTP via in-process invocation; remote agents resolve through static URLs.
+
+| Package | Docs |
+|---------|------|
+| `@rcrsr/rill-agent-ext-ahi` | [agent-ahi.md](packages/agent/ahi/docs/agent-ahi.md) |
+
+Exports: `createAhiExtension`
+
+## Dependency graph
+
+```
+core ← foundry (peer)
+ahi
+```
+
+`core` is self-contained. `foundry` consumes `@rcrsr/rill-agent` as a peer dependency. `ahi` uses `@rcrsr/rill` as a peer dependency and has no other workspace dependencies.
