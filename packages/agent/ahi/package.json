@@ -1,6 +1,6 @@
 {
   "name": "@rcrsr/rill-agent-ext-ahi",
-  "version": "0.18.4",
+  "version": "0.18.5",
   "description": "rill extension for Agent Host Interface (AHI) integration",
   "license": "MIT",
   "author": "Andre Bremer",

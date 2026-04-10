@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.5] - 2026-04-09
+
 ### Removed
 
 - `@rcrsr/rill-agent-shared` package (types and validation utilities no longer needed by `core` or `foundry`; types required by `ahi` are inlined into the package)

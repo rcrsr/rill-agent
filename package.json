@@ -1,6 +1,6 @@
 {
   "name": "rill-agent",
-  "version": "0.18.4",
+  "version": "0.18.5",
   "description": "rill agent framework — harness, bundle, proxy, and tooling",
   "private": true,
   "packageManager": "pnpm@10.29.2",
@@ -28,7 +28,9 @@
     "node": ">=22.0.0"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
