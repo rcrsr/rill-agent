@@ -1,6 +1,6 @@
 # rill Agent Framework Index
 
-> Discovery index for the rill agent framework packages in this repository. Each entry lists the npm package, a summary, and a relative path to full documentation. The framework hosts compiled rill agents behind HTTP harnesses and supports agent-to-agent invocation.
+> Discovery index for the rill agent framework packages in this repository. Each entry lists an import path (npm package or subpath export), a summary, and a relative path to full documentation. The framework hosts compiled rill agents behind HTTP harnesses and supports agent-to-agent invocation.
 
 ## How the pipeline fits together
 
@@ -16,12 +16,12 @@ manifest -> router -> harness -> serve
 
 Manifest loader, `AgentRouter`, and Hono HTTP harness. Self-contained with only `hono` and `@hono/node-server` as runtime dependencies.
 
-| Package | Entry | Docs |
-|---------|-------|------|
-| `@rcrsr/rill-agent` | main (`loadManifest`, `createRouter`, types) | [agent-core.md](packages/agent/core/docs/agent-core.md) |
-| `@rcrsr/rill-agent/http` | HTTP harness (`httpHarness`) | [agent-core.md](packages/agent/core/docs/agent-core.md) |
+| Import path | Kind | Docs |
+|-------------|------|------|
+| `@rcrsr/rill-agent` | Package main (`loadManifest`, `createRouter`, types) | [agent-core.md](packages/agent/core/docs/agent-core.md) |
+| `@rcrsr/rill-agent/http` | Subpath export of `@rcrsr/rill-agent` (`httpHarness`) | [agent-core.md](packages/agent/core/docs/agent-core.md) |
 
-Exports: `loadManifest`, `createRouter`, `httpHarness`, `AgentHandler`, `AgentManifest`, `AgentRouter`, `HandlerDescription`, `InitContext`, `RunRequest`
+Exports: `loadManifest`, `createRouter`, `httpHarness`, `AgentHandler`, `AgentManifest`, `AgentRouter`, `HandlerDescription`, `InitContext`, `RunContext`, `RunRequest`, `RunResponse`
 
 HTTP routes: `GET /agents`, `POST /agents/:name/run`, `POST /run`
 
@@ -37,7 +37,7 @@ Exports: `createFoundryHarness`, `FoundryHarness`, `FoundryHarnessOptions`, `Fou
 
 Deployment guide: [deploy-foundry-agent.md](packages/agent/foundry/docs/deploy-foundry-agent.md)
 
-## AHI — Agent Host Interface (1 package)
+## AHI, Agent Host Interface (1 package)
 
 rill extension that lets an agent call other agents by name. Registers `ahi::<agentName>` functions in the runtime context. Co-located agents skip HTTP via in-process invocation; remote agents resolve through static URLs.
 
