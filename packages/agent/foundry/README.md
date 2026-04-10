@@ -1,14 +1,14 @@
 # @rcrsr/rill-agent-foundry
 
-Azure-hosted harness factory for the [rill](https://github.com/rcrsr/rill) agent framework. Wraps an `AgentRouter` in a Hono server that implements the Foundry Responses API protocol with SSE streaming, session persistence, OpenTelemetry tracing, and Entra ID auth.
+Azure-hosted harness factory for the [rill](https://github.com/rcrsr/rill) agent framework. Wraps an `AgentRouter` in a Hono server that implements the Foundry Responses API protocol with SSE streaming, session persistence, and OpenTelemetry tracing. Outbound calls to Azure AI Foundry Conversations authenticate via `DefaultAzureCredential` (Entra ID).
 
 ## Install
 
 ```bash
-npm install @rcrsr/rill-agent-foundry @rcrsr/rill-agent
-# Optional: OpenTelemetry trace export
-npm install @opentelemetry/api
+npm install @rcrsr/rill-agent-foundry @rcrsr/rill-agent @opentelemetry/api
 ```
+
+`@opentelemetry/api` is a required peer dependency.
 
 ## Quick Start
 
