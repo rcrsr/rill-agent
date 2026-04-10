@@ -60,7 +60,7 @@ harness ← proxy
 bundle ← proxy
 ```
 
-All packages consume `@rcrsr/rill` from npm as a direct dependency (not peer), except `ahi` and `foundry` which use it as a peer dependency.
+All packages consume `@rcrsr/rill` from npm as a direct dependency (not peer), except `ahi` which uses it as a peer dependency. The `foundry` package depends on `@rcrsr/rill-agent` (workspace) and does not import `@rcrsr/rill` directly.
 
 ### Composition Pipeline
 

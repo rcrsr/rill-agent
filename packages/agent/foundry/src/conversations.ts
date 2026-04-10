@@ -76,8 +76,12 @@ export function createConversationsClient(
         throw new CredentialError(message);
       }
 
+      // Encode conversationId as a path segment: it originates from the
+      // request body and must be treated as untrusted to prevent path
+      // injection when IDs contain '/', '..', or other reserved chars.
+      const encodedConversationId = encodeURIComponent(conversationId);
       const url = new URL(
-        `${projectEndpoint}/openai/conversations/${conversationId}/items`
+        `${projectEndpoint}/openai/conversations/${encodedConversationId}/items`
       );
       url.searchParams.set('api-version', API_VERSION);
 

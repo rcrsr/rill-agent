@@ -14,7 +14,16 @@ interface StreamOptions {
   readonly invocationId?: string | undefined;
   /** Pre-built x-aml-foundry-agents-metadata JSON string. */
   readonly metadataHeader?: string | undefined;
+  /**
+   * When true, raw error messages are forwarded to clients. When false
+   * (default), error events emit a generic message to avoid leaking
+   * internal details. Mirrors the harness `debugErrors` option used by
+   * `buildErrorResponse`.
+   */
+  readonly debugErrors?: boolean | undefined;
 }
+
+const REDACTED_ERROR_MESSAGE = 'Internal server error';
 
 // ============================================================
 // HELPERS
@@ -153,7 +162,9 @@ export function createFoundryStreamResponse(
   ): void {
     clearKeepAlive();
     options.onError?.(err);
-    const message = err instanceof Error ? err.message : String(err);
+    const rawMessage = err instanceof Error ? err.message : String(err);
+    const message =
+      options.debugErrors === true ? rawMessage : REDACTED_ERROR_MESSAGE;
     controller.enqueue(
       encoder.encode(
         sseChunk(

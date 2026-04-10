@@ -493,6 +493,7 @@ export function createFoundryHarness(
         sessionId: agentSessionId,
         invocationId,
         metadataHeader,
+        debugErrors,
       });
     }
 

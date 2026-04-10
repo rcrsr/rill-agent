@@ -136,11 +136,12 @@ describe('createFoundryStreamResponse', () => {
     expect(data.response['temperature']).toBeUndefined();
   });
 
-  it('emits error event when resultPromise rejects', async () => {
+  it('emits error event with raw message when debugErrors=true and resultPromise rejects', async () => {
     const errors: unknown[] = [];
     const res = createFoundryStreamResponse('resp_err', {
       resultPromise: Promise.reject(new Error('agent failure')),
       onError: (err) => errors.push(err),
+      debugErrors: true,
     });
 
     const text = await res.text();
@@ -161,7 +162,28 @@ describe('createFoundryStreamResponse', () => {
     expect(errors).toHaveLength(1);
   });
 
-  it('emits error event when chunks iterable throws', async () => {
+  it('redacts error message when debugErrors is not set and resultPromise rejects', async () => {
+    const errors: unknown[] = [];
+    const res = createFoundryStreamResponse('resp_err_redacted', {
+      resultPromise: Promise.reject(
+        new Error('agent failure with secret token=abc123')
+      ),
+      onError: (err) => errors.push(err),
+    });
+
+    const text = await res.text();
+    const events = parseSseText(text);
+    const errorEvent = events.find((e) => e.event === 'error');
+    expect(errorEvent).toBeDefined();
+    const errorData = JSON.parse(errorEvent?.data ?? '{}') as {
+      message: string;
+    };
+    expect(errorData.message).toBe('Internal server error');
+    expect(errorData.message).not.toContain('secret');
+    expect(errors).toHaveLength(1);
+  });
+
+  it('emits error event with raw message when debugErrors=true and chunks iterable throws', async () => {
     async function* failingChunks(): AsyncIterable<string> {
       yield 'partial';
       throw new Error('chunk failure');
@@ -171,6 +193,7 @@ describe('createFoundryStreamResponse', () => {
     const res = createFoundryStreamResponse('resp_cerr', {
       chunks: failingChunks(),
       onError: (err) => errors.push(err),
+      debugErrors: true,
     });
 
     const text = await res.text();

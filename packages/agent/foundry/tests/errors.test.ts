@@ -267,7 +267,10 @@ describe('createFoundryHarness — handler execution failure', () => {
       },
     };
 
-    const harness = createFoundryHarness(throwingRouter, { port: 18091 });
+    const harness = createFoundryHarness(throwingRouter, {
+      port: 18091,
+      debugErrors: true,
+    });
 
     const response = await harness.app.fetch(
       new Request('http://localhost/responses', {
@@ -282,6 +285,35 @@ describe('createFoundryHarness — handler execution failure', () => {
     expect(text).toContain('event: error');
     expect(text).toContain('"code":"SERVER_ERROR"');
     expect(text).toContain('streaming handler failure');
+  });
+
+  it('redacts SSE error message when debugErrors is false and router.run() throws with stream: true', async () => {
+    const throwingRouter: AgentRouter = {
+      ...mockRouter,
+      run: async () => {
+        throw new Error('sensitive internal stream detail');
+      },
+    };
+
+    const harness = createFoundryHarness(throwingRouter, {
+      port: 18092,
+      debugErrors: false,
+    });
+
+    const response = await harness.app.fetch(
+      new Request('http://localhost/responses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: 'hello', stream: true }),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    const text = await response.text();
+    expect(text).toContain('event: error');
+    expect(text).toContain('"code":"SERVER_ERROR"');
+    expect(text).not.toContain('sensitive internal stream detail');
+    expect(text).toContain('Internal server error');
   });
 });
 
