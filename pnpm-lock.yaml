@@ -82,8 +82,8 @@ importers:
         specifier: ^1.9.0
         version: 1.9.1
       '@rcrsr/rill-agent':
-        specifier: workspace:^
-        version: link:../core
+        specifier: ~0.18.4
+        version: 0.18.4
 
 packages:
 
@@ -554,6 +554,9 @@ packages:
 
   '@protobufjs/utf8@1.1.0':
     resolution: {integrity: sha512-Vvn3zZrhQZkkBE8LSuW3em98c0FwgO4nxzv6OdSxPKJIEKY2bGbHn+mhGIPerzI4twdxaP8/0+06HBpwf345Lw==}
+
+  '@rcrsr/rill-agent@0.18.4':
+    resolution: {integrity: sha512-W8zsBy771YxF2UaRNkjmlsmBFZPjWcdclUSobWbO+hxLzdrNBC/TuDHIReTOrbOxNQiKINfiGOi0k6y7/q2keg==}
 
   '@rcrsr/rill@0.18.4':
     resolution: {integrity: sha512-Ns8o9VWGVZUvLwplvxtuWxIYZ7vkoei5kqvBFt8jfhXOwTCQOWIjCEAd4uA0jqQVZCH+k+KP6tNfRYTyFLqSLw==}
@@ -1958,6 +1961,11 @@ snapshots:
   '@protobufjs/pool@1.1.0': {}
 
   '@protobufjs/utf8@1.1.0': {}
+
+  '@rcrsr/rill-agent@0.18.4':
+    dependencies:
+      '@hono/node-server': 1.19.12(hono@4.12.10)
+      hono: 4.12.10
 
   '@rcrsr/rill@0.18.4': {}
 
