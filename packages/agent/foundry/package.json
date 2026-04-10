@@ -1,6 +1,6 @@
 {
   "name": "@rcrsr/rill-agent-foundry",
-  "version": "0.18.4",
+  "version": "0.18.5",
   "description": "rill agent foundry — Azure-hosted harness factory",
   "license": "MIT",
   "author": "Andre Bremer",
@@ -24,7 +24,7 @@
   },
   "peerDependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "@rcrsr/rill-agent": "~0.18.4"
+    "@rcrsr/rill-agent": "workspace:~"
   },
   "dependencies": {
     "@azure/identity": "^4.10.0",
@@ -36,7 +36,7 @@
   },
   "devDependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "@rcrsr/rill-agent": "~0.18.4"
+    "@rcrsr/rill-agent": "workspace:~"
   },
   "files": [
     "dist"
