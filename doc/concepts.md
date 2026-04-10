@@ -158,12 +158,6 @@ ahi::summarizer([text: $content]) => $summary
 {"ahi": {"agents": {"summarizer": {"url": "http://localhost:3001"}}}}
 ```
 
-**Registry mode** resolves endpoints from a service registry at runtime:
-
-```json
-{"ahi": {"agents": ["summarizer", "classifier"], "registry": "http://localhost:4000"}}
-```
-
 ### In-Process Optimization
 
 When agents share a harness process, `bindHost()` replaces HTTP calls with direct in-process invocation. Scripts use the same `ahi::` syntax. No code changes required.

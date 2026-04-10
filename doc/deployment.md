@@ -184,19 +184,6 @@ Trade-offs:
 }
 ```
 
-## Service Registry
-
-For dynamic agent discovery across deployments:
-
-1. Set `RILL_REGISTRY_URL` in the agent's environment
-2. The host self-registers after binding its port
-3. Other agents resolve endpoints via the registry client
-4. The AHI extension in registry mode calls `client.resolve()` before each invocation
-
-```bash
-RILL_REGISTRY_URL=http://registry:4000 node dist/harness.js
-```
-
 ## Choosing a Deployment Model
 
 | Scenario | Model | Transport |

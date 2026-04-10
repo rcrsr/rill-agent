@@ -4,14 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Monorepo Structure
 
-pnpm workspace monorepo containing the agent framework for the [rill](https://github.com/rcrsr/rill) language runtime. All 5 packages under `packages/agent/` share a synchronized version.
+pnpm workspace monorepo containing the agent framework for the [rill](https://github.com/rcrsr/rill) language runtime. All 3 packages under `packages/agent/` share a synchronized version.
 
 | Package | NPM Name | Role |
 |---------|----------|------|
 | `agent/core` | `@rcrsr/rill-agent` | Manifest loader, `AgentRouter`, Hono HTTP harness (`/http` subpath) |
-| `agent/shared` | `@rcrsr/rill-agent-shared` | Types, manifest validation (zod), card generation |
 | `agent/foundry` | `@rcrsr/rill-agent-foundry` | Foundry Responses API harness with SSE, Azure Conversations, OTEL |
-| `agent/registry` | `@rcrsr/rill-agent-registry` | Service registry client for publish/resolve |
 | `agent/ahi` | `@rcrsr/rill-agent-ext-ahi` | Agent Host Interface extension for agent-to-agent invocation |
 
 ## Commands
@@ -43,13 +41,11 @@ cd packages/agent/core && npx vitest run tests/router.test.ts
 ### Dependency Graph
 
 ```
-shared
 core ← foundry (peer)
-registry
 ahi
 ```
 
-`core` (`@rcrsr/rill-agent`) is self-contained and depends only on `hono` and `@hono/node-server`. `shared` provides types and validation utilities. `ahi` uses `@rcrsr/rill` as a peer dependency. `foundry` consumes `@rcrsr/rill-agent` as a peer dependency and does not import `@rcrsr/rill` directly.
+`core` (`@rcrsr/rill-agent`) is self-contained and depends only on `hono` and `@hono/node-server`. `ahi` uses `@rcrsr/rill` as a peer dependency and has no other workspace dependencies. `foundry` consumes `@rcrsr/rill-agent` as a peer dependency and does not import `@rcrsr/rill` directly.
 
 ### Runtime Pipeline
 
@@ -70,7 +66,7 @@ Foundry hosting lives in its own package: `@rcrsr/rill-agent-foundry` exposes `c
 
 ### AHI (Agent-to-Agent Invocation)
 
-The `ahi` extension registers `ahi::<agentName>` functions in the rill runtime context. The router builds an in-process AHI resolver that calls `router.run(agentName, request)` directly, so co-located agents skip HTTP. Remote agents resolve via static URLs or the registry client.
+The `ahi` extension registers `ahi::<agentName>` functions in the rill runtime context. The router builds an in-process AHI resolver that calls `router.run(agentName, request)` directly, so co-located agents skip HTTP. Remote agents resolve via static URLs.
 
 ## Conventions
 

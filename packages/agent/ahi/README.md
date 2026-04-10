@@ -1,6 +1,6 @@
 # @rcrsr/rill-agent-ext-ahi
 
-[rill](https://github.com/rcrsr/rill) extension for the Agent Host Interface (AHI). Registers `ahi::<agentName>` host functions so a rill agent can call other agents over HTTP. Supports static URL mode and registry-based resolution.
+[rill](https://github.com/rcrsr/rill) extension for the Agent Host Interface (AHI). Registers `ahi::<agentName>` host functions so a rill agent can call other agents over HTTP. Uses static URL resolution with `${VAR_NAME}` environment variable substitution.
 
 ## Install
 
@@ -29,7 +29,7 @@ $result -> log
 
 ## Documentation
 
-See [full documentation](docs/agent-ahi.md) for static and registry modes, error mapping, and in-process binding.
+See [full documentation](docs/agent-ahi.md) for configuration, error mapping, and in-process binding.
 
 ## License
 

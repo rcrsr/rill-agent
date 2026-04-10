@@ -25,10 +25,6 @@
   "peerDependencies": {
     "@rcrsr/rill": "~0.18.4"
   },
-  "dependencies": {
-    "@rcrsr/rill-agent-registry": "workspace:^",
-    "@rcrsr/rill-agent-shared": "workspace:^"
-  },
   "devDependencies": {
     "@rcrsr/rill": "^0.18.4"
   },
