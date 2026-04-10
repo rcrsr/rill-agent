@@ -24,7 +24,7 @@
   },
   "peerDependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "@rcrsr/rill-agent": "workspace:^"
+    "@rcrsr/rill-agent": "~0.18.4"
   },
   "dependencies": {
     "@azure/identity": "^4.10.0",
@@ -36,7 +36,7 @@
   },
   "devDependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "@rcrsr/rill-agent": "workspace:^"
+    "@rcrsr/rill-agent": "~0.18.4"
   },
   "files": [
     "dist"
