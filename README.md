@@ -5,7 +5,7 @@
 
 Host framework that turns compiled [rill](https://github.com/rcrsr/rill) scripts into callable agents. A rill script becomes an `AgentHandler` exposing `describe`, `init`, `execute`, and `dispose`. The runtime loads one or more handlers from a manifest, builds a router that wires up agent-to-agent invocation, and serves the router over HTTP or the Azure AI Foundry Responses API.
 
-Use this repo when you have a rill script and want to run it as a long-lived service with parameter validation, session state, streaming responses, and observability. Single-agent and multi-agent deployments use the same router. Co-located agents call each other in-process; remote agents resolve via static URLs or the registry client.
+Use this repo when you have a rill script and want to run it as a long-lived service with parameter validation and agent routing. The core HTTP harness provides request and parameter validation plus a single JSON response path; features such as session persistence, streaming responses, and observability depend on the hosting integration you choose, such as [`@rcrsr/rill-agent-foundry`](packages/agent/foundry). Single-agent and multi-agent deployments use the same router. Co-located agents call each other in-process; remote agents resolve via static URLs or the registry client.
 
 ## Documentation
 
