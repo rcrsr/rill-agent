@@ -45,7 +45,7 @@ importers:
   packages/agent/ahi:
     devDependencies:
       '@rcrsr/rill':
-        specifier: ^0.18.4
+        specifier: ~0.18.4
         version: 0.18.4
 
   packages/agent/core:
