@@ -1,6 +1,8 @@
 {
   "name": "@rcrsr/rill-agent",
   "version": "0.18.4",
+  "license": "MIT",
+  "author": "Andre Bremer",
   "type": "module",
   "exports": {
     ".": {
