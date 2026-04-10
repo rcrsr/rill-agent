@@ -12,9 +12,11 @@
  */
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { createInProcessFunction } from '../../src/index.js';
+import {
+  createInProcessFunction,
+  type InProcessRunner,
+} from '../../src/index.js';
 import { RuntimeError } from '@rcrsr/rill';
-import type { AgentRunner } from '@rcrsr/rill-agent-shared';
 import type { RillValue } from '@rcrsr/rill';
 
 // ============================================================
@@ -36,24 +38,24 @@ function makeCtx(overrides?: Partial<Record<string, string>>): {
 }
 
 /**
- * Build an AgentRunner mock that resolves to the given response.
+ * Build an InProcessRunner mock that resolves to the given response.
  * Captures the agentName and input for inspection.
  */
 function makeRunner(response: {
   state: 'running' | 'completed' | 'failed';
   result?: RillValue | undefined;
 }): {
-  runner: AgentRunner;
+  runner: InProcessRunner;
   calls: Array<{
     agentName: string;
-    input: Parameters<AgentRunner['runForAgent']>[1];
+    input: Parameters<InProcessRunner['runForAgent']>[1];
   }>;
 } {
   const calls: Array<{
     agentName: string;
-    input: Parameters<AgentRunner['runForAgent']>[1];
+    input: Parameters<InProcessRunner['runForAgent']>[1];
   }> = [];
-  const runner: AgentRunner = {
+  const runner: InProcessRunner = {
     runForAgent: vi.fn(async (agentName, input) => {
       calls.push({ agentName, input });
       return response;
@@ -63,9 +65,9 @@ function makeRunner(response: {
 }
 
 /**
- * Build an AgentRunner mock that throws the given error.
+ * Build an InProcessRunner mock that throws the given error.
  */
-function makeThrowingRunner(err: Error): AgentRunner {
+function makeThrowingRunner(err: Error): InProcessRunner {
   return {
     runForAgent: vi.fn().mockRejectedValue(err),
   };
@@ -92,7 +94,10 @@ describe('createInProcessFunction', () => {
 
     // Act — untyped callable receives args as array (params: undefined skips marshalArgs)
     await def.fn(
-      [{ target: 'hello' } as unknown as RillValue] as unknown as Record<string, RillValue>,
+      [{ target: 'hello' } as unknown as RillValue] as unknown as Record<
+        string,
+        RillValue
+      >,
       makeCtx()
     );
 
@@ -149,7 +154,9 @@ describe('createInProcessFunction', () => {
     const def = createInProcessFunction(runner, 'classifier', 30000);
 
     // Act + Assert
-    const thrown = await def.fn([] as unknown as Record<string, RillValue>, makeCtx()).catch((e: unknown) => e);
+    const thrown = await def
+      .fn([] as unknown as Record<string, RillValue>, makeCtx())
+      .catch((e: unknown) => e);
     expect(thrown).toBeInstanceOf(RuntimeError);
     expect((thrown as RuntimeError).errorId).toBe('RILL-R032');
   });
@@ -161,7 +168,9 @@ describe('createInProcessFunction', () => {
     const def = createInProcessFunction(runner, 'classifier', 30000);
 
     // Act + Assert
-    const thrown = await def.fn([] as unknown as Record<string, RillValue>, makeCtx()).catch((e: unknown) => e);
+    const thrown = await def
+      .fn([] as unknown as Record<string, RillValue>, makeCtx())
+      .catch((e: unknown) => e);
     expect(thrown).toBeInstanceOf(RuntimeError);
     expect((thrown as RuntimeError).errorId).toBe('RILL-R032');
   });
@@ -172,7 +181,9 @@ describe('createInProcessFunction', () => {
     const def = createInProcessFunction(runner, 'classifier', 30000);
 
     // Act + Assert
-    const thrown = await def.fn([] as unknown as Record<string, RillValue>, makeCtx()).catch((e: unknown) => e);
+    const thrown = await def
+      .fn([] as unknown as Record<string, RillValue>, makeCtx())
+      .catch((e: unknown) => e);
     expect(thrown).toBeInstanceOf(RuntimeError);
     expect((thrown as RuntimeError).errorId).toBe('RILL-R029');
   });
@@ -183,7 +194,10 @@ describe('createInProcessFunction', () => {
     const def = createInProcessFunction(runner, 'classifier', 30000);
 
     // Act
-    const result = await def.fn([] as unknown as Record<string, RillValue>, makeCtx());
+    const result = await def.fn(
+      [] as unknown as Record<string, RillValue>,
+      makeCtx()
+    );
 
     // Assert
     expect(result).toBe('hello');
@@ -195,7 +209,10 @@ describe('createInProcessFunction', () => {
     const def = createInProcessFunction(runner, 'classifier', 30000);
 
     // Act
-    const result = await def.fn([] as unknown as Record<string, RillValue>, makeCtx());
+    const result = await def.fn(
+      [] as unknown as Record<string, RillValue>,
+      makeCtx()
+    );
 
     // Assert
     expect(result).toBeNull();
@@ -221,7 +238,9 @@ describe('createInProcessFunction', () => {
     const def = createInProcessFunction(runner, 'classifier', 30000);
 
     // Act + Assert
-    await expect(def.fn([] as unknown as Record<string, RillValue>, makeCtx())).rejects.toThrow('connection refused');
+    await expect(
+      def.fn([] as unknown as Record<string, RillValue>, makeCtx())
+    ).rejects.toThrow('connection refused');
   });
 });
 
@@ -260,7 +279,7 @@ describe('bindHost', () => {
     const harness = {
       agents,
       sharedExtensions: {},
-      bindHost(host: AgentRunner): void {
+      bindHost(host: InProcessRunner): void {
         // Documents the observable contract: iterating functions with no
         // ahi:: key must never call host.runForAgent. The production path
         // for this contract is tested in packages/compose/tests/unit/harness.test.ts.
@@ -275,7 +294,7 @@ describe('bindHost', () => {
       dispose: async () => undefined,
     };
 
-    const mockHost: AgentRunner = {
+    const mockHost: InProcessRunner = {
       runForAgent: vi.fn().mockResolvedValue({ state: 'completed' }),
     };
 

@@ -3,22 +3,57 @@
  *
  * Provides agent-to-agent HTTP invocation via the Agent Host Interface (AHI).
  * Static URL mode: agents are configured with explicit endpoint URLs.
- * Registry mode (Phase 4): agents array resolved via a registry service.
  */
 
 import type { ExtensionConfigSchema, ExtensionManifest } from '@rcrsr/rill';
 import type { RillValue, ApplicationCallable } from '@rcrsr/rill';
 import { isDict, RuntimeError, callable } from '@rcrsr/rill';
-import type { ExtensionResult } from '@rcrsr/rill-agent-shared';
-import type { InputSchema } from '@rcrsr/rill-agent-shared';
-import {
-  createRegistryClient,
-  type RegistryClient,
-} from '@rcrsr/rill-agent-registry';
 
 // ============================================================
 // TYPES
 // ============================================================
+
+/**
+ * Result object returned by extension factories. Contains application
+ * callables keyed by function name with optional lifecycle hooks.
+ */
+export type ExtensionResult = Record<string, ApplicationCallable> & {
+  dispose?: () => void | Promise<void>;
+  suspend?: () => unknown;
+  restore?: (state: unknown) => void;
+};
+
+/** Minimal run request for in-process agent invocation. */
+interface InProcessRunRequest {
+  readonly params?: Record<string, unknown> | undefined;
+  readonly correlationId?: string | undefined;
+  readonly timeout?: number | undefined;
+  readonly trigger?:
+    | string
+    | {
+        readonly type: 'agent';
+        readonly agentName: string;
+        readonly sessionId: string;
+      };
+}
+
+/** Minimal run response for in-process agent invocation. */
+interface InProcessRunResponse {
+  readonly state: 'running' | 'completed' | 'failed';
+  readonly result?: RillValue | undefined;
+}
+
+/**
+ * Interface for an in-process agent host accepted by createInProcessFunction.
+ * Implemented by AgentHost from @rcrsr/rill-host. Defined here locally to
+ * avoid a cross-package dependency.
+ */
+export interface InProcessRunner {
+  runForAgent(
+    agentName: string,
+    input: InProcessRunRequest
+  ): Promise<InProcessRunResponse>;
+}
 
 /** Configuration for a single AHI agent endpoint */
 export interface AhiAgentConfig {
@@ -26,12 +61,10 @@ export interface AhiAgentConfig {
   url: string;
 }
 
-/** AHI extension configuration */
+/** AHI extension configuration (static URL mode) */
 export interface AhiExtensionConfig {
-  /** Registry URL (required when agents is an array) */
-  registry?: string | undefined;
-  /** Agent map (static mode) or agent name list (registry mode) */
-  agents: Record<string, AhiAgentConfig> | string[];
+  /** Agent name to endpoint config map */
+  agents: Record<string, AhiAgentConfig>;
   /** Request timeout in milliseconds (default: 30000) */
   timeout?: number | undefined;
 }
@@ -76,7 +109,6 @@ function extractParams(args: RillValue[]): Record<string, RillValue> {
 
 /**
  * Perform the HTTP POST to a resolved agent endpoint.
- * Shared by both static URL mode and registry mode.
  *
  * @param agentUrl - Resolved base URL of the agent
  * @param agentTimeout - Effective timeout in ms (0 = unlimited)
@@ -197,214 +229,16 @@ async function invokeAgent(
 }
 
 // ============================================================
-// INPUT VALIDATION (AC-16)
-// ============================================================
-
-/**
- * Validate a params dict against an InputSchema.
- * Returns a string describing the first failure, or null when valid.
- *
- * Mirrors the logic in packages/host/src/routes.ts validateInputParams(),
- * inlined here because @rcrsr/rill-host is not a dependency of this package.
- */
-function validateAgentParams(
-  params: Record<string, RillValue>,
-  inputSchema: InputSchema
-): string | null {
-  for (const [param, descriptor] of Object.entries(inputSchema)) {
-    const provided = Object.prototype.hasOwnProperty.call(params, param);
-    const value = params[param];
-
-    if (descriptor.required === true) {
-      if (!provided || value === null) {
-        return `param "${param}" is required`;
-      }
-    }
-
-    if (provided && value !== null && value !== undefined) {
-      const ok = checkRillType(value, descriptor.type);
-      if (!ok) {
-        const got = rillValueLabel(value);
-        const expected =
-          descriptor.type === 'bool' ? 'boolean' : descriptor.type;
-        return `param "${param}": expected ${expected}, got ${got}`;
-      }
-    }
-  }
-  return null;
-}
-
-/** Returns true when value matches the declared Rill type. */
-function checkRillType(
-  value: RillValue,
-  rillType: 'string' | 'number' | 'bool' | 'list' | 'dict'
-): boolean {
-  switch (rillType) {
-    case 'string':
-      return typeof value === 'string';
-    case 'number':
-      return typeof value === 'number';
-    case 'bool':
-      return typeof value === 'boolean';
-    case 'list':
-      return Array.isArray(value);
-    case 'dict':
-      return (
-        typeof value === 'object' && value !== null && !Array.isArray(value)
-      );
-  }
-}
-
-/** Maps a RillValue to a human-readable type label for error messages. */
-function rillValueLabel(value: RillValue): string {
-  if (typeof value === 'string') return 'string';
-  if (typeof value === 'number') return 'number';
-  if (typeof value === 'boolean') return 'boolean';
-  if (Array.isArray(value)) return 'list';
-  if (typeof value === 'object' && value !== null) return 'dict';
-  return typeof value;
-}
-
-// ============================================================
-// REGISTRY MODE
-// ============================================================
-
-/** Cached resolution result for a registry agent. */
-interface ResolvedEntry {
-  readonly endpoint: string;
-  readonly input?: InputSchema | undefined;
-}
-
-/**
- * Build an ExtensionResult for registry mode (agents is a string[]).
- *
- * AC-12: At boot, resolve(name) is called for each symbolic agent name.
- * AC-13: Success → cache endpoint; register ahi::<name> with cached URL.
- * AC-14: Failure → log warning; register ahi::<name> with lazy flag.
- * AC-15 / EC-3: On first call to a lazy-flagged agent, retry resolve().
- *               If retry fails, throw runtime error RILL-R035.
- * AC-16: When input contract is present, validate params before HTTP call.
- */
-function createRegistryModeExtension(
-  names: string[],
-  registryUrl: string,
-  timeout: number
-): ExtensionResult {
-  const client: RegistryClient = createRegistryClient({ url: registryUrl });
-  const inFlight = new Set<AbortController>();
-  let disposed = false;
-
-  // Per-agent resolution state.
-  // bootPromise resolves to { endpoint, input } on success, or null on failure.
-  const bootPromises = new Map<string, Promise<ResolvedEntry | null>>();
-
-  // AC-12: kick off eager resolution for every symbolic name at boot
-  for (const name of names) {
-    const promise = client
-      .resolve(name)
-      .then((agent) => ({ endpoint: agent.endpoint, input: agent.input }))
-      .catch((err: unknown) => {
-        // AC-14: log warning on boot failure; agent flagged as lazy
-        console.warn(
-          `[ahi] boot resolve failed for "${name}":`,
-          err instanceof Error ? err.message : String(err)
-        );
-        return null;
-      });
-    bootPromises.set(name, promise);
-  }
-
-  const functions: Record<string, ApplicationCallable> = {};
-
-  for (const name of names) {
-    // Capture per-agent boot promise in closure
-    const agentName = name;
-    const bootPromise = bootPromises.get(name)!;
-
-    // AC-15: lazily-resolved promise, set on first call when boot failed.
-    // Subsequent calls await the same promise — client.resolve() fires once.
-    let lazyPromise: Promise<ResolvedEntry> | undefined;
-
-    const fn = async (
-      args: RillValue[],
-      ctx: { readonly metadata?: Record<string, string> | undefined }
-    ): Promise<RillValue> => {
-      // AC-11: reject calls after dispose
-      if (disposed) {
-        throw new RuntimeError('RILL-R033', 'AHI: extension disposed');
-      }
-
-      // AC-13 / AC-15: resolve entry — await boot result first
-      let entry = await bootPromise;
-
-      if (entry === null) {
-        // AC-15: boot failed — retry resolve() on first call and cache result.
-        // lazyPromise is shared across all calls; client.resolve() fires once.
-        if (lazyPromise === undefined) {
-          lazyPromise = client
-            .resolve(agentName)
-            .then((agent) => ({ endpoint: agent.endpoint, input: agent.input }))
-            .catch(() => {
-              // Reset so a future dispose-then-recreate scenario is clean,
-              // but keep the rejected promise so awaiting callers get EC-3.
-              return Promise.reject(
-                new RuntimeError(
-                  'RILL-R035',
-                  `Agent ${agentName} could not be resolved`
-                )
-              );
-            });
-        }
-        // EC-3: if lazyPromise rejects, the RuntimeError propagates to caller
-        entry = await lazyPromise;
-      }
-
-      // AC-16: validate params against InputSchema when contract is present
-      if (entry.input !== undefined) {
-        const params = extractParams(args);
-        const failure = validateAgentParams(params, entry.input);
-        if (failure !== null) {
-          throw new RuntimeError('RILL-R027', `AHI: ${failure}`);
-        }
-      }
-
-      return invokeAgent(entry.endpoint, timeout, args, ctx, inFlight);
-    };
-
-    functions[agentName] = callable(
-      fn as unknown as Parameters<typeof callable>[0]
-    );
-  }
-
-  // AC-11: cancel all in-flight requests and block further calls
-  const dispose = (): void => {
-    disposed = true;
-    for (const ctrl of inFlight) {
-      ctrl.abort();
-    }
-    inFlight.clear();
-    client.dispose();
-  };
-
-  const result: ExtensionResult = { ...functions };
-  result.dispose = dispose;
-  return result;
-}
-
-// ============================================================
 // FACTORY
 // ============================================================
 
 /**
  * Create AHI extension for agent-to-agent HTTP invocation.
  *
- * Static URL mode: pass agents as a Record<string, AhiAgentConfig>.
- * Registry mode: pass agents as a string[] with registry URL set.
  * Each agent name registers an `ahi::<name>` host function.
  *
  * @param config - AHI extension configuration
  * @returns ExtensionResult with one function per agent
- * @throws Error if agents is an array without a registry URL (EC-1)
  * @throws Error if any agent URL contains an unset env variable (EC-2)
  *
  * @example
@@ -419,18 +253,7 @@ function createRegistryModeExtension(
 export function createAhiExtension(
   config: AhiExtensionConfig
 ): ExtensionResult {
-  const { agents, registry, timeout = 30000 } = config;
-
-  // EC-1: Array form requires registry
-  if (Array.isArray(agents)) {
-    if (registry === undefined || registry === '') {
-      throw new Error(
-        'AHI extension requires registry URL when agents is an array'
-      );
-    }
-    // AC-12–AC-15: registry mode with eager boot + lazy fallback
-    return createRegistryModeExtension(agents, registry, timeout);
-  }
+  const { agents, timeout = 30000 } = config;
 
   // Static URL mode: validate and resolve env vars in each agent URL
   const resolvedAgents = new Map<string, { url: string }>();
@@ -457,18 +280,16 @@ export function createAhiExtension(
     // Capture agent state for this closure
     const agentUrl = agent.url;
 
-    functions[name] = callable(
-      ((
-        args: RillValue[],
-        ctx: { readonly metadata?: Record<string, string> | undefined }
-      ): Promise<RillValue> => {
-        // AC-11: reject calls after dispose
-        if (disposed) {
-          throw new RuntimeError('RILL-R033', 'AHI: extension disposed');
-        }
-        return invokeAgent(agentUrl, timeout, args, ctx, inFlight);
-      }) as unknown as Parameters<typeof callable>[0]
-    );
+    functions[name] = callable(((
+      args: RillValue[],
+      ctx: { readonly metadata?: Record<string, string> | undefined }
+    ): Promise<RillValue> => {
+      // AC-11: reject calls after dispose
+      if (disposed) {
+        throw new RuntimeError('RILL-R033', 'AHI: extension disposed');
+      }
+      return invokeAgent(agentUrl, timeout, args, ctx, inFlight);
+    }) as unknown as Parameters<typeof callable>[0]);
   }
 
   // ============================================================
@@ -499,24 +320,11 @@ export function createAhiExtension(
 // ============================================================
 export const configSchema: ExtensionConfigSchema = {
   agents: { type: 'string' },
-  registry: { type: 'string' },
   timeout: { type: 'number' },
 };
 
 // ============================================================
-// IN-PROCESS RUNNER INTERFACE
-// ============================================================
-
-/**
- * Interface for an in-process agent host accepted by createInProcessFunction.
- * Aliased from AgentRunner in @rcrsr/rill-agent-shared to avoid duplication.
- */
-import type { AgentRunner as InProcessRunner } from '@rcrsr/rill-agent-shared';
-export type { InProcessRunner };
-export type { ExtensionResult } from '@rcrsr/rill-agent-shared';
-
-// ============================================================
-// IN-PROCESS CALL (TASK 3.2)
+// IN-PROCESS CALL
 // ============================================================
 
 /**
@@ -603,16 +411,16 @@ function createInProcessCallFn(
 }
 
 // ============================================================
-// IN-PROCESS FUNCTION FACTORY (TASK 3.3)
+// IN-PROCESS FUNCTION FACTORY
 // ============================================================
 
 /**
  * Create a HostFunctionDefinition for in-process AHI invocation.
  *
- * IC-13: Used by bindHost() in compose.ts to register ahi::<name>
- * functions that bypass HTTP and call the agent directly.
+ * Used by bindHost() to register ahi::<name> functions that bypass HTTP
+ * and call the agent directly.
  *
- * @param runner - In-process agent runner (AgentRunner-compatible)
+ * @param runner - In-process agent runner (InProcessRunner-compatible)
  * @param targetAgentName - Name of the target agent
  * @param timeout - Default request timeout in ms (0 = unlimited)
  * @returns HostFunctionDefinition ready for registration
@@ -623,7 +431,11 @@ export function createInProcessFunction(
   timeout: number
 ): ApplicationCallable {
   return callable(
-    createInProcessCallFn(runner, targetAgentName, timeout) as unknown as Parameters<typeof callable>[0]
+    createInProcessCallFn(
+      runner,
+      targetAgentName,
+      timeout
+    ) as unknown as Parameters<typeof callable>[0]
   );
 }
 

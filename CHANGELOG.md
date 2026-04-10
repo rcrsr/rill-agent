@@ -7,8 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- `@rcrsr/rill-agent-shared` package (types and validation utilities no longer needed by `core` or `foundry`; types required by `ahi` are inlined into the package)
+- `@rcrsr/rill-agent-registry` package (registry client removed together with AHI registry mode)
+- AHI registry-mode resolution (`agents: string[]` with a `registry` URL is no longer accepted; use static URL mode only)
+
 ### Changed
 
+- `@rcrsr/rill-agent-ext-ahi` no longer imports from `@rcrsr/rill-agent-shared` or `@rcrsr/rill-agent-registry`. `ExtensionResult`, `InputSchema`, and `InProcessRunner` are now defined locally in the package.
 - Consolidated build, bundle, harness, proxy, and run packages into single `@rcrsr/rill-agent` core package
 - Replaced demo apps with agentic-news-digest
 - TypeScript 5.9.3 → 6.0.2 (added explicit `types: ["node"]` in tsconfig.base.json)

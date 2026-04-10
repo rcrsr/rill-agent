@@ -4,13 +4,12 @@ Package structure, dependency graph, and data flow for the rill agent framework.
 
 ## Package Overview
 
-8 packages under `packages/agent/` form three layers.
+Packages under `packages/agent/` form three layers.
 
 ### Core
 
 | Package | npm | Role |
 |---------|-----|------|
-| `rill-agent-shared` | `@rcrsr/rill-agent-shared` | Types, manifest validation (zod), card generation |
 | `rill-agent-harness` | `@rcrsr/rill-agent-harness` | HTTP server, lifecycle, session management, metrics, SSE |
 
 ### Build
@@ -26,34 +25,30 @@ Package structure, dependency graph, and data flow for the rill agent framework.
 | Package | npm | Role |
 |---------|-----|------|
 | `rill-agent-proxy` | `@rcrsr/rill-agent-proxy` | Multi-agent routing proxy with child process management |
-| `rill-agent-registry` | `@rcrsr/rill-agent-registry` | Service registry client for agent discovery |
 | `rill-agent-ext-ahi` | `@rcrsr/rill-agent-ext-ahi` | Agent-to-agent invocation extension |
 
 ## Dependency Graph
 
 ```
-shared ─────┬── harness ────┬── bundle ──── run
-            │               │
-            ├── build       ├── proxy
-            │               │
-            ├── registry ───┤
-            │               │
-            └── ahi ────────┘
+harness ────┬── bundle ──── run
+            │
+            ├── build
+            │
+            ├── proxy
+            │
+            └── ahi
 ```
 
-Direction: left depends on right (e.g., `harness` depends on `shared`).
+Direction: left depends on right (e.g., `harness` depends on `bundle`).
 
 All packages depend on `@rcrsr/rill` from npm as a direct dependency, except `ahi` which uses it as a peer dependency.
 
 Key relationships:
 
-- `shared` has zero internal dependencies. Every other package imports from it.
-- `harness` imports `shared` for types and validation.
 - `bundle` imports `harness` for `composeAgent` and `composeHarness`.
 - `run` imports `bundle` to load bundles and `harness` to execute them.
 - `proxy` imports `harness` and `bundle` for child process management.
-- `registry` is a peer dependency of `harness` (optional self-registration).
-- `ahi` imports `shared` and `registry`.
+- `ahi` has no workspace dependencies.
 
 ## Data Flow
 

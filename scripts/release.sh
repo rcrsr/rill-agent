@@ -3,7 +3,7 @@ set -e
 
 # Rill Agent Framework Release Script
 # Validates, creates a version tag, and pushes to trigger CI release.
-# All 8 agent packages share a synchronized version.
+# All agent packages share a synchronized version.
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'

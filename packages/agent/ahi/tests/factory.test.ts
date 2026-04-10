@@ -1,34 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createAhiExtension, type AhiExtensionConfig } from '../src/index.js';
 
-// ============================================================
-// EC-1: agents array without registry
-// ============================================================
-
 describe('createAhiExtension', () => {
-  describe('EC-1: agents array without registry', () => {
-    it('throws when agents is an array and registry is absent', () => {
-      const config: AhiExtensionConfig = {
-        agents: ['parser', 'writer'],
-      };
-
-      expect(() => createAhiExtension(config)).toThrow(
-        'AHI extension requires registry URL when agents is an array'
-      );
-    });
-
-    it('throws when agents is an array and registry is empty string', () => {
-      const config: AhiExtensionConfig = {
-        agents: ['parser'],
-        registry: '',
-      };
-
-      expect(() => createAhiExtension(config)).toThrow(
-        'AHI extension requires registry URL when agents is an array'
-      );
-    });
-  });
-
   // ============================================================
   // EC-2: unresolved env variable in static URL
   // ============================================================
@@ -122,7 +95,11 @@ describe('createAhiExtension', () => {
 
       const fn = result['parser']!;
       // fn returns a Promise (async function)
-      const returnValue = fn.fn([] as unknown as Record<string, import('@rcrsr/rill').RillValue>, {} as never, undefined);
+      const returnValue = fn.fn(
+        [] as unknown as Record<string, import('@rcrsr/rill').RillValue>,
+        {} as never,
+        undefined
+      );
       expect(returnValue).toBeInstanceOf(Promise);
       // Reject the dangling promise to avoid unhandled rejection noise
       void returnValue.catch(() => undefined);

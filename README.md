@@ -7,7 +7,7 @@ Host framework that turns compiled [rill](https://github.com/rcrsr/rill) scripts
 
 Azure AI Foundry is the first supported third-party agent framework, via [`@rcrsr/rill-agent-foundry`](packages/agent/foundry), which speaks the Foundry Responses API and adds session persistence, SSE streaming, and OTEL observability. Additional framework integrations will follow.
 
-Use this repo when you have a rill script and want to run it as a long-lived service with parameter validation and agent routing. The core HTTP harness provides request and parameter validation plus a single JSON response path; features such as session persistence, streaming responses, and observability depend on the hosting integration you choose. Single-agent and multi-agent deployments use the same router. Co-located agents call each other in-process; remote agents resolve via static URLs or the registry client.
+Use this repo when you have a rill script and want to run it as a long-lived service with parameter validation and agent routing. The core HTTP harness provides request and parameter validation plus a single JSON response path; features such as session persistence, streaming responses, and observability depend on the hosting integration you choose. Single-agent and multi-agent deployments use the same router. Co-located agents call each other in-process; remote agents resolve via static URLs.
 
 ## Documentation
 
@@ -26,10 +26,8 @@ All packages are published under `@rcrsr/` on npm and share a synchronized versi
 | Category | Package | npm | Docs | Description |
 |----------|---------|-----|------|-------------|
 | **Runtime** | [`rill-agent`](packages/agent/core) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent)](https://www.npmjs.com/package/@rcrsr/rill-agent) | [docs](packages/agent/core/docs/agent-core.md) | Manifest loader, router, HTTP harness |
-| | [`rill-agent-shared`](packages/agent/shared) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent-shared)](https://www.npmjs.com/package/@rcrsr/rill-agent-shared) | [docs](packages/agent/shared/docs/agent-shared.md) | Types, validation, card generation |
 | **Hosting** | [`rill-agent-foundry`](packages/agent/foundry) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent-foundry)](https://www.npmjs.com/package/@rcrsr/rill-agent-foundry) | [docs](packages/agent/foundry/docs/agent-foundry.md) | Azure Foundry Responses API harness |
-| **Infrastructure** | [`rill-agent-registry`](packages/agent/registry) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent-registry)](https://www.npmjs.com/package/@rcrsr/rill-agent-registry) | [docs](packages/agent/registry/docs/agent-registry.md) | Service registry client |
-| | [`rill-agent-ext-ahi`](packages/agent/ahi) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent-ext-ahi)](https://www.npmjs.com/package/@rcrsr/rill-agent-ext-ahi) | [docs](packages/agent/ahi/docs/agent-ahi.md) | Agent-to-agent invocation |
+| **Extensions** | [`rill-agent-ext-ahi`](packages/agent/ahi) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent-ext-ahi)](https://www.npmjs.com/package/@rcrsr/rill-agent-ext-ahi) | [docs](packages/agent/ahi/docs/agent-ahi.md) | Agent-to-agent invocation |
 
 ## Usage
 
