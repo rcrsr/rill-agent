@@ -1,9 +1,13 @@
 # rill-agent
 
-[![CI](https://github.com/rcrsr/rill-agent/actions/workflows/pr-check.yml/badge.svg?branch=main)](https://github.com/rcrsr/rill-agent/actions/workflows/pr-check.yml?query=branch%3Amain)
+[![CI](https://github.com/rcrsr/rill-agent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/rcrsr/rill-agent/actions/workflows/ci.yml?query=branch%3Amain)
 [![License](https://img.shields.io/github/license/rcrsr/rill-agent)](https://github.com/rcrsr/rill-agent/blob/main/LICENSE)
 
-Agent framework for [rill](https://github.com/rcrsr/rill). Production HTTP server, build tools, bundle system, and multi-agent proxy.
+Host framework that turns compiled [rill](https://github.com/rcrsr/rill) scripts into callable agents. A rill script becomes an `AgentHandler` exposing `describe`, `init`, `execute`, and `dispose`. The runtime loads one or more handlers from a manifest, builds a router that wires up agent-to-agent invocation, and serves the router over HTTP or through a third-party agent framework integration.
+
+Azure AI Foundry is the first supported third-party agent framework, via [`@rcrsr/rill-agent-foundry`](packages/agent/foundry), which speaks the Foundry Responses API and adds session persistence, SSE streaming, and OTEL observability. Additional framework integrations will follow.
+
+Use this repo when you have a rill script and want to run it as a long-lived service with parameter validation and agent routing. The core HTTP harness provides request and parameter validation plus a single JSON response path; features such as session persistence, streaming responses, and observability depend on the hosting integration you choose. Single-agent and multi-agent deployments use the same router. Co-located agents call each other in-process; remote agents resolve via static URLs or the registry client.
 
 ## Documentation
 
