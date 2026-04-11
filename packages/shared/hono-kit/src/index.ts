@@ -19,7 +19,6 @@ export interface HarnessLifecycle {
  * Assert parsed value is non-null, non-array object.
  * Throws on null, array, or non-object types.
  * Returns narrowed Record<string, unknown>.
- * Ref: core/src/harness/http.ts:86-91
  */
 export function assertJsonObject(parsed: unknown): Record<string, unknown> {
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
@@ -36,7 +35,6 @@ export function assertJsonObject(parsed: unknown): Record<string, unknown> {
  * Create Hono app with serve/close lifecycle.
  * serverTweaks called after serve() with raw server.
  * close() is idempotent. Sync construction, async listen.
- * Ref: core/src/harness/http.ts:165-180
  */
 export function createHarnessLifecycle(options?: {
   serverTweaks?: (server: unknown) => void;

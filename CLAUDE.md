@@ -42,12 +42,12 @@ cd packages/agent/core && npx vitest run tests/router.test.ts
 ### Dependency Graph
 
 ```
-core ← http (peer)
-core ← foundry (peer)
+core ← http (dep)
+core ← foundry (dep)
 ahi
 ```
 
-`core` (`@rcrsr/rill-agent`) is self-contained and depends only on `hono` and `@hono/node-server`. `http` (`@rcrsr/rill-agent-http`) consumes `@rcrsr/rill-agent` as a peer dependency. `ahi` uses `@rcrsr/rill` as a peer dependency and has no other workspace dependencies. `foundry` consumes `@rcrsr/rill-agent` as a peer dependency and does not import `@rcrsr/rill` directly.
+`core` (`@rcrsr/rill-agent`) is self-contained and has no runtime dependency on `hono`. `http` (`@rcrsr/rill-agent-http`) and `foundry` (`@rcrsr/rill-agent-foundry`) each list `@rcrsr/rill-agent` under `dependencies` and carry the `hono` / `@hono/node-server` runtime dependencies. `ahi` uses `@rcrsr/rill` as a peer dependency and has no other workspace dependencies. `foundry` does not import `@rcrsr/rill` directly.
 
 ### Runtime Pipeline
 

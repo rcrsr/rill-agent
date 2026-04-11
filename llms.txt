@@ -14,7 +14,7 @@ manifest -> router -> harness -> serve
 
 ## Core (2 packages)
 
-Manifest loader, `AgentRouter`, and Hono HTTP harness. `@rcrsr/rill-agent` is self-contained with only `hono` and `@hono/node-server` as runtime dependencies. `@rcrsr/rill-agent-http` provides the HTTP harness as a separate package.
+Manifest loader, `AgentRouter`, and shared types live in `@rcrsr/rill-agent`. The Hono HTTP harness lives in `@rcrsr/rill-agent-http`, which provides `httpHarness` and carries the `hono` / `@hono/node-server` runtime dependencies.
 
 | Package | Kind | Docs |
 |---------|------|------|
@@ -52,8 +52,9 @@ Exports: `createAhiExtension`
 ## Dependency graph
 
 ```
-core ← foundry (peer)
+core ← http (dep)
+core ← foundry (dep)
 ahi
 ```
 
-`core` is self-contained. `foundry` consumes `@rcrsr/rill-agent` as a peer dependency. `ahi` uses `@rcrsr/rill` as a peer dependency and has no other workspace dependencies.
+`core` is self-contained with no runtime dependencies on `hono`. `http` and `foundry` each depend on `@rcrsr/rill-agent` and carry the `hono` / `@hono/node-server` runtime dependencies. `ahi` uses `@rcrsr/rill` as a peer dependency and has no other workspace dependencies.
