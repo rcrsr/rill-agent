@@ -8,11 +8,17 @@ Core agent runtime for the [rill](https://github.com/rcrsr/rill) language. Loads
 npm install @rcrsr/rill-agent
 ```
 
+For the HTTP harness, install the separate package:
+
+```bash
+npm install @rcrsr/rill-agent-http
+```
+
 ## Quick Start
 
 ```typescript
 import { loadManifest, createRouter } from '@rcrsr/rill-agent';
-import { httpHarness } from '@rcrsr/rill-agent/http';
+import { httpHarness } from '@rcrsr/rill-agent-http';
 
 const manifest = await loadManifest('./build');
 const router = await createRouter(manifest, {

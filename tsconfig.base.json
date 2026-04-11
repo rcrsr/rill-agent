@@ -40,7 +40,9 @@
 
     // Path mappings for agent packages
     "paths": {
-      "@rcrsr/rill-agent-ext-ahi": ["./packages/agent/ahi/src/index.ts"]
+      "@rcrsr/rill-agent-ext-ahi": ["./packages/agent/ahi/src/index.ts"],
+      "@rcrsr/rill-agent-hono-kit": ["./packages/shared/hono-kit/src/index.ts"],
+      "@rcrsr/rill-agent-http": ["./packages/agent/http/src/index.ts"]
     }
   }
 }

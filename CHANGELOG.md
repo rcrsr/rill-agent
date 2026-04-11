@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- HTTP server hosting is now a separate optional package; core agent framework no longer bundles HTTP transport code
+
 ## [0.18.5] - 2026-04-09
 
 ### Removed

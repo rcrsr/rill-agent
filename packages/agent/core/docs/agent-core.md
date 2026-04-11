@@ -1,8 +1,8 @@
 # Agent Core
 
-*Manifest loading, agent routing, and HTTP harness for the rill agent framework*
+*Manifest loading and agent routing for the rill agent framework*
 
-`@rcrsr/rill-agent` is the runtime that hosts compiled agent handlers. It loads a manifest from disk, builds an `AgentRouter` that wires up agent-to-agent invocation, and exposes the router over HTTP via a Hono-based harness.
+`@rcrsr/rill-agent` is the runtime that hosts compiled agent handlers. It loads a manifest from disk and builds an `AgentRouter` that wires up agent-to-agent invocation. The HTTP harness lives in a separate package, `@rcrsr/rill-agent-http`, which wraps an `AgentRouter` in a Hono server.
 
 ## Exports
 
@@ -21,7 +21,7 @@
 | `RunContext` | type | `{ sessionVars?, onLog?, onChunk? }` |
 | `RunResponse` | type | `{ state, result, streamed? }` |
 
-### HTTP entry — `@rcrsr/rill-agent/http`
+### HTTP entry — `@rcrsr/rill-agent-http`
 
 | Export | Kind | Description |
 |--------|------|-------------|

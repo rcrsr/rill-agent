@@ -3,9 +3,8 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { loadManifest } from '../src/manifest.js';
-import { createRouter } from '../src/router.js';
-import { httpHarness } from '../src/harness/http.js';
+import { loadManifest, createRouter } from '@rcrsr/rill-agent';
+import { httpHarness } from '../src/index.js';
 
 const PKG_ROOT = path.dirname(
   fileURLToPath(new URL('../package.json', import.meta.url))
@@ -54,6 +53,44 @@ export function describe() {
 export async function init() {}
 export async function execute(request) {
   return { state: 'completed', result: ${JSON.stringify(result)} };
+}
+export async function dispose() {}
+`,
+    'utf-8'
+  );
+  return dir;
+}
+
+async function makeAgentNoDescribe(_name: string): Promise<string> {
+  const dir = await makeTmpDir();
+  await writeFile(
+    path.join(dir, 'handler.js'),
+    `
+export function describe() {
+  return null;
+}
+export async function init() {}
+export async function execute(request) {
+  return { state: 'completed', result: 'ok' };
+}
+export async function dispose() {}
+`,
+    'utf-8'
+  );
+  return dir;
+}
+
+async function makeAgentThrows(name: string, message: string): Promise<string> {
+  const dir = await makeTmpDir();
+  await writeFile(
+    path.join(dir, 'handler.js'),
+    `
+export function describe() {
+  return { name: ${JSON.stringify(name)}, params: [] };
+}
+export async function init() {}
+export async function execute(request) {
+  throw new Error(${JSON.stringify(message)});
 }
 export async function dispose() {}
 `,
@@ -177,7 +214,7 @@ describe('httpHarness', () => {
 
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
-    expect(body.error).toContain('Invalid JSON');
+    expect(body.error).toContain('JSON object');
 
     await router.dispose();
   });
@@ -252,6 +289,54 @@ describe('httpHarness', () => {
     });
 
     expect(res.status).toBe(404);
+
+    await router.dispose();
+  });
+
+  it('validateParams returns null when describe() returns null [AC-17]', async () => {
+    const dir = await makeAgentNoDescribe('no-describe-agent');
+    const manifest = await loadManifest(dir);
+    const router = await createRouter(manifest);
+    const harness = httpHarness(router);
+
+    const res = await harness.app.request('/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ params: {} }),
+    });
+
+    expect(res.status).toBe(200);
+
+    await router.dispose();
+  });
+
+  it('returns 500 for non-not-found router errors [EC-4]', async () => {
+    const dir = await makeAgentThrows('error-agent', 'unexpected failure');
+    const manifest = await loadManifest(dir);
+    const router = await createRouter(manifest);
+    const harness = httpHarness(router);
+
+    const res = await harness.app.request('/agents/error-agent/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ params: {} }),
+    });
+
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('unexpected failure');
+
+    await router.dispose();
+  });
+
+  it('close() called twice does not throw [AC-20]', async () => {
+    const dir = await makeAgent('close-agent');
+    const manifest = await loadManifest(dir);
+    const router = await createRouter(manifest);
+    const harness = httpHarness(router);
+
+    await expect(harness.close()).resolves.toBeUndefined();
+    await expect(harness.close()).resolves.toBeUndefined();
 
     await router.dispose();
   });
