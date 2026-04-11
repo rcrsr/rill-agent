@@ -48,14 +48,7 @@ importers:
         specifier: ~0.18.4
         version: 0.18.4
 
-  packages/agent/core:
-    dependencies:
-      '@hono/node-server':
-        specifier: ^1.19.12
-        version: 1.19.12(hono@4.12.10)
-      hono:
-        specifier: ^4.12.10
-        version: 4.12.10
+  packages/agent/core: {}
 
   packages/agent/foundry:
     dependencies:
