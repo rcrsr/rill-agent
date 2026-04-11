@@ -7,7 +7,7 @@ set -e
 ROOT_VERSION=$(node -p "require('./package.json').version")
 UPDATED=0
 
-for pkg in packages/agent/*/; do
+for pkg in packages/agent/*/ packages/shared/*/; do
   pkg="${pkg%/}"
   [ -f "$pkg/package.json" ] || continue
 

@@ -21,7 +21,7 @@
 | `RunContext` | type | `{ sessionVars?, onLog?, onChunk? }` |
 | `RunResponse` | type | `{ state, result, streamed? }` |
 
-### HTTP entry — `@rcrsr/rill-agent/http`
+### HTTP entry — `@rcrsr/rill-agent-http`
 
 | Export | Kind | Description |
 |--------|------|-------------|

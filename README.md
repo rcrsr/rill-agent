@@ -25,7 +25,8 @@ All packages are published under `@rcrsr/` on npm and share a synchronized versi
 
 | Category | Package | npm | Docs | Description |
 |----------|---------|-----|------|-------------|
-| **Runtime** | [`rill-agent`](packages/agent/core) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent)](https://www.npmjs.com/package/@rcrsr/rill-agent) | [docs](packages/agent/core/docs/agent-core.md) | Manifest loader, router, HTTP harness |
+| **Runtime** | [`rill-agent`](packages/agent/core) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent)](https://www.npmjs.com/package/@rcrsr/rill-agent) | [docs](packages/agent/core/docs/agent-core.md) | Manifest loader and router |
+| **Runtime** | [`rill-agent-http`](packages/agent/http) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent-http)](https://www.npmjs.com/package/@rcrsr/rill-agent-http) | [docs](packages/agent/core/docs/agent-core.md) | HTTP harness for `AgentRouter` |
 | **Hosting** | [`rill-agent-foundry`](packages/agent/foundry) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent-foundry)](https://www.npmjs.com/package/@rcrsr/rill-agent-foundry) | [docs](packages/agent/foundry/docs/agent-foundry.md) | Azure Foundry Responses API harness |
 | **Extensions** | [`rill-agent-ext-ahi`](packages/agent/ahi) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent-ext-ahi)](https://www.npmjs.com/package/@rcrsr/rill-agent-ext-ahi) | [docs](packages/agent/ahi/docs/agent-ahi.md) | Agent-to-agent invocation |
 
@@ -33,7 +34,7 @@ All packages are published under `@rcrsr/` on npm and share a synchronized versi
 
 ```typescript
 import { loadManifest, createRouter } from '@rcrsr/rill-agent';
-import { httpHarness } from '@rcrsr/rill-agent/http';
+import { httpHarness } from '@rcrsr/rill-agent-http';
 
 const manifest = await loadManifest('./build');
 const router = await createRouter(manifest);

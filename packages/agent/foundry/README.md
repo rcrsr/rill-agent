@@ -5,7 +5,7 @@ Azure-hosted harness factory for the [rill](https://github.com/rcrsr/rill) agent
 ## Install
 
 ```bash
-npm install @rcrsr/rill-agent-foundry @rcrsr/rill-agent @opentelemetry/api
+npm install @rcrsr/rill-agent-foundry @opentelemetry/api
 ```
 
 `@opentelemetry/api` is a required peer dependency.

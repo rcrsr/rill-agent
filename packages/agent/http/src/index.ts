@@ -1,6 +1,10 @@
-import { Hono } from 'hono';
-import { serve, type ServerType } from '@hono/node-server';
-import type { AgentRouter, RunRequest } from '../types.js';
+import { validateParams, routerErrorToStatus } from '@rcrsr/rill-agent';
+import {
+  assertJsonObject,
+  createHarnessLifecycle,
+} from '@rcrsr/rill-agent-hono-kit';
+import type { AgentRouter, RunRequest } from '@rcrsr/rill-agent';
+import type { Hono } from 'hono';
 
 // ============================================================
 // PUBLIC TYPES
@@ -13,43 +17,6 @@ export interface HttpHarness {
 }
 
 // ============================================================
-// PARAM VALIDATION
-// ============================================================
-
-function validateParams(
-  params: Record<string, unknown>,
-  agentName: string,
-  router: AgentRouter
-): string | null {
-  const desc = router.describe(agentName);
-  if (desc === null) return null;
-
-  for (const param of desc.params) {
-    const value = params[param.name];
-    if (param.required && (value === undefined || value === null)) {
-      return `Missing required parameter: ${param.name}`;
-    }
-    if (value !== undefined && value !== null && param.type !== 'any') {
-      const actual = typeof value;
-      const expected = param.type === 'dict' ? 'object' : param.type;
-      if (expected === 'list') {
-        if (!Array.isArray(value)) {
-          return `Parameter "${param.name}" must be a list, got ${actual}`;
-        }
-      } else if (expected === 'object') {
-        if (actual !== 'object' || value === null || Array.isArray(value)) {
-          return `Parameter "${param.name}" must be a dict, got ${Array.isArray(value) ? 'list' : actual}`;
-        }
-      } else if (actual !== expected) {
-        return `Parameter "${param.name}" must be ${param.type}, got ${actual}`;
-      }
-    }
-  }
-
-  return null;
-}
-
-// ============================================================
 // HTTP HARNESS
 // ============================================================
 
@@ -57,13 +24,13 @@ function validateParams(
  * Create an HTTP harness wrapping an AgentRouter.
  *
  * Routes:
+ *   GET  /agents            — list agents with descriptions
  *   POST /agents/:name/run  — execute a named agent
  *   POST /run               — execute the default agent
- *   GET  /agents            — list agents with descriptions
  */
 export function httpHarness(router: AgentRouter): HttpHarness {
-  const app = new Hono();
-  let server: ServerType | undefined;
+  const lifecycle = createHarnessLifecycle();
+  const { app } = lifecycle;
 
   // List agents
   app.get('/agents', (c) => {
@@ -83,16 +50,9 @@ export function httpHarness(router: AgentRouter): HttpHarness {
     let body: Record<string, unknown>;
     try {
       const parsed: unknown = await c.req.json();
-      if (
-        parsed === null ||
-        typeof parsed !== 'object' ||
-        Array.isArray(parsed)
-      ) {
-        return c.json({ error: 'Request body must be a JSON object' }, 400);
-      }
-      body = parsed as Record<string, unknown>;
+      body = assertJsonObject(parsed);
     } catch {
-      return c.json({ error: 'Invalid JSON in request body' }, 400);
+      return c.json({ error: 'Request body must be a JSON object' }, 400);
     }
 
     const params = (body['params'] as Record<string, unknown>) ?? {};
@@ -113,11 +73,9 @@ export function httpHarness(router: AgentRouter): HttpHarness {
       const response = await router.run(name, request);
       return c.json(response);
     } catch (err) {
+      const status = routerErrorToStatus(err);
       const message = err instanceof Error ? err.message : String(err);
-      if (message.includes('not found')) {
-        return c.json({ error: message }, 404);
-      }
-      return c.json({ error: message }, 500);
+      return c.json({ error: message }, status as 404 | 500);
     }
   });
 
@@ -126,16 +84,9 @@ export function httpHarness(router: AgentRouter): HttpHarness {
     let body: Record<string, unknown>;
     try {
       const parsed: unknown = await c.req.json();
-      if (
-        parsed === null ||
-        typeof parsed !== 'object' ||
-        Array.isArray(parsed)
-      ) {
-        return c.json({ error: 'Request body must be a JSON object' }, 400);
-      }
-      body = parsed as Record<string, unknown>;
+      body = assertJsonObject(parsed);
     } catch {
-      return c.json({ error: 'Invalid JSON in request body' }, 400);
+      return c.json({ error: 'Request body must be a JSON object' }, 400);
     }
 
     const params = (body['params'] as Record<string, unknown>) ?? {};
@@ -163,19 +114,8 @@ export function httpHarness(router: AgentRouter): HttpHarness {
   });
 
   async function listen(port = 3000): Promise<void> {
-    return new Promise((resolve) => {
-      server = serve({ fetch: app.fetch, port }, () => {
-        resolve();
-      });
-    });
+    return lifecycle.listen(port);
   }
 
-  async function close(): Promise<void> {
-    if (server !== undefined) {
-      server.close();
-      server = undefined;
-    }
-  }
-
-  return { listen, close, app };
+  return { listen, close: lifecycle.close, app };
 }

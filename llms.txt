@@ -12,16 +12,18 @@ manifest -> router -> harness -> serve
 2. `createRouter(manifest, options?)` calls `describe()` on every handler, builds an AHI resolver, and runs `init()` concurrently.
 3. A harness wraps the router in a Hono server. Choose `httpHarness` for plain HTTP or `createFoundryHarness` for the Azure AI Foundry Responses API.
 
-## Core (1 package, 2 entry points)
+## Core (2 packages)
 
-Manifest loader, `AgentRouter`, and Hono HTTP harness. Self-contained with only `hono` and `@hono/node-server` as runtime dependencies.
+Manifest loader, `AgentRouter`, and Hono HTTP harness. `@rcrsr/rill-agent` is self-contained with only `hono` and `@hono/node-server` as runtime dependencies. `@rcrsr/rill-agent-http` provides the HTTP harness as a separate package.
 
-| Import path | Kind | Docs |
-|-------------|------|------|
+| Package | Kind | Docs |
+|---------|------|------|
 | `@rcrsr/rill-agent` | Package main (`loadManifest`, `createRouter`, types) | [agent-core.md](packages/agent/core/docs/agent-core.md) |
-| `@rcrsr/rill-agent/http` | Subpath export of `@rcrsr/rill-agent` (`httpHarness`) | [agent-core.md](packages/agent/core/docs/agent-core.md) |
+| `@rcrsr/rill-agent-http` | HTTP harness package (`httpHarness`) | [agent-core.md](packages/agent/core/docs/agent-core.md) |
 
-Exports: `loadManifest`, `createRouter`, `httpHarness`, `AgentHandler`, `AgentManifest`, `AgentRouter`, `HandlerDescription`, `InitContext`, `RunContext`, `RunRequest`, `RunResponse`
+`@rcrsr/rill-agent` exports: `loadManifest`, `createRouter`, `AgentHandler`, `AgentManifest`, `AgentRouter`, `HandlerDescription`, `InitContext`, `RunContext`, `RunRequest`, `RunResponse`
+
+`@rcrsr/rill-agent-http` exports: `httpHarness`, `HttpHarness`
 
 HTTP routes: `GET /agents`, `POST /agents/:name/run`, `POST /run`
 

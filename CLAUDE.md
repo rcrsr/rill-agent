@@ -4,11 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Monorepo Structure
 
-pnpm workspace monorepo containing the agent framework for the [rill](https://github.com/rcrsr/rill) language runtime. All 3 packages under `packages/agent/` share a synchronized version.
+pnpm workspace monorepo containing the agent framework for the [rill](https://github.com/rcrsr/rill) language runtime. All 4 packages under `packages/agent/` share a synchronized version.
 
 | Package | NPM Name | Role |
 |---------|----------|------|
-| `agent/core` | `@rcrsr/rill-agent` | Manifest loader, `AgentRouter`, Hono HTTP harness (`/http` subpath) |
+| `agent/core` | `@rcrsr/rill-agent` | Manifest loader, `AgentRouter` |
+| `agent/http` | `@rcrsr/rill-agent-http` | Hono HTTP harness (`httpHarness`) |
 | `agent/foundry` | `@rcrsr/rill-agent-foundry` | Foundry Responses API harness with SSE, Azure Conversations, OTEL |
 | `agent/ahi` | `@rcrsr/rill-agent-ext-ahi` | Agent Host Interface extension for agent-to-agent invocation |
 
@@ -41,11 +42,12 @@ cd packages/agent/core && npx vitest run tests/router.test.ts
 ### Dependency Graph
 
 ```
+core ← http (peer)
 core ← foundry (peer)
 ahi
 ```
 
-`core` (`@rcrsr/rill-agent`) is self-contained and depends only on `hono` and `@hono/node-server`. `ahi` uses `@rcrsr/rill` as a peer dependency and has no other workspace dependencies. `foundry` consumes `@rcrsr/rill-agent` as a peer dependency and does not import `@rcrsr/rill` directly.
+`core` (`@rcrsr/rill-agent`) is self-contained and depends only on `hono` and `@hono/node-server`. `http` (`@rcrsr/rill-agent-http`) consumes `@rcrsr/rill-agent` as a peer dependency. `ahi` uses `@rcrsr/rill` as a peer dependency and has no other workspace dependencies. `foundry` consumes `@rcrsr/rill-agent` as a peer dependency and does not import `@rcrsr/rill` directly.
 
 ### Runtime Pipeline
 
@@ -53,14 +55,14 @@ The core workflow is: **manifest -> router -> harness -> serve**.
 
 1. **core/manifest.ts** `loadManifest(dir)` auto-detects single-agent (`handler.js`), nested single-agent, or multi-agent (`manifest.json`) layouts and imports each `handler.js` module.
 2. **core/router.ts** `createRouter(manifest, options?)` calls `describe()` on every handler, creates an AHI resolver, calls `init({ globalVars, ahiResolver })` concurrently, and returns an `AgentRouter`.
-3. **core/harness/http.ts** `httpHarness(router)` wraps the router in a Hono server exposing `GET /agents`, `POST /agents/:name/run`, and `POST /run`.
+3. **http/src/index.ts** `httpHarness(router)` wraps the router in a Hono server exposing `GET /agents`, `POST /agents/:name/run`, and `POST /run`.
 4. **foundry/harness.ts** `createFoundryHarness(router, options?)` is the alternative hosting entry point that speaks the Foundry Responses API.
 
 ### Transport Modes
 
-Core exports two entry points:
+The HTTP harness lives in its own package:
 - `@rcrsr/rill-agent` — main (`loadManifest`, `createRouter`, types)
-- `@rcrsr/rill-agent/http` — HTTP harness (`httpHarness`)
+- `@rcrsr/rill-agent-http` — HTTP harness (`httpHarness`)
 
 Foundry hosting lives in its own package: `@rcrsr/rill-agent-foundry` exposes `createFoundryHarness` and supporting helpers (sessions, conversations client, telemetry, response builders, SSE stream emitter).
 

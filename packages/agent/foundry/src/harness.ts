@@ -1,9 +1,13 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { serve, type ServerType } from '@hono/node-server';
 import { SpanStatusCode } from '@opentelemetry/api';
 import { DefaultAzureCredential } from '@azure/identity';
+import { validateParams, routerErrorToStatus } from '@rcrsr/rill-agent';
 import type { AgentRouter, RunContext, RunRequest } from '@rcrsr/rill-agent';
+import {
+  assertJsonObject,
+  createHarnessLifecycle,
+} from '@rcrsr/rill-agent-hono-kit';
 import type {
   CreateResponse,
   FoundryHarnessOptions,
@@ -30,48 +34,6 @@ export interface FoundryHarness {
   close(): Promise<void>;
   readonly app: Hono;
   metrics(): FoundryMetrics;
-}
-
-// ============================================================
-// PARAM VALIDATION
-// ============================================================
-
-/**
- * Validate extracted params against the handler description for a named agent.
- * Returns a string describing the first violation, or null when valid.
- * Returns null when describe() returns null (no description available).
- */
-function validateParams(
-  params: Record<string, unknown>,
-  agentName: string,
-  router: AgentRouter
-): string | null {
-  const desc = router.describe(agentName);
-  if (desc === null) return null;
-
-  for (const param of desc.params) {
-    const value = params[param.name];
-    if (param.required && (value === undefined || value === null)) {
-      return `Missing required parameter: ${param.name}`;
-    }
-    if (value !== undefined && value !== null && param.type !== 'any') {
-      const actual = typeof value;
-      const expected = param.type === 'dict' ? 'object' : param.type;
-      if (expected === 'list') {
-        if (!Array.isArray(value)) {
-          return `Parameter "${param.name}" must be a list, got ${actual}`;
-        }
-      } else if (expected === 'object') {
-        if (actual !== 'object' || value === null || Array.isArray(value)) {
-          return `Parameter "${param.name}" must be a dict, got ${Array.isArray(value) ? 'list' : actual}`;
-        }
-      } else if (actual !== expected) {
-        return `Parameter "${param.name}" must be ${param.type}, got ${actual}`;
-      }
-    }
-  }
-
-  return null;
 }
 
 // ============================================================
@@ -167,10 +129,18 @@ export function createFoundryHarness(
 
   let totalRequests = 0;
   let errorCount = 0;
-  let server: ServerType | undefined;
   let ready = false;
 
-  const app = new Hono();
+  function serverTweaks(srv: unknown): void {
+    const s = srv as Record<string, unknown>;
+    s['requestTimeout'] = 0;
+    s['headersTimeout'] = 0;
+    s['keepAliveTimeout'] = 0;
+    s['timeout'] = 0;
+  }
+
+  const lifecycle = createHarnessLifecycle({ serverTweaks });
+  const app = lifecycle.app;
 
   // ============================================================
   // MIDDLEWARE — agent metadata header
@@ -232,28 +202,13 @@ export function createFoundryHarness(
     let body: CreateResponse;
     try {
       const parsed: unknown = await c.req.json();
-      if (
-        parsed === null ||
-        typeof parsed !== 'object' ||
-        Array.isArray(parsed)
-      ) {
-        errorCount++;
-        return c.json(
-          buildErrorResponse(
-            'INVALID_REQUEST',
-            'Request body must be a JSON object',
-            debugErrors
-          ),
-          400
-        );
-      }
-      body = parsed as CreateResponse;
-    } catch {
+      body = assertJsonObject(parsed) as unknown as CreateResponse;
+    } catch (err) {
       errorCount++;
       return c.json(
         buildErrorResponse(
           'INVALID_REQUEST',
-          'Invalid JSON in request body',
+          err instanceof Error ? err.message : 'Invalid JSON in request body',
           debugErrors
         ),
         400
@@ -519,7 +474,8 @@ export function createFoundryHarness(
         span.end();
         errorCount++;
         const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes('not found')) {
+        const status = routerErrorToStatus(err);
+        if (status === 404) {
           return c.json(buildErrorResponse('NOT_FOUND', msg, debugErrors), 404);
         }
         return c.json(
@@ -598,24 +554,11 @@ export function createFoundryHarness(
         process.exit(1);
       }
     }
-    return new Promise((resolve) => {
-      server = serve({ fetch: app.fetch, port }, () => {
-        resolve();
-      });
-      // Disable server timeouts for long-running SSE streams.
-      const srv = server as unknown as Record<string, unknown>;
-      srv['requestTimeout'] = 0;
-      srv['headersTimeout'] = 0;
-      srv['keepAliveTimeout'] = 0;
-      srv['timeout'] = 0;
-    });
+    await lifecycle.listen(port);
   }
 
   async function close(): Promise<void> {
-    if (server !== undefined) {
-      server.close();
-      server = undefined;
-    }
+    await lifecycle.close();
     await shutdownTelemetry();
   }
 
