@@ -7,6 +7,13 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.6] - 2026-04-10
+
+### Changed
+
+- Harness lifecycle helpers now sourced from shared `@rcrsr/rill-agent-hono-kit` package
+- `@rcrsr/rill-agent` dependency bumped to `~0.18.6`
+
 ## [0.18.5] - 2026-04-09
 
 ### Added

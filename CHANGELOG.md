@@ -7,9 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.6] - 2026-04-10
+
 ### Changed
 
 - HTTP server hosting is now a separate optional package; core agent framework no longer bundles HTTP transport code
+- `@rcrsr/rill-agent-http` extracted from core with `httpHarness` export and its own build pipeline
+- `@rcrsr/rill-agent-hono-kit` shared package added for Hono helpers reused by `http` and `foundry`
+- `routerErrorToStatus` return type narrowed to `404 | 500`
+- Packages are now versioned independently; the synchronized-version rule is dropped
+- Release flow simplified: bump affected package versions, update changelogs, push a `v*` tag (CI publishes)
+
+### Added
+
+- `validateParams` and `routerErrorToStatus` utilities exported from `@rcrsr/rill-agent`
+
+### Removed
+
+- `scripts/sync-versions.sh`, `scripts/check-versions.sh`, `scripts/release.sh`
+- `sync-versions` and `check-versions` npm scripts from root `package.json`
+- `Verify version consistency` step from the release GitHub Actions workflow
 
 ## [0.18.5] - 2026-04-09
 

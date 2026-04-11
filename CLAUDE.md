@@ -4,14 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Monorepo Structure
 
-pnpm workspace monorepo containing the agent framework for the [rill](https://github.com/rcrsr/rill) language runtime. All 4 packages under `packages/agent/` share a synchronized version.
+pnpm workspace monorepo containing the agent framework for the [rill](https://github.com/rcrsr/rill) language runtime. Four published packages under `packages/agent/` plus one private shared package under `packages/shared/`. Packages are versioned independently.
 
 | Package | NPM Name | Role |
 |---------|----------|------|
-| `agent/core` | `@rcrsr/rill-agent` | Manifest loader, `AgentRouter` |
+| `agent/core` | `@rcrsr/rill-agent` | Manifest loader, `AgentRouter`, `validateParams`, `routerErrorToStatus` |
 | `agent/http` | `@rcrsr/rill-agent-http` | Hono HTTP harness (`httpHarness`) |
 | `agent/foundry` | `@rcrsr/rill-agent-foundry` | Foundry Responses API harness with SSE, Azure Conversations, OTEL |
 | `agent/ahi` | `@rcrsr/rill-agent-ext-ahi` | Agent Host Interface extension for agent-to-agent invocation |
+| `shared/hono-kit` | `@rcrsr/rill-agent-hono-kit` *(private)* | Shared Hono lifecycle and JSON assertion helpers used by `http` and `foundry` |
 
 ## Commands
 
@@ -42,12 +43,14 @@ cd packages/agent/core && npx vitest run tests/router.test.ts
 ### Dependency Graph
 
 ```
-core ← http (dep)
-core ← foundry (dep)
+core  ← http     (dep)
+core  ← foundry  (dep)
+hono-kit ← http     (dep)
+hono-kit ← foundry  (dep)
 ahi
 ```
 
-`core` (`@rcrsr/rill-agent`) is self-contained and has no runtime dependency on `hono`. `http` (`@rcrsr/rill-agent-http`) and `foundry` (`@rcrsr/rill-agent-foundry`) each list `@rcrsr/rill-agent` under `dependencies` and carry the `hono` / `@hono/node-server` runtime dependencies. `ahi` uses `@rcrsr/rill` as a peer dependency and has no other workspace dependencies. `foundry` does not import `@rcrsr/rill` directly.
+`core` (`@rcrsr/rill-agent`) is transport-agnostic and has no runtime dependency on `hono`. `http` (`@rcrsr/rill-agent-http`) and `foundry` (`@rcrsr/rill-agent-foundry`) each depend on `@rcrsr/rill-agent` and the private `@rcrsr/rill-agent-hono-kit`, and they carry the `hono` / `@hono/node-server` runtime dependencies. `ahi` uses `@rcrsr/rill` as a peer dependency and has no other workspace dependencies. `foundry` does not import `@rcrsr/rill` directly.
 
 ### Runtime Pipeline
 
@@ -82,19 +85,11 @@ The `ahi` extension registers `ahi::<agentName>` functions in the rill runtime c
 
 ## Versioning and Release
 
-All packages share an identical version number and use semver with two rules:
+Packages are versioned independently. Bump only the packages affected by a change.
 
-1. **Minor version compatibility**: `@rcrsr/rill` and `@rcrsr/rill-ext-*` dependencies match by minor version. When rill bumps to `0.10.0`, agent packages bump to `0.10.0` and update rill and rill-ext deps to `^0.10.0`.
-2. **Patch version per change**: bump the patch version for each publish, regardless of change size.
+**Minor version compatibility rule**: `@rcrsr/rill` and `@rcrsr/rill-ext-*` dependencies match by minor version. When rill bumps to `0.10.0`, packages that depend on rill bump to `0.10.0` and update those deps to `^0.10.0`.
 
-```bash
-# Update version in root package.json, then:
-pnpm sync-versions     # propagate to all packages
-pnpm check-versions    # verify consistency
-./scripts/release.sh   # validate, tag, push (CI publishes)
-```
-
-CI triggers on `v*` tags and publishes all non-private packages to npm.
+To release: bump affected package versions, update changelogs, commit, then push a `v<version>` tag. CI (`.github/workflows/release.yml`) triggers on `v*` tags and publishes all non-private packages to npm (skipping versions already published).
 
 ## Documentation
 

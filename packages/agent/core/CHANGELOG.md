@@ -7,6 +7,22 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.6] - 2026-04-10
+
+### Added
+
+- `routerErrorToStatus(err)` exported from package root, returns `404 | 500`
+- `validateParams(params, schema)` exported from package root
+
+### Changed
+
+- HTTP harness extracted into separate package `@rcrsr/rill-agent-http`; core no longer ships HTTP transport code
+
+### Removed
+
+- `hono` and `@hono/node-server` runtime dependencies (core is now transport-agnostic)
+- `/http` subpath export
+
 ## [0.18.5] - 2026-04-09
 
 ### Added
