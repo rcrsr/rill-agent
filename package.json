@@ -1,6 +1,6 @@
 {
   "name": "rill-agent",
-  "version": "0.18.5",
+  "version": "0.18.6",
   "description": "rill agent framework — harness, bundle, proxy, and tooling",
   "private": true,
   "packageManager": "pnpm@10.29.2",
@@ -18,9 +18,7 @@
     "test": "pnpm -r run test",
     "typecheck": "pnpm -r run typecheck",
     "lint": "pnpm -r run lint",
-    "check": "pnpm -r run check",
-    "sync-versions": "bash scripts/sync-versions.sh",
-    "check-versions": "bash scripts/check-versions.sh"
+    "check": "pnpm -r run check"
   },
   "author": "Andre Bremer",
   "license": "MIT",
