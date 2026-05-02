@@ -7,8 +7,11 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-05-02
+
 ### Changed
 
+- `@rcrsr/rill-agent` dependency bumped to `~0.19.0`
 - `@hono/node-server` bumped from `^1.19.12` to `^2.0.1`; `hono` to `^4.12.16`
 
 ## [0.18.6] - 2026-04-10

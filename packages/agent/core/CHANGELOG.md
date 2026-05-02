@@ -7,6 +7,12 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-05-02
+
+### Changed
+
+- Version bumped to align with framework-wide 0.19.0 release (no source changes)
+
 ## [0.18.6] - 2026-04-10
 
 ### Added

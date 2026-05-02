@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-05-02
+
 ### Changed
 
+- All published packages aligned at `0.19.0`: `@rcrsr/rill-agent`, `@rcrsr/rill-agent-ext-ahi`, `@rcrsr/rill-agent-foundry`, `@rcrsr/rill-agent-http` (private `@rcrsr/rill-agent-hono-kit` also bumped)
 - `@rcrsr/rill` peer dependency bumped from `~0.18.4` to `~0.19.2` (rill 0.19 refresh)
 - `@hono/node-server` bumped to `^2.0.1` across `http`, `foundry`, and `hono-kit`
 - `hono` bumped to `^4.12.16`
