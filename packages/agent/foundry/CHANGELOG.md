@@ -7,6 +7,12 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `@hono/node-server` bumped from `^1.19.12` to `^2.0.1`; `hono` to `^4.12.16`
+- `@opentelemetry/sdk-node` bumped to `^0.216.0`, `@opentelemetry/exporter-trace-otlp-http` to `^0.216.0`, `@opentelemetry/resources` to `^2.7.1`
+- Telemetry initialization migrated from `new Resource(...)` to `resourceFromAttributes(...)` for the OpenTelemetry 2.x resources API
+
 ## [0.18.6] - 2026-04-10
 
 ### Changed

@@ -7,6 +7,16 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `@rcrsr/rill` peer dependency bumped from `~0.18.4` to `~0.19.2`
+
+### Added
+
+- Extension factory now accepts `ExtensionFactoryCtx` and registers error codes `RILL-R027` through `RILL-R034` (validation, transport, downstream, timeout, capacity, lifecycle)
+- Dispose handler wired to `ctx.signal` abort event so the runtime can tear down the extension on shutdown
+- Manifest test suite (`tests/manifest.test.ts`) covering factory wiring, error code registration, signal-driven dispose, and double-teardown safety
+
 ## [0.18.5] - 2026-04-09
 
 ### Added
