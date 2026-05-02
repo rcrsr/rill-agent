@@ -5,8 +5,13 @@
  * Static URL mode: agents are configured with explicit endpoint URLs.
  */
 
-import type { ExtensionConfigSchema, ExtensionManifest } from '@rcrsr/rill';
-import type { RillValue, ApplicationCallable } from '@rcrsr/rill';
+import type {
+  ApplicationCallable,
+  ExtensionConfigSchema,
+  ExtensionFactoryCtx,
+  ExtensionManifest,
+  RillValue,
+} from '@rcrsr/rill';
 import { isDict, RuntimeError, callable } from '@rcrsr/rill';
 
 // ============================================================
@@ -452,9 +457,27 @@ export function createInProcessFunction(
  * callable dict as the mounted RillValue.
  */
 export const extensionManifest: ExtensionManifest = {
-  factory: async (config: unknown) => {
+  factory: async (config: unknown, ctx: ExtensionFactoryCtx) => {
+    ctx.registerErrorCode('RILL-R027', 'validation');
+    ctx.registerErrorCode('RILL-R028', 'transport');
+    ctx.registerErrorCode('RILL-R029', 'downstream');
+    ctx.registerErrorCode('RILL-R030', 'timeout');
+    ctx.registerErrorCode('RILL-R031', 'transport');
+    ctx.registerErrorCode('RILL-R032', 'capacity');
+    ctx.registerErrorCode('RILL-R033', 'lifecycle');
+    ctx.registerErrorCode('RILL-R034', 'downstream');
+
     const result = createAhiExtension(config as AhiExtensionConfig);
     const { dispose, ...value } = result;
+
+    if (dispose !== undefined) {
+      if (ctx.signal.aborted) {
+        dispose();
+      } else {
+        ctx.signal.addEventListener('abort', dispose, { once: true });
+      }
+    }
+
     return {
       value: value as unknown as RillValue,
       ...(dispose !== undefined ? { dispose } : {}),

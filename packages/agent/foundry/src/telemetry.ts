@@ -1,7 +1,7 @@
 import { trace, type Tracer } from '@opentelemetry/api';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { Resource } from '@opentelemetry/resources';
+import { resourceFromAttributes } from '@opentelemetry/resources';
 
 // ============================================================
 // TYPES
@@ -30,7 +30,7 @@ export function initTelemetry(options?: TelemetryOptions): void {
   if (!process.env['OTEL_EXPORTER_OTLP_ENDPOINT']) return;
   if (sdk !== undefined) return;
 
-  const resource = new Resource({
+  const resource = resourceFromAttributes({
     'service.name': options?.agentName ?? 'rill-foundry-harness',
     'service.version': options?.agentVersion ?? '0.0.0',
   });
