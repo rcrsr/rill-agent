@@ -471,7 +471,11 @@ export const extensionManifest: ExtensionManifest = {
     const { dispose, ...value } = result;
 
     if (dispose !== undefined) {
-      ctx.signal.addEventListener('abort', dispose, { once: true });
+      if (ctx.signal.aborted) {
+        dispose();
+      } else {
+        ctx.signal.addEventListener('abort', dispose, { once: true });
+      }
     }
 
     return {

@@ -205,14 +205,31 @@ describe('extensionManifest', () => {
     const factoryResult = await extensionManifest.factory(VALID_CONFIG, ctx);
 
     controller.abort();
-    await expect(async () => factoryResult.dispose?.()).not.toThrow();
+    // dispose is synchronous; if it throws the test fails
+    factoryResult.dispose?.();
   });
 
   it('dispose then abort does not throw', async () => {
     const { ctx, controller } = makeCtx();
     const factoryResult = await extensionManifest.factory(VALID_CONFIG, ctx);
 
-    await factoryResult.dispose?.();
+    factoryResult.dispose?.();
     expect(() => controller.abort()).not.toThrow();
+  });
+
+  // ============================================================
+  // Pre-aborted signal: factory disposes immediately
+  // ============================================================
+
+  it('disposes immediately when ctx.signal is already aborted at factory time', async () => {
+    const { ctx, controller } = makeCtx();
+    controller.abort();
+    const factoryResult = await extensionManifest.factory(VALID_CONFIG, ctx);
+
+    const thrown = await callFn(factoryResult.value, 'svc').catch(
+      (e: unknown) => e
+    );
+    expect(thrown).toBeInstanceOf(RuntimeError);
+    expect((thrown as RuntimeError).errorId).toBe('RILL-R033');
   });
 });

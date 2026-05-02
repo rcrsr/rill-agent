@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `@opentelemetry/sdk-node` bumped to `^0.216.0`, `@opentelemetry/exporter-trace-otlp-http` to `^0.216.0`, `@opentelemetry/resources` to `^2.7.1`
 - Foundry telemetry switched from `new Resource(...)` to `resourceFromAttributes(...)` for the OpenTelemetry 2.x API
 - `pnpm` updated to `10.33.2`
+- `engines.node` raised from `>=22.0.0` to `>=22.16.0` to align with `@rcrsr/rill@0.19.2` minimum
 - TypeScript `6.0.2` to `6.0.3`, vitest `4.1.2` to `4.1.5`, eslint `10.2.0` to `10.2.1`, prettier `3.8.1` to `3.8.3`, `@typescript-eslint/*` to `8.59.1`, `@types/node` to `25.6.0`, globals to `17.5.0`
 
 ### Added
