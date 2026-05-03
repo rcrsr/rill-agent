@@ -7,6 +7,8 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-05-02
+
 ### Changed
 
 - `@rcrsr/rill` peer dependency bumped from `~0.18.4` to `~0.19.2`
