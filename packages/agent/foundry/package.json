@@ -5,6 +5,9 @@
   "license": "MIT",
   "author": "Andre Bremer",
   "type": "module",
+  "rill": {
+    "role": "harness"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "keywords": [

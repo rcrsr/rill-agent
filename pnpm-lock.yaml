@@ -54,8 +54,8 @@ importers:
   packages/agent/ahi:
     devDependencies:
       '@rcrsr/rill':
-        specifier: ~0.19.2
-        version: 0.19.2
+        specifier: ~0.20.0
+        version: 0.20.0
 
   packages/agent/chat:
     dependencies:
@@ -635,8 +635,8 @@ packages:
   '@protobufjs/utf8@1.1.0':
     resolution: {integrity: sha512-Vvn3zZrhQZkkBE8LSuW3em98c0FwgO4nxzv6OdSxPKJIEKY2bGbHn+mhGIPerzI4twdxaP8/0+06HBpwf345Lw==}
 
-  '@rcrsr/rill@0.19.2':
-    resolution: {integrity: sha512-DX0mLHxpmuh55lGxvkohAkQahbzl1lPbSYt02MUatGYuLkvNnKTqMgZ3YzGZC2/fwISrOzg33806FOfX5KV7Xw==}
+  '@rcrsr/rill@0.20.0':
+    resolution: {integrity: sha512-/OnCLODUNnATQNOjqgBIxNuTqzTL75P7Db2mLkZgptFGqsi5GMwBaZ0kB3lpJaVdIO6KRjnay253QgWJ/1LXHA==}
     engines: {node: '>=22.16.0'}
 
   '@rollup/rollup-android-arm-eabi@4.60.1':
@@ -2187,7 +2187,7 @@ snapshots:
 
   '@protobufjs/utf8@1.1.0': {}
 
-  '@rcrsr/rill@0.19.2': {}
+  '@rcrsr/rill@0.20.0': {}
 
   '@rollup/rollup-android-arm-eabi@4.60.1':
     optional: true

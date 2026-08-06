@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { loadManifest } from '../src/manifest.js';
+import { assembleManifest, loadManifest } from '../src/manifest.js';
 import { createRouter } from '../src/router.js';
 
 const PKG_ROOT = path.dirname(
@@ -106,6 +106,80 @@ describe('loadManifest single agent', () => {
     await expect(loadManifest(dir)).rejects.toThrow(
       'No manifest.json or handler.js'
     );
+  });
+});
+
+// ============================================================
+// ASSEMBLE MANIFEST (bundle harness entry)
+// ============================================================
+
+describe('assembleManifest', () => {
+  it('builds a manifest keyed by entry name from compiled dirs', async () => {
+    const rootA = await makeAgentDir('echo');
+    const rootB = await makeAgentDir('greet');
+    const dirA = path.join(rootA, 'echo');
+    const dirB = path.join(rootB, 'greet');
+
+    const manifest = await assembleManifest([
+      { name: 'alpha', dir: dirA },
+      { name: 'beta', dir: dirB },
+    ]);
+
+    expect(manifest.agents.size).toBe(2);
+    expect(manifest.agents.has('alpha')).toBe(true);
+    expect(manifest.agents.has('beta')).toBe(true);
+    // First entry is the default when none is named.
+    expect(manifest.defaultAgent).toBe('alpha');
+  });
+
+  it('honors an explicit default agent', async () => {
+    const root = await makeAgentDir('echo');
+    const dir = path.join(root, 'echo');
+
+    const manifest = await assembleManifest(
+      [
+        { name: 'alpha', dir },
+        { name: 'beta', dir },
+      ],
+      'beta'
+    );
+
+    expect(manifest.defaultAgent).toBe('beta');
+  });
+
+  it('throws when given no entries', async () => {
+    await expect(assembleManifest([])).rejects.toThrow(
+      'at least one package entry'
+    );
+  });
+
+  it('throws when a dir has no handler.js', async () => {
+    const dir = await makeTmpDir();
+
+    await expect(assembleManifest([{ name: 'alpha', dir }])).rejects.toThrow(
+      'handler.js not found'
+    );
+  });
+
+  it('throws when the named default is not among entries', async () => {
+    const root = await makeAgentDir('echo');
+    const dir = path.join(root, 'echo');
+
+    await expect(
+      assembleManifest([{ name: 'alpha', dir }], 'missing')
+    ).rejects.toThrow('not found among package entries');
+  });
+
+  it('produces a manifest a router can run', async () => {
+    const root = await makeAgentDir('echo', 'from-assembled');
+    const dir = path.join(root, 'echo');
+
+    const manifest = await assembleManifest([{ name: 'alpha', dir }]);
+    const router = await createRouter(manifest);
+
+    expect(router.agents()).toContain('alpha');
+    const res = await router.run('alpha', { params: {} });
+    expect(res).toMatchObject({ state: 'completed', result: 'from-assembled' });
   });
 });
 

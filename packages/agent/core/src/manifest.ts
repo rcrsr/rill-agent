@@ -38,6 +38,42 @@ export async function loadManifest(dir: string): Promise<AgentManifest> {
   throw new Error(`No manifest.json or handler.js found in ${absDir}`);
 }
 
+/**
+ * Assemble a manifest from explicit (name, dir) entries, importing handler.js
+ * from each directory. Used by rill-CLI bundle harness adapters, which receive
+ * each package's compiled output path (keyed by mount) rather than a single
+ * manifest directory. Agent names are the caller-supplied entry names (mounts).
+ * The first entry is the default agent unless `defaultAgent` names another.
+ */
+export async function assembleManifest(
+  entries: ReadonlyArray<{ readonly name: string; readonly dir: string }>,
+  defaultAgent?: string
+): Promise<AgentManifest> {
+  const first = entries[0];
+  if (first === undefined) {
+    throw new Error('assembleManifest requires at least one package entry');
+  }
+
+  const agents = new Map<string, AgentHandler>();
+  for (const { name, dir } of entries) {
+    const handlerPath = path.join(path.resolve(dir), 'handler.js');
+    if (!existsSync(handlerPath)) {
+      throw new Error(
+        `handler.js not found for agent "${name}" at ${handlerPath}`
+      );
+    }
+    agents.set(name, await importHandler(handlerPath));
+  }
+
+  if (defaultAgent !== undefined && !agents.has(defaultAgent)) {
+    throw new Error(
+      `Default agent "${defaultAgent}" not found among package entries`
+    );
+  }
+
+  return { defaultAgent: defaultAgent ?? first.name, agents };
+}
+
 async function loadMultiAgent(
   dir: string,
   manifestPath: string
