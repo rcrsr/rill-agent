@@ -42,7 +42,10 @@ describe('POST /agents/:name/chat — valid agent streams chunks', () => {
     });
     const harness = createChatHarness(router);
 
-    const res = await harness.app.request('/agents/alpha/chat', VALID_BODY);
+    const res = await harness.app.request(
+      '/agents/alpha/chat',
+      jsonPost({ messages: [{ role: 'user', content: 'hello' }], stream: true })
+    );
 
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('text/event-stream');
@@ -176,7 +179,10 @@ describe('POST /chat — invokes default agent and streams', () => {
     });
     const harness = createChatHarness(router);
 
-    const res = await harness.app.request('/chat', VALID_BODY);
+    const res = await harness.app.request(
+      '/chat',
+      jsonPost({ messages: [{ role: 'user', content: 'hello' }], stream: true })
+    );
 
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('text/event-stream');

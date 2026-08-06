@@ -7,7 +7,10 @@ import {
 import type { AgentHandler, AgentRouter } from '@rcrsr/rill-agent';
 import { ChatSignatureError } from './errors.js';
 import { inspectChatHandler } from './eligibility.js';
-import { createChatStreamResponse } from './stream.js';
+import {
+  createChatCompletionResponse,
+  createChatStreamResponse,
+} from './stream.js';
 import { validateMessages } from './validate.js';
 import type {
   AhiResolver,
@@ -262,6 +265,54 @@ export function createChatHarness(
   }
 
   // ============================================================
+  // BUFFERED RESPONSE HELPER
+  // ============================================================
+
+  /**
+   * Non-streaming counterpart to streamChatResponse. Mirrors its counter
+   * accounting (activeConnections/requests/errors) but has no TransformStream
+   * pump: the source is fully buffered by createChatCompletionResponse before
+   * a single JSON response is returned.
+   */
+  async function bufferedChatResponse(
+    source: AsyncIterable<ChatChunk> | ReadableStream<ChatChunk>,
+    resolvedAgent: string
+  ): Promise<Response> {
+    activeConnections++;
+    try {
+      return await createChatCompletionResponse(source, {
+        model: resolvedAgent,
+      });
+    } catch (err) {
+      errors++;
+      const msg = err instanceof Error ? err.message : String(err);
+      return new Response(JSON.stringify({ error: { message: msg } }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } finally {
+      activeConnections--;
+      requests++;
+    }
+  }
+
+  /**
+   * Dispatches to the streaming or buffered response builder based on the
+   * caller's `stream` field. Only `stream === true` selects SSE; any other
+   * value (including missing/non-boolean) selects the buffered JSON path.
+   */
+  function dispatchChatResponse(
+    source: AsyncIterable<ChatChunk> | ReadableStream<ChatChunk>,
+    resolvedAgent: string,
+    abortController: AbortController,
+    wantsStream: boolean
+  ): Promise<Response> {
+    return wantsStream
+      ? streamChatResponse(source, resolvedAgent, abortController)
+      : bufferedChatResponse(source, resolvedAgent);
+  }
+
+  // ============================================================
   // CHAT REQUEST HANDLER
   // ============================================================
 
@@ -353,7 +404,13 @@ export function createChatHarness(
       abortController.signal
     );
 
-    return streamChatResponse(source, resolvedAgent, abortController);
+    const wantsStream = chatReq.stream === true;
+    return dispatchChatResponse(
+      source,
+      resolvedAgent,
+      abortController,
+      wantsStream
+    );
   }
 
   // ============================================================
@@ -443,7 +500,13 @@ export function createChatHarness(
         abortController.signal
       );
 
-      return streamChatResponse(source, resolvedAgent, abortController);
+      const wantsStream = body['stream'] === true;
+      return dispatchChatResponse(
+        source,
+        resolvedAgent,
+        abortController,
+        wantsStream
+      );
     });
   }
 

@@ -302,7 +302,7 @@ describe('createChatHarness — BC: single agent as default and only chat-eligib
 
     const res = await harness.app.request(
       '/agents/solo/chat',
-      jsonPost({ messages: VALID_MESSAGES })
+      jsonPost({ messages: VALID_MESSAGES, stream: true })
     );
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('text/event-stream');
@@ -317,7 +317,7 @@ describe('createChatHarness — BC: single agent as default and only chat-eligib
 
     const res = await harness.app.request(
       '/chat',
-      jsonPost({ messages: VALID_MESSAGES })
+      jsonPost({ messages: VALID_MESSAGES, stream: true })
     );
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('text/event-stream');
@@ -332,7 +332,7 @@ describe('createChatHarness — BC: single agent as default and only chat-eligib
 
     const res = await harness.app.request(
       '/v1/chat/completions',
-      jsonPost({ messages: VALID_MESSAGES, model: 'solo' })
+      jsonPost({ messages: VALID_MESSAGES, model: 'solo', stream: true })
     );
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('text/event-stream');

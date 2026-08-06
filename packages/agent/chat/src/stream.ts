@@ -1,4 +1,4 @@
-import type { ChatChunk } from './types.js';
+import type { ChatChunk, UsageMetadata } from './types.js';
 
 // ============================================================
 // TYPES
@@ -166,6 +166,135 @@ export async function createChatStreamResponse(
   });
 
   return new Response(body, { status: 200, headers: sseHeaders() });
+}
+
+// ============================================================
+// JSON RESPONSE BUILDER
+// ============================================================
+
+export interface ChatCompletionOptions {
+  readonly model: string;
+}
+
+/**
+ * Checks a chunk for an in-band error signal (finish_reason:'error' or an
+ * `error` field) and throws if found, so the caller maps it to HTTP 500.
+ */
+function checkChunkForError(chunk: ChatChunk): void {
+  const finishReason = chunk.choices[0]?.finish_reason;
+  if (finishReason === 'error' || chunk.error !== undefined) {
+    throw new Error(chunk.error?.message ?? 'stream error');
+  }
+}
+
+/**
+ * Builds a buffered, non-streaming `Response` from a ChatChunk source.
+ *
+ * Mirrors createChatStreamResponse's peek-first-chunk approach: a
+ * pre-first-chunk throw propagates synchronously so the caller maps it to
+ * HTTP 500. All chunks (including the peeked first one) are then buffered
+ * and assembled into a single chat.completion JSON object.
+ */
+export async function createChatCompletionResponse(
+  source: AsyncIterable<ChatChunk> | ReadableStream<ChatChunk>,
+  options: ChatCompletionOptions
+): Promise<Response> {
+  const iterable = toAsyncIterable(source);
+  const iter = iterable[Symbol.asyncIterator]();
+
+  // Stable defaults computed once per response.
+  const id = `chatcmpl-${crypto.randomUUID()}`;
+  const created = Math.floor(Date.now() / 1000);
+
+  // Phase 1: peek the first chunk. Throws if the source errors before
+  // producing any output — the caller maps this to HTTP 500.
+  const firstResult = await iter.next();
+
+  let content = '';
+  let lastFinishReason: 'stop' | 'length' | null | undefined;
+  let usage: UsageMetadata | undefined;
+
+  if (firstResult.done !== true) {
+    checkChunkForError(firstResult.value);
+    ({ content, lastFinishReason, usage } = accumulateChunk(
+      firstResult.value,
+      content,
+      usage
+    ));
+
+    // Phase 2: buffer remaining chunks.
+    let result = await iter.next();
+    while (result.done !== true) {
+      checkChunkForError(result.value);
+      ({ content, lastFinishReason, usage } = accumulateChunk(
+        result.value,
+        content,
+        usage
+      ));
+      result = await iter.next();
+    }
+  }
+
+  // Per spec, finish_reason reflects only the true last chunk: its value
+  // when defined and non-null, otherwise 'stop'. Earlier chunks' values are
+  // not carried forward.
+  const finishReason: 'stop' | 'length' =
+    lastFinishReason !== undefined && lastFinishReason !== null
+      ? lastFinishReason
+      : 'stop';
+
+  const body = {
+    id,
+    object: 'chat.completion' as const,
+    created,
+    model: options.model,
+    choices: [
+      {
+        index: 0,
+        message: { role: 'assistant' as const, content },
+        finish_reason: finishReason,
+      },
+    ],
+    ...(usage !== undefined ? { usage } : {}),
+  };
+
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+/**
+ * Folds a single chunk into the running content/usage accumulators used by
+ * createChatCompletionResponse, and records this chunk's raw finish_reason
+ * (not folded — the caller resolves the final value from the true last
+ * chunk only, per spec). checkChunkForError has already thrown for any
+ * chunk whose finish_reason is 'error' before this runs, so 'error' is
+ * unreachable here.
+ */
+function accumulateChunk(
+  chunk: ChatChunk,
+  content: string,
+  usage: UsageMetadata | undefined
+): {
+  content: string;
+  lastFinishReason: 'stop' | 'length' | null | undefined;
+  usage: UsageMetadata | undefined;
+} {
+  const delta = chunk.choices[0]?.delta.content;
+  const nextContent = delta !== undefined ? content + delta : content;
+
+  const nextUsage = chunk.usage !== undefined ? chunk.usage : usage;
+
+  return {
+    content: nextContent,
+    lastFinishReason: chunk.choices[0]?.finish_reason as
+      | 'stop'
+      | 'length'
+      | null
+      | undefined,
+    usage: nextUsage,
+  };
 }
 
 // ============================================================

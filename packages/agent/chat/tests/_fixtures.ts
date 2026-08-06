@@ -9,6 +9,7 @@ import type {
   RunResponse,
 } from '@rcrsr/rill-agent';
 import { createRouter } from '@rcrsr/rill-agent';
+import { createChatHarness } from '../src/harness.js';
 import type { ChatChunk } from '../src/types.js';
 
 // ============================================================
@@ -22,6 +23,19 @@ import type { ChatChunk } from '../src/types.js';
 function makeChunk(content: string): ChatChunk {
   return {
     choices: [{ delta: { role: 'assistant', content }, finish_reason: 'stop' }],
+  };
+}
+
+/**
+ * OpenAI-shaped chat chunk representing an in-band stream error:
+ * finish_reason 'error' paired with an error.message. Exercises the
+ * buffered JSON path's checkChunkForError branch as well as the SSE path's
+ * post-first-chunk error frame.
+ */
+export function makeErrorChunk(message: string): ChatChunk {
+  return {
+    choices: [{ index: 0, delta: {}, finish_reason: 'error' }],
+    error: { message },
   };
 }
 
@@ -181,6 +195,52 @@ export function jsonPost(body: unknown): {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   };
+}
+
+/**
+ * Default request body for chat routes: a single user message plus any
+ * overrides (e.g. `{ stream: true }`, `{ stream: false }`, or omitted
+ * entirely to exercise the harness's default dispatch branch).
+ */
+export function defaultBody(overrides: Record<string, unknown> = {}): {
+  method: string;
+  headers: Record<string, string>;
+  body: string;
+} {
+  return jsonPost({
+    model: 't',
+    messages: [{ role: 'user', content: 'hello' }],
+    ...overrides,
+  });
+}
+
+/**
+ * Build a router whose default agent emits the given chunks via onChunk
+ * during execute(). Most tests only care about the chunk sequence.
+ */
+export async function harnessFor(opts: {
+  chunks?: ChatChunk[];
+  throwBefore?: unknown;
+  throwAfter?: { chunks: ChatChunk[]; error: unknown };
+  onInvoke?: (
+    request: Parameters<NonNullable<AgentHandler['execute']>>[0],
+    context: Parameters<NonNullable<AgentHandler['execute']>>[1]
+  ) => void;
+}): Promise<ReturnType<typeof createChatHarness>> {
+  const handler = makeChatHandler({
+    name: 't',
+    ...(opts.chunks !== undefined ? { chunks: opts.chunks } : {}),
+    ...(opts.throwBefore !== undefined
+      ? { throwBefore: opts.throwBefore }
+      : {}),
+    ...(opts.throwAfter !== undefined ? { throwAfter: opts.throwAfter } : {}),
+    ...(opts.onInvoke !== undefined ? { onInvoke: opts.onInvoke } : {}),
+  });
+  const router = await makeRouter({
+    agents: new Map<string, AgentHandler>([['t', handler]]),
+    defaultAgent: 't',
+  });
+  return createChatHarness(router);
 }
 
 /**

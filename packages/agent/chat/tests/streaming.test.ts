@@ -1,11 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import type { AgentHandler } from '@rcrsr/rill-agent';
-import { createChatHarness } from '../src/harness.js';
 import type { ChatChunk } from '../src/types.js';
 import {
+  defaultBody,
+  harnessFor,
   jsonPost,
-  makeChatHandler,
-  makeRouter,
   parseSseFrames,
   readBody,
 } from './_fixtures.js';
@@ -35,47 +33,6 @@ function parseDataLine(frame: string): string {
   return m && m[1] !== undefined ? m[1] : '';
 }
 
-function defaultBody(overrides: Record<string, unknown> = {}): {
-  method: string;
-  headers: Record<string, string>;
-  body: string;
-} {
-  return jsonPost({
-    model: 't',
-    messages: [{ role: 'user', content: 'hello' }],
-    ...overrides,
-  });
-}
-
-/**
- * Build a router whose default agent emits the given chunks via onChunk
- * during execute(). Most tests only care about the chunk sequence.
- */
-async function harnessFor(opts: {
-  chunks?: ChatChunk[];
-  throwBefore?: unknown;
-  throwAfter?: { chunks: ChatChunk[]; error: unknown };
-  onInvoke?: (
-    request: Parameters<NonNullable<AgentHandler['execute']>>[0],
-    context: Parameters<NonNullable<AgentHandler['execute']>>[1]
-  ) => void;
-}): Promise<ReturnType<typeof createChatHarness>> {
-  const handler = makeChatHandler({
-    name: 't',
-    ...(opts.chunks !== undefined ? { chunks: opts.chunks } : {}),
-    ...(opts.throwBefore !== undefined
-      ? { throwBefore: opts.throwBefore }
-      : {}),
-    ...(opts.throwAfter !== undefined ? { throwAfter: opts.throwAfter } : {}),
-    ...(opts.onInvoke !== undefined ? { onInvoke: opts.onInvoke } : {}),
-  });
-  const router = await makeRouter({
-    agents: new Map<string, AgentHandler>([['t', handler]]),
-    defaultAgent: 't',
-  });
-  return createChatHarness(router);
-}
-
 // ============================================================
 // SSE WIRE FORMAT — EACH CHUNK AS SEPARATE FRAME
 // ============================================================
@@ -88,7 +45,7 @@ describe('SSE wire format — each chunk as separate frame', () => {
 
     const res = await harness.app.request(
       '/v1/chat/completions',
-      defaultBody()
+      defaultBody({ stream: true })
     );
 
     expect(res.status).toBe(200);
@@ -117,7 +74,7 @@ describe('SSE wire format — each chunk as separate frame', () => {
 
     const res = await harness.app.request(
       '/v1/chat/completions',
-      defaultBody()
+      defaultBody({ stream: true })
     );
     const frames = await readSse(res);
     const chunk = JSON.parse(parseDataLine(frames[0] ?? '')) as ChatChunk;
@@ -146,7 +103,7 @@ describe('SSE wire format — each chunk as separate frame', () => {
 
     const res = await harness.app.request(
       '/v1/chat/completions',
-      defaultBody()
+      defaultBody({ stream: true })
     );
     const frames = await readSse(res);
     const chunk = JSON.parse(parseDataLine(frames[0] ?? '')) as ChatChunk;
@@ -169,7 +126,7 @@ describe('pre-first-chunk handler error', () => {
 
     const res = await harness.app.request(
       '/v1/chat/completions',
-      defaultBody()
+      defaultBody({ stream: true })
     );
 
     expect(res.status).toBe(500);
@@ -190,7 +147,7 @@ describe('pre-first-chunk handler error', () => {
 
     const res = await harness.app.request(
       '/v1/chat/completions',
-      defaultBody()
+      defaultBody({ stream: true })
     );
 
     expect(res.status).toBe(500);
@@ -214,7 +171,7 @@ describe('post-first-chunk handler error', () => {
 
     const res = await harness.app.request(
       '/v1/chat/completions',
-      defaultBody()
+      defaultBody({ stream: true })
     );
 
     expect(res.status).toBe(200);
@@ -253,7 +210,7 @@ describe('request-to-first-chunk overhead', () => {
     const start = performance.now();
     const res = await harness.app.request(
       '/v1/chat/completions',
-      defaultBody()
+      defaultBody({ stream: true })
     );
     expect(res.status).toBe(200);
 
@@ -290,7 +247,7 @@ describe('concurrent connections — no harness-imposed cap', () => {
     });
 
     const requests = Array.from({ length: CONCURRENCY }, () =>
-      harness.app.request('/v1/chat/completions', defaultBody())
+      harness.app.request('/v1/chat/completions', defaultBody({ stream: true }))
     );
     const responses = await Promise.all(requests);
     for (const res of responses) expect(res.status).toBe(200);
@@ -319,7 +276,7 @@ describe('throughput stability across message array sizes', () => {
     const start = performance.now();
     const res = await harness.app.request(
       '/v1/chat/completions',
-      jsonPost({ model: 't', messages })
+      jsonPost({ model: 't', messages, stream: true })
     );
     expect(res.status).toBe(200);
 
@@ -376,7 +333,7 @@ describe('messages forwarded unchanged to handler', () => {
 
     const res = await harness.app.request(
       '/v1/chat/completions',
-      jsonPost({ model: 't', messages: inputMessages })
+      jsonPost({ model: 't', messages: inputMessages, stream: true })
     );
     await readSse(res);
 
@@ -401,7 +358,7 @@ describe('messages forwarded unchanged to handler', () => {
 
     const res = await harness.app.request(
       '/v1/chat/completions',
-      jsonPost({ model: 't', messages: large })
+      jsonPost({ model: 't', messages: large, stream: true })
     );
     await readSse(res);
 
@@ -420,7 +377,7 @@ describe('wire format compatibility — simulated client parsers', () => {
     });
     const res = await harness.app.request(
       '/v1/chat/completions',
-      defaultBody()
+      defaultBody({ stream: true })
     );
     return readSse(res);
   }
@@ -450,7 +407,7 @@ describe('wire format compatibility — simulated client parsers', () => {
 
     const res = await harness.app.request(
       '/v1/chat/completions',
-      defaultBody()
+      defaultBody({ stream: true })
     );
     const rawText = await res.text();
     const rawFrames = rawText.split('\n\n').filter((f) => f.length > 0);
@@ -525,7 +482,7 @@ describe('client disconnect — stream cancellation', () => {
 
     const res = await harness.app.request(
       '/v1/chat/completions',
-      defaultBody()
+      defaultBody({ stream: true })
     );
     expect(res.status).toBe(200);
     expect(res.body).not.toBeNull();
