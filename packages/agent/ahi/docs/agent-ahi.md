@@ -2,9 +2,9 @@
 
 *Agent-to-agent HTTP invocation for rill scripts*
 
-This extension lets a rill agent call other agents by name. It registers `ahi::<agentName>` functions in the runtime context. Scripts call `ahi::summarizer(params)` and receive the remote agent's result as a dict. The host handles endpoint resolution, timeout enforcement, and error mapping.
+This extension lets a rill agent call other agents by name. It mounts a dict of `<agentName>` callables into the runtime. A script hoists the mount with `use<ext:ahi> => $ahi` and calls `$ahi.summarizer(params)`, receiving the remote agent's result as a dict. The host handles endpoint resolution, timeout enforcement, and error mapping.
 
-Static URL mode hardcodes endpoints at deploy time. When agents are co-located in the same harness process, `compose.ts:bindHost()` replaces HTTP calls with direct in-process invocation.
+Static URL mode hardcodes endpoints at deploy time. When agents are co-located in the same harness process, `createInProcessFunction` replaces HTTP calls with direct in-process invocation.
 
 ## Quick Start
 
@@ -21,7 +21,8 @@ const ext = createAhiExtension({
 ```
 
 ```rill
-ahi::summarizer([text: "Long article content..."]) => $result
+use<ext:ahi> => $ahi
+$ahi.summarizer([text: "Long article content..."]) => $result
 $result -> log
 ```
 
@@ -52,30 +53,37 @@ URLs support `${VAR_NAME}` environment variable substitution at init time.
 
 ### Manifest Usage
 
-Declare AHI in `rill-config.json`:
+Mount AHI in `rill-config.json` and give it an `agents` map. The mount name
+(`ahi` below) becomes the `use<ext:...>` path:
 
 ```json
 {
   "extensions": {
-    "ahi": {
-      "package": "@rcrsr/rill-agent-ext-ahi"
+    "mounts": { "ahi": "@rcrsr/rill-agent-ext-ahi" },
+    "config": {
+      "ahi": {
+        "agents": { "summarizer": { "url": "http://localhost:3001" } },
+        "timeout": 30000
+      }
     }
   }
 }
 ```
 
-```bash
-rill-agent-run dist/ my-agent --config '{"ahi":{"agents":{"summarizer":{"url":"http://localhost:3001"}}}}'
-```
+`rill run` then builds and serves the project through its declared harness. See
+the `demo/ahi-caller` example for the full two-agent setup.
 
 ## Functions
 
-Each configured agent name registers as `ahi::<name>`. All functions share the same signature and return shape.
+Each configured agent name is a member of the mounted `ahi` dict. Hoist the mount
+once, then call by member access. All agents share the same signature and return
+shape.
 
-**ahi::\<name\>(params)** — Invoke a remote agent:
+**$ahi.\<name\>(params)** — invoke a remote agent:
 
 ```rill
-ahi::classifier([text: "hello world", lang: "en"]) => $result
+use<ext:ahi> => $ahi
+$ahi.classifier([text: "hello world", lang: "en"]) => $result
 $result -> log
 ```
 
@@ -105,7 +113,7 @@ When the caller has a deadline set in metadata, AHI forwards the smaller of the 
 
 ## In-Process Mode
 
-When agents share a harness process, `composeHarness().bindHost()` replaces HTTP-based `ahi::<name>` functions with direct in-process calls. Scripts use the same `ahi::` syntax with no code changes. In-process mode eliminates HTTP overhead and serialization.
+When agents share a harness process, `createInProcessFunction` builds a callable that replaces the HTTP hop with a direct in-process call. Scripts use the same `$ahi.<name>` syntax with no code changes. In-process mode eliminates HTTP overhead and serialization.
 
 ```typescript
 import { createInProcessFunction } from '@rcrsr/rill-agent-ext-ahi';
@@ -151,9 +159,9 @@ Call `dispose()` to cancel in-flight requests and block further calls:
 await ext.dispose?.();
 ```
 
-After dispose, any `ahi::` call throws `RILL-R033` immediately.
+After dispose, any `$ahi.<name>` call throws `RILL-R033` immediately.
 
 ## See Also
 
-- [Agent Harness](agent-harness.md) — Production HTTP server with in-process AHI binding
-- [Agent Bundle](agent-bundle.md) — Manifest format and AHI extension configuration
+- [`@rcrsr/rill-agent-http`](../../http/README.md) — the HTTP harness that serves an AHI caller
+- [`demo/ahi-caller`](../../../../demo/ahi-caller) — a runnable two-agent example

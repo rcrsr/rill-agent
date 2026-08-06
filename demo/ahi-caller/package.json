@@ -1,13 +1,11 @@
 {
-  "name": "chat-echo",
+  "name": "ahi-caller",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "scripts": {
-    "start": "node server.js"
-  },
   "dependencies": {
     "@rcrsr/rill-agent": "workspace:*",
-    "@rcrsr/rill-agent-chat": "workspace:*"
+    "@rcrsr/rill-agent-http": "workspace:*",
+    "@rcrsr/rill-agent-ext-ahi": "workspace:*"
   }
 }

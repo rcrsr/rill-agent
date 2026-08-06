@@ -36,6 +36,18 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(vite@7.3.1(@types/node@26.1.2)(jiti@2.7.0)(tsx@4.23.7)(yaml@2.9.0))
 
+  demo/ahi-caller:
+    dependencies:
+      '@rcrsr/rill-agent':
+        specifier: workspace:*
+        version: link:../../packages/agent/core
+      '@rcrsr/rill-agent-ext-ahi':
+        specifier: workspace:*
+        version: link:../../packages/agent/ahi
+      '@rcrsr/rill-agent-http':
+        specifier: workspace:*
+        version: link:../../packages/agent/http
+
   demo/chat-echo:
     dependencies:
       '@rcrsr/rill-agent':
@@ -44,6 +56,27 @@ importers:
       '@rcrsr/rill-agent-chat':
         specifier: workspace:*
         version: link:../../packages/agent/chat
+
+  demo/foundry-echo:
+    dependencies:
+      '@opentelemetry/api':
+        specifier: ^1.9.0
+        version: 1.9.1
+      '@rcrsr/rill-agent':
+        specifier: workspace:*
+        version: link:../../packages/agent/core
+      '@rcrsr/rill-agent-foundry':
+        specifier: workspace:*
+        version: link:../../packages/agent/foundry
+
+  demo/http-echo:
+    dependencies:
+      '@rcrsr/rill-agent':
+        specifier: workspace:*
+        version: link:../../packages/agent/core
+      '@rcrsr/rill-agent-http':
+        specifier: workspace:*
+        version: link:../../packages/agent/http
 
   packages/agent/ahi:
     devDependencies:

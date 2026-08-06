@@ -11,8 +11,12 @@
     "packages/agent/foundry": {
       "ignoreDependencies": ["@hono/node-server"]
     },
-    "demo/chat-echo": {
-      "ignoreBinaries": ["rill"]
+    "demo/ahi-caller": {
+      "ignoreDependencies": [
+        "@rcrsr/rill-agent",
+        "@rcrsr/rill-agent-http",
+        "@rcrsr/rill-agent-ext-ahi"
+      ]
     }
   }
 }

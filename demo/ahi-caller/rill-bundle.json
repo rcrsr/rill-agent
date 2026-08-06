@@ -1,0 +1,15 @@
+{
+  "name": "ahi-caller",
+  "version": "0.0.0",
+  "harness": "@rcrsr/rill-agent-http",
+  "defaultPackage": "ahi-caller",
+  "config": {
+    "port": 3003
+  },
+  "packages": [
+    {
+      "mount": "ahi-caller",
+      "project": "."
+    }
+  ]
+}

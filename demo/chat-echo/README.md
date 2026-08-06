@@ -33,18 +33,19 @@ rill --version                # → rill-cli 0.20.0 (runtime 0.20.0) or newer
 on `config.port`.
 
 ```bash
-pnpm install
-rill install @rcrsr/rill-agent-chat --replace   # records the harness in .rill/npm
-rill run                                          # builds packages, then serves on :3000
+pnpm install       # links the workspace harness into this package's node_modules
+rill init          # bootstraps .rill/ (gitignored); one-time per checkout
+rill run           # builds packages, then serves on :3000
 ```
 
-`rill install` refuses packages that do not declare a `rill.role`; the chat
-harness declares `"role": "harness"`, so it installs into the bundle root's
-`.rill/npm/` and is recorded as the bundle harness.
-
-> Note: the bundle flow requires rill-cli ≥ 0.20 on `PATH`. It is not exercised
-> by this repo's test suite (which has no rill CLI); validate it against a local
-> 0.20 install.
+> The harness is resolved from this package's workspace `node_modules`, so no
+> `rill install` step is needed while `@rcrsr/rill-agent-chat` is unpublished.
+> Once it is on npm, `rill install @rcrsr/rill-agent-chat --replace` records it in
+> `.rill/npm/` instead — the chat harness declares `"role": "harness"`, which the
+> `rill install` gate requires.
+>
+> The bundle flow needs rill-cli ≥ 0.20 on `PATH`. It is not exercised by this
+> repo's test suite (which has no rill CLI); validate it against a local install.
 
 ## Run manually (library host)
 
@@ -53,9 +54,12 @@ repo root:
 
 ```bash
 pnpm install
-pnpm --filter chat-echo build      # runs `rill build --output build`
+rill init && rill run              # run once to produce build/, then stop it
 pnpm --filter chat-echo start      # node server.js, listens on PORT (default 3000)
 ```
+
+`server.js` loads the compiled manifest from `build/chat-echo/`. Override the
+port with `PORT`.
 
 Rebuild only when `main.rill` or `rill-config.json` changes. Override the port with the `PORT` env var.
 

@@ -14,11 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `assembleManifest(entries)` exported from `@rcrsr/rill-agent`: builds a router-ready manifest from a bundle's compiled packages keyed by mount
 - `rill.role` package.json declaration required by the rill 0.20 `rill install` gate: `extension` on `@rcrsr/rill-agent-ext-ahi`; `harness` on the three harness packages
 - Private `@rcrsr/rill-agent-hono-kit` exposes the structural `RillHarness`/`ServeContext`/`PostBuildContext` contract and shared serve glue (`runRillServe`, `readHarnessPort`, `compiledPackageEntries`, `assertCompiledHandlers`)
+- Runnable `demo/` bundles: `chat-echo`, `http-echo`, `foundry-echo`, and `ahi-caller` (agent-to-agent invocation), each a rill 0.20 bundle started with `rill init && rill run`
 
 ### Changed
 
 - All published packages aligned at `0.20.0`
 - `@rcrsr/rill-agent-ext-ahi` `@rcrsr/rill` peer dependency bumped from `~0.19.2` to `~0.20.0` (rill 0.20 minor-compat rule)
+- Adopted the `@rcrsr/rill-dev` repository standard: linter/formatter migrated from ESLint + Prettier to **oxlint + oxfmt**; `pnpm` `10.33.2` → `11.18.0`; TypeScript `6` → `7`; `@types/node` → `^26.1.2`, vitest → `^4.1.10`; added the canonical root script vocabulary (`check:*`/`fix:*`, `bootstrap`, `test:rules`, `check:standards`, `check:versions`), supply-chain policy in `pnpm-workspace.yaml` (`minimumReleaseAge`, `trustPolicy`), lefthook git hooks, `CODEOWNERS`, dependabot, CodeQL and dependency-review workflows, and community-health files
 
 ## [0.19.0] - 2026-05-02
 
