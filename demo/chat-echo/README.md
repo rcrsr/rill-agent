@@ -7,7 +7,8 @@ A minimal rill agent that exposes itself over `@rcrsr/rill-agent-chat`. The agen
 ```
 main.rill           # rill source — fully-typed stream closure bound to $chat
 rill-config.json    # rill project config
-server.js           # loads manifest, builds router, starts chat harness
+rill-bundle.json    # rill 0.20 bundle config — declares the chat harness
+server.js           # manual host: loads manifest, builds router, starts chat harness
 package.json        # workspace package
 build/              # rill-build output (gitignored)
 .rill/              # rill bootstrap scaffolding (gitignored)
@@ -17,16 +18,38 @@ build/              # rill-build output (gitignored)
 
 - Node.js ≥ 22
 - `pnpm` for the workspace install
-- `@rcrsr/rill-cli` ≥ 0.19.6 on `PATH` (paired with `@rcrsr/rill` ≥ 0.19.3) — earlier releases do not emit positional arg bindings or the `returnType` introspection that `inspectChatHandler` requires.
+- `@rcrsr/rill-cli` ≥ 0.20.0 on `PATH` (paired with `@rcrsr/rill` ≥ 0.20.0) — bundle mode and the `rill.role` install gate require 0.20; the `returnType` introspection that `inspectChatHandler` needs landed in `@rcrsr/rill` 0.19.3.
 
 ```bash
 npm i -g @rcrsr/rill-cli      # or upgrade if you already have it
-rill --version                # → rill-cli 0.19.6 (runtime 0.19.3) or newer
+rill --version                # → rill-cli 0.20.0 (runtime 0.20.0) or newer
 ```
 
-## Run
+## Run as a rill 0.20 bundle (recommended)
 
-From the repo root:
+`rill-bundle.json` declares `@rcrsr/rill-agent-chat` as the bundle harness, so
+`rill run` hosts the agent directly — no `server.js` needed. The harness's
+`serve` hook assembles a router from the bundle's compiled packages and listens
+on `config.port`.
+
+```bash
+pnpm install
+rill install @rcrsr/rill-agent-chat --replace   # records the harness in .rill/npm
+rill run                                          # builds packages, then serves on :3000
+```
+
+`rill install` refuses packages that do not declare a `rill.role`; the chat
+harness declares `"role": "harness"`, so it installs into the bundle root's
+`.rill/npm/` and is recorded as the bundle harness.
+
+> Note: the bundle flow requires rill-cli ≥ 0.20 on `PATH`. It is not exercised
+> by this repo's test suite (which has no rill CLI); validate it against a local
+> 0.20 install.
+
+## Run manually (library host)
+
+The named exports still work for hand-wired hosting via `server.js`, from the
+repo root:
 
 ```bash
 pnpm install

@@ -7,6 +7,12 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `assembleManifest(entries, defaultAgent?)` builds an `AgentManifest` from explicit `{ name, dir }` entries, importing `handler.js` from each compiled directory — used by rill 0.20 bundle-harness adapters that receive per-mount compiled output paths
+- `AgentRouter.manifest` is now part of the public interface
+- `HandlerDescription.returnType` optional field carries the handler closure's `:T` annotation (emitted by rill-build ≥ 0.19.6)
+
 ## [0.19.0] - 2026-05-02
 
 ### Changed

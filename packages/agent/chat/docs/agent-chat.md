@@ -28,9 +28,34 @@ await harness.listen(3000);
 
 `createChatHarness` is synchronous. Call `listen()` separately to bind to a port.
 
+## Bundle harness (rill 0.20)
+
+The package's default export is a rill-CLI `RillHarness`, so a bundle can host
+its agents with `rill run` instead of a hand-wired host. Declare the harness in
+`rill-bundle.json`:
+
+```json
+{
+  "name": "my-bundle",
+  "version": "0.0.0",
+  "harness": "@rcrsr/rill-agent-chat",
+  "config": { "port": 3000 },
+  "packages": [{ "mount": "my-agent", "project": "." }]
+}
+```
+
+```bash
+rill install @rcrsr/rill-agent-chat --replace   # role: "harness" gate
+rill run                                          # build + serve on config.port
+```
+
+`serve` assembles a router from the bundle's compiled packages (agent name =
+mount) and hosts it on `config.port` (default 3000); `postBuild` asserts each
+package emitted `handler.js`.
+
 ## Writing a chat handler
 
-Author the agent in rill. Bind a streaming closure to `$chat`; `rill-build` compiles the script into an `AgentHandler` whose `chat()` method the harness invokes per request. The closure receives the request payload and must emit zero or more `ChatChunk` dicts via `yield`.
+Author the agent in rill. Bind a streaming closure to `$chat`; `rill-build` compiles the script into an `AgentHandler` whose declared signature the harness validates via `describe()`, then invokes per request through `execute({ params: { messages } }, { onChunk })`. The closure receives the messages and must emit zero or more `ChatChunk` dicts via `yield`.
 
 **main.rill** (echo agent — streams the last user message back as a single chunk):
 

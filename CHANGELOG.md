@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `@rcrsr/rill-agent-chat` package provides OpenAI-compatible chat completions endpoint with streaming support, consumable by openai SDK, LiteLLM, Vercel AI SDK, and standard HTTP clients
+- rill 0.20 bundle-harness alignment: `@rcrsr/rill-agent-http`, `@rcrsr/rill-agent-foundry`, and `@rcrsr/rill-agent-chat` each ship a default-export `RillHarness` adapter (`serve` + `postBuild`) consumable by the rill CLI's bundle mode (`rill install --replace`, `rill run`)
+- `assembleManifest(entries)` exported from `@rcrsr/rill-agent`: builds a router-ready manifest from a bundle's compiled packages keyed by mount
+- `rill.role` package.json declaration required by the rill 0.20 `rill install` gate: `extension` on `@rcrsr/rill-agent-ext-ahi`; `harness` on the three harness packages
+- Private `@rcrsr/rill-agent-hono-kit` exposes the structural `RillHarness`/`ServeContext`/`PostBuildContext` contract and shared serve glue (`runRillServe`, `readHarnessPort`, `compiledPackageEntries`, `assertCompiledHandlers`)
+
+### Changed
+
+- All published packages aligned at `0.20.0`
+- `@rcrsr/rill-agent-ext-ahi` `@rcrsr/rill` peer dependency bumped from `~0.19.2` to `~0.20.0` (rill 0.20 minor-compat rule)
 
 ## [0.19.0] - 2026-05-02
 
