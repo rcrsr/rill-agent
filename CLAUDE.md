@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Rill Ecosystem
+
+This repository is one piece of the broader rill ecosystem. See the ecosystem map at https://raw.githubusercontent.com/rcrsr/rill/refs/heads/main/llms-map.txt for an index of the wider documentation.
+
 ## Monorepo Structure
 
 pnpm workspace monorepo containing the agent framework for the [rill](https://github.com/rcrsr/rill) language runtime. Four published packages under `packages/agent/` plus one private shared package under `packages/shared/`. Packages are versioned independently.
@@ -12,7 +16,8 @@ pnpm workspace monorepo containing the agent framework for the [rill](https://gi
 | `agent/http` | `@rcrsr/rill-agent-http` | Hono HTTP harness (`httpHarness`) |
 | `agent/foundry` | `@rcrsr/rill-agent-foundry` | Foundry Responses API harness with SSE, Azure Conversations, OTEL |
 | `agent/ahi` | `@rcrsr/rill-agent-ext-ahi` | Agent Host Interface extension for agent-to-agent invocation |
-| `shared/hono-kit` | `@rcrsr/rill-agent-hono-kit` *(private)* | Shared Hono lifecycle and JSON assertion helpers used by `http` and `foundry` |
+| `agent/chat` | `@rcrsr/rill-agent-chat` | OpenAI-compatible chat completions harness (SSE) |
+| `shared/hono-kit` | `@rcrsr/rill-agent-hono-kit` *(private)* | Shared Hono lifecycle and JSON assertion helpers used by `http`, `foundry`, and `chat` |
 
 ## Commands
 
@@ -45,12 +50,14 @@ cd packages/agent/core && npx vitest run tests/router.test.ts
 ```
 core  ← http     (dep)
 core  ← foundry  (dep)
+core  ← chat     (dep)
 hono-kit ← http     (dep)
 hono-kit ← foundry  (dep)
+hono-kit ← chat     (dep)
 ahi
 ```
 
-`core` (`@rcrsr/rill-agent`) is transport-agnostic and has no runtime dependency on `hono`. `http` (`@rcrsr/rill-agent-http`) and `foundry` (`@rcrsr/rill-agent-foundry`) each depend on `@rcrsr/rill-agent` and the private `@rcrsr/rill-agent-hono-kit`, and they carry the `hono` / `@hono/node-server` runtime dependencies. `ahi` uses `@rcrsr/rill` as a peer dependency and has no other workspace dependencies. `foundry` does not import `@rcrsr/rill` directly.
+`core` (`@rcrsr/rill-agent`) is transport-agnostic and has no runtime dependency on `hono`. `http` (`@rcrsr/rill-agent-http`), `foundry` (`@rcrsr/rill-agent-foundry`), and `chat` (`@rcrsr/rill-agent-chat`) each depend on `@rcrsr/rill-agent` and the private `@rcrsr/rill-agent-hono-kit`, and they carry the `hono` / `@hono/node-server` runtime dependencies. `ahi` uses `@rcrsr/rill` as a peer dependency and has no other workspace dependencies. `foundry` and `chat` do not import `@rcrsr/rill` directly.
 
 ### Runtime Pipeline
 

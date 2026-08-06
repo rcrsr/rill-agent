@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `@rcrsr/rill-agent-chat` package provides OpenAI-compatible chat completions endpoint with streaming support, consumable by openai SDK, LiteLLM, Vercel AI SDK, and standard HTTP clients
+
 ## [0.19.0] - 2026-05-02
 
 ### Changed

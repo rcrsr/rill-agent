@@ -1,0 +1,14 @@
+{
+  "name": "chat-echo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "rill build --output build",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@rcrsr/rill-agent": "workspace:*",
+    "@rcrsr/rill-agent-chat": "workspace:*"
+  }
+}
