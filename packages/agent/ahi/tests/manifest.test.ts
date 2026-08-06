@@ -205,8 +205,8 @@ describe('extensionManifest', () => {
     const factoryResult = await extensionManifest.factory(VALID_CONFIG, ctx);
 
     controller.abort();
-    // dispose is synchronous; if it throws the test fails
-    factoryResult.dispose?.();
+    // dispose is synchronous; assert it does not throw after an abort
+    expect(() => factoryResult.dispose?.()).not.toThrow();
   });
 
   it('dispose then abort does not throw', async () => {

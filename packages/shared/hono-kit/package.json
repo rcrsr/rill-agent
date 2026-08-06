@@ -1,6 +1,6 @@
 {
   "name": "@rcrsr/rill-agent-hono-kit",
-  "version": "0.19.0",
+  "version": "0.20.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -13,7 +13,7 @@
     "build": "tsc --build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint --config ../../../eslint.config.js src/",
+    "lint": "oxlint --config ../../../.oxlintrc.json src/ tests/",
     "check": "pnpm run build && pnpm run test && pnpm run lint"
   },
   "dependencies": {

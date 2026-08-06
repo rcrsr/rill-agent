@@ -19,7 +19,7 @@ import type { ChatChunk } from '../src/types.js';
  * Minimal OpenAI-shaped chat chunk. Tests usually only care about content;
  * the role/finish_reason values match what the harness round-trips back.
  */
-export function makeChunk(content: string): ChatChunk {
+function makeChunk(content: string): ChatChunk {
   return {
     choices: [{ delta: { role: 'assistant', content }, finish_reason: 'stop' }],
   };

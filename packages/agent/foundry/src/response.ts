@@ -100,7 +100,7 @@ const FALLBACK_MESSAGE = 'An error occurred';
  *
  * When debug is true, the original message is passed through verbatim.
  * When debug is false or absent, a generic message is returned based on
- * the error code per IR-10 (FOUNDRY_AGENT_DEBUG_ERRORS=false behavior).
+ * the error code (FOUNDRY_AGENT_DEBUG_ERRORS=false behavior).
  */
 export function buildErrorResponse(
   code: string,
@@ -138,7 +138,7 @@ function mapParamType(rillType: string): string {
 /**
  * Generate Foundry tool definitions from the default agent's handler descriptions.
  *
- * Only the default agent's handlers are exposed (AC-21).
+ * Only the default agent's handlers are exposed.
  * Returns an empty array when describe() returns null.
  */
 export function generateToolDefinitions(

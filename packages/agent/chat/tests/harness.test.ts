@@ -406,9 +406,9 @@ describe('createChatHarness — lifecycle', () => {
     }
   });
 
-  // [DEVIATION] ESM module namespaces are not configurable — vi.spyOn cannot
-  // replace the `serve` export from @hono/node-server at test time.
-  it.skip('port bind failure propagates the native error', () => {});
+  // Port-bind failure propagation is not exercised here: ESM module namespaces
+  // are not configurable, so vi.spyOn cannot replace the `serve` export from
+  // @hono/node-server at test time.
 });
 
 // ============================================================

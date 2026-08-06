@@ -1,47 +1,47 @@
 name: CI
 
+# No path filtering, deliberately. Both filtering mechanisms are incompatible
+# with required status checks: `paths-ignore` prevents the run entirely, so a
+# required context is never reported and the PR blocks forever; a job-level
+# `if:` gate reports "skipped", which never satisfies a required context. See
+# node_modules/@rcrsr/rill-dev/REPO-STANDARDS.md STD-CI-7.
+#
+# Every `uses:` in this repository pins a commit SHA with the release it belongs
+# to in a trailing comment, per STD-CI-8. A major tag such as `@v7` is mutable:
+# whoever controls the action repository can retarget it, and the next run
+# executes different code with no diff here. The comment is what dependabot
+# reads to offer an upgrade, so it must stay accurate when a SHA changes.
 on:
   push:
     branches: [main]
   pull_request:
     types: [opened, synchronize, reopened]
 
-jobs:
-  changes:
-    runs-on: ubuntu-latest
-    outputs:
-      code: ${{ steps.filter.outputs.code }}
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            code:
-              - '**/*.ts'
-              - '**/*.js'
-              - '**/*.json'
-              - '**/*.yaml'
-              - '**/*.yml'
-              - '**/*.cjs'
-              - '**/*.mjs'
-              - '**/*.rill'
+permissions:
+  contents: read
 
+concurrency:
+  # Include the workflow name: a bare ref collides across workflows keyed on the
+  # same ref, so one would cancel another's run. Never cancel on main — a push
+  # there must leave a completed status behind, or the required contexts for
+  # that commit never report and the branch deadlocks.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
   check:
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
         node-version: ['22', '24', '25']
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Enable Corepack
         run: corepack enable
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'pnpm'
@@ -49,14 +49,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build libraries
-        run: pnpm -r --filter='./packages/**' run build
-
-      - name: Relink workspace bins
-        run: pnpm install --frozen-lockfile
-
-      - name: Build demos
-        run: pnpm -r --filter='./demo/**' run build
-
+      # The root `check`, not `pnpm -r run check`. `-r` excludes the workspace
+      # root, so every root-only script — check:format, check:deps,
+      # check:versions, test:rules, check:standards — silently never ran here.
+      # The root aggregate reaches all of them plus each package's typecheck,
+      # which is the only thing that covers the tsup-built harnesses whose
+      # bundler does not typecheck (STD-CHK-5).
+      #
+      # check:standards runs tree-only through this: no --remote, no token. A
+      # pull request cannot change host state, and GITHUB_TOKEN cannot read
+      # branch protection anyway, so the flag would add an API round trip and
+      # decide nothing. Host settings are checked with
+      # `pnpm check:standards --remote` from a maintainer's authenticated shell.
       - name: Run checks
-        run: pnpm -r run check
+        run: pnpm run check

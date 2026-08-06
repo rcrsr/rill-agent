@@ -11,6 +11,10 @@ await harness.listen(port);
 
 console.log(`chat-echo listening on http://localhost:${port}`);
 console.log('Try:');
-console.log(`  curl -N -X POST http://localhost:${port}/v1/chat/completions \\`);
+console.log(
+  `  curl -N -X POST http://localhost:${port}/v1/chat/completions \\`
+);
 console.log(`    -H 'Content-Type: application/json' \\`);
-console.log(`    -d '{"model":"chat-echo","messages":[{"role":"user","content":"hello"}]}'`);
+console.log(
+  `    -d '{"model":"chat-echo","messages":[{"role":"user","content":"hello"}]}'`
+);

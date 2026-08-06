@@ -5,20 +5,35 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: read
+
+concurrency:
+  # A fixed group, and never cancelling. A publish interrupted between two
+  # packages leaves the registry holding half a release, which the pre-publish
+  # existence check then reads as already-done on the retry. See
+  # node_modules/@rcrsr/rill-dev/REPO-STANDARDS.md STD-CI-6.
+  group: release
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
+      # write: creates the GitHub Release. id-token: mints the OIDC token the
+      # npm provenance attestation requires. `pnpm publish --provenance` below
+      # is what consumes it. STD-REL-3 and STD-REL-4. pnpm 11 is required: pnpm
+      # 10 ignores --provenance silently.
       contents: write
       id-token: write
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Enable Corepack and install pnpm
         run: corepack enable && corepack prepare --activate
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '25'
           cache: 'pnpm'
@@ -27,14 +42,23 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build libraries
+      # Before anything is published, and before the build: every package must
+      # sit at the root major.minor, and the root version must be the tag being
+      # released. A mismatch caught here is a failed job; caught after the first
+      # publish it is a half-released registry that cannot be rolled back. See
+      # STD-REL-2 and STD-CHK-7.
+      - name: Verify version consistency
+        run: |
+          pnpm run check:versions
+          ROOT=$(node -p "require('./package.json').version")
+          if [ "v$ROOT" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match root package.json version v$ROOT" >&2
+            exit 1
+          fi
+          echo "Tag $GITHUB_REF_NAME matches root version v$ROOT"
+
+      - name: Build packages
         run: pnpm -r --filter='./packages/**' run build
-
-      - name: Relink workspace bins
-        run: pnpm install --frozen-lockfile
-
-      - name: Build demos
-        run: pnpm -r --filter='./demo/**' run build
 
       - name: Run tests
         run: pnpm -r run test
@@ -43,6 +67,11 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          # Without pipefail the `pnpm publish | tee` below reports tee's exit
+          # status, so a failed publish would read as success and the job would
+          # go on to cut a GitHub Release for packages that never shipped. See
+          # STD-REL-5 and STD-REL-6.
+          set -o pipefail
           for dir in packages/agent/*/; do
             dir="${dir%/}"
             [ -f "$dir/package.json" ] || continue
@@ -56,18 +85,38 @@ jobs:
             fi
             echo "Publishing $NAME@$VERSION..."
             cd "$dir"
-            pnpm publish --access public --no-git-checks
+            PUBLISH_LOG=$(mktemp)
+            if pnpm publish --access public --no-git-checks --provenance 2>&1 | tee "$PUBLISH_LOG"; then
+              echo "Published $NAME@$VERSION"
+            # Deliberately NOT matching a bare E403. npm returns E403 for a
+            # revoked token, a token missing publish scope, an org policy change
+            # and lost package ownership as well as for a version conflict, so
+            # treating it as "already published" turns a real auth failure into
+            # a silent skip and cuts a release for a package that never shipped.
+            # Match the specific conflict strings only.
+            elif grep -Eqi '(EPUBLISHCONFLICT|cannot publish over( the)? previously published versions|cannot modify pre-existing version)' "$PUBLISH_LOG"; then
+              echo "Skipping $NAME@$VERSION (already published, confirmed by registry)"
+            else
+              echo "Failed to publish $NAME@$VERSION"
+              cat "$PUBLISH_LOG"
+              rm -f "$PUBLISH_LOG"
+              exit 1
+            fi
+            rm -f "$PUBLISH_LOG"
             cd "$GITHUB_WORKSPACE"
           done
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+        # $GITHUB_REF_NAME, never ${{ github.ref_name }}, inside run:. The
+        # templater substitutes before bash parses, so a crafted ref name would
+        # execute as shell. The expression form is only safe in an env: mapping.
         run: |
-          if gh release view "${{ github.ref_name }}" >/dev/null 2>&1; then
-            echo "GitHub Release '${{ github.ref_name }}' already exists. Skipping creation."
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "GitHub Release '$GITHUB_REF_NAME' already exists. Skipping creation."
             exit 0
           fi
-          gh release create "${{ github.ref_name }}" \
-            --title "${{ github.ref_name }}" \
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
             --generate-notes

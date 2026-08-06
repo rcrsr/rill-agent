@@ -183,15 +183,12 @@ describe('createFoundryHarness', () => {
   // AC-7: GET /readiness returns 503 before init
   // [ASSUMPTION] The factory sets ready=true synchronously after registering
   // routes. There is no async init step, so the harness is always ready
-  // immediately after createFoundryHarness() returns. AC-7 (503 before init)
-  // cannot be exercised without modifying the factory to accept a deferred
-  // ready signal. Documenting here; 503 path exists in code but is unreachable
-  // via the current public API.
-  it.skip('GET /readiness returns 503 before init', () => {
-    // Not testable: ready=true is set synchronously in the factory
-  });
+  // immediately after createFoundryHarness() returns. The 503-before-init path
+  // exists in code but is unreachable via the current public API: ready=true is
+  // set synchronously in the factory, so there is nothing to exercise here
+  // without modifying the factory to accept a deferred ready signal.
 
-  // AC-8: GET /liveness returns 200
+  // GET /liveness returns 200
   it('GET /liveness returns 200', async () => {
     const harness = createFoundryHarness(makeMockRouter());
     const res = await harness.app.request('/liveness');
@@ -547,7 +544,7 @@ describe('createFoundryHarness', () => {
       ) => {
         const entry = {
           name,
-          attributes: { ...(options?.attributes ?? {}) },
+          attributes: { ...options?.attributes },
           span: {} as Span,
         };
         const span: Span = {

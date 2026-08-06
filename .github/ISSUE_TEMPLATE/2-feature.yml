@@ -1,0 +1,54 @@
+# Pre-sets the native Issue Type. Decision rule vs Chore: "would a host
+# integrator notice it in a release note?" Yes -> Feature. Taxonomy:
+# .github/labeler.yml.
+name: Feature
+description: 'Net-new capability a host or agent author sees: a new harness endpoint, router option, or manifest capability'
+type: Feature
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: >-
+        What a host integrator or agent author cannot do today, and who hits it?
+        Show the endpoint, router call, or manifest shape you wish you could
+        use.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: >-
+        What does done look like as observable behavior, not the implementation.
+        Include the new surface, its inputs, and how it fails. Keep it scoped;
+        link related issues with #N.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Supporting context
+      description: >-
+        Optional. Prior art in sibling harnesses, related issues (#N), and
+        pointers to relevant source. What to look at, not the solution to build.
+    validations:
+      required: false
+  - type: dropdown
+    id: areas
+    attributes:
+      label: Area(s)
+      description: Which package or surface, becomes the area:* labels at triage.
+      multiple: true
+      options:
+        - core
+        - http
+        - foundry
+        - chat
+        - ahi
+        - shared
+        - demo
+        - docs
+        - dx
+    validations:
+      required: true

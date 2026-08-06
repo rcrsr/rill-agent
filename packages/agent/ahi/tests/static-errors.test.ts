@@ -67,7 +67,9 @@ async function callAhi(
   metadata?: Record<string, string>
 ): Promise<RillValue> {
   const fnDef = (ext as Record<string, ApplicationCallable>)[agentName]!;
-  return fnDef.fn(args as unknown as Record<string, RillValue>, { metadata: metadata ?? makeCtx().metadata });
+  return fnDef.fn(args as unknown as Record<string, RillValue>, {
+    metadata: metadata ?? makeCtx().metadata,
+  });
 }
 
 // ============================================================
