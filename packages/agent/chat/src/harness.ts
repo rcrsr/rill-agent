@@ -185,9 +185,11 @@ export function createChatHarness(
    * createChatStreamResponse, and manages activeConnections/requests counters.
    *
    * Increments activeConnections on entry. Decrements activeConnections and
-   * increments requests in the stream finally block (success or error). On a
-   * pre-first-chunk exception from createChatStreamResponse, increments both
-   * errors and requests and returns HTTP 500 JSON.
+   * increments requests in the stream finally block (success or error) —
+   * this is the sole `requests` increment for this path, since the pump's
+   * `finally` always runs regardless of where the failure occurs. On a
+   * pre-first-chunk exception from createChatStreamResponse, increments only
+   * errors and returns HTTP 500 JSON.
    */
   async function streamChatResponse(
     source: AsyncIterable<ChatChunk> | ReadableStream<ChatChunk>,
@@ -225,7 +227,9 @@ export function createChatHarness(
             reader.releaseLock();
           }
         }
-        if (!abortController.signal.aborted) {
+        if (abortController.signal.aborted) {
+          await writer.abort();
+        } else {
           await writer.close();
         }
       } catch (err) {
@@ -242,6 +246,9 @@ export function createChatHarness(
       return await createChatStreamResponse(readable, {
         model: resolvedAgent,
         abortController,
+        onError: () => {
+          errors++;
+        },
       });
     } catch (err) {
       // The handler threw before yielding its first chunk. The exception
@@ -249,7 +256,6 @@ export function createChatHarness(
       // message so internals (stack traces, error text) are not exposed.
       console.error(err);
       errors++;
-      requests++;
       return new Response(
         JSON.stringify({ error: { message: 'Internal server error' } }),
         {
@@ -290,7 +296,7 @@ export function createChatHarness(
         return new Response(
           JSON.stringify({ error: { message: err.message } }),
           {
-            status: 500,
+            status: err.statusCode,
             headers: { 'Content-Type': 'application/json' },
           }
         );

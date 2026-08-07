@@ -141,3 +141,55 @@ describe('validateMessages — large array', () => {
     }
   });
 });
+
+// ============================================================
+// MAX_MESSAGES BOUNDARY
+// ============================================================
+
+describe('validateMessages — MAX_MESSAGES boundary', () => {
+  it('passes validation for exactly 10000 messages', () => {
+    const atLimit = Array.from({ length: 10_000 }, () => ({
+      role: 'user',
+      content: 'hi',
+    }));
+    const result = validateMessages(atLimit);
+    expect(result.valid).toBe(true);
+  });
+
+  it('rejects an array of 10001 messages with a cap error', () => {
+    const overLimit = Array.from({ length: 10_001 }, () => ({
+      role: 'user',
+      content: 'hi',
+    }));
+    const result = validateMessages(overLimit);
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.error).toBe('messages must not exceed 10000 items');
+    }
+  });
+});
+
+// ============================================================
+// MAX_CONTENT_LENGTH BOUNDARY
+// ============================================================
+
+describe('validateMessages — MAX_CONTENT_LENGTH boundary', () => {
+  it('passes validation for content at exactly 32000 characters', () => {
+    const result = validateMessages([
+      { role: 'user', content: 'a'.repeat(32_000) },
+    ]);
+    expect(result.valid).toBe(true);
+  });
+
+  it('rejects content over 32000 characters with an indexed error', () => {
+    const result = validateMessages([
+      { role: 'user', content: 'a'.repeat(32_001) },
+    ]);
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.error).toBe(
+        'messages[0].content must not exceed 32000 characters'
+      );
+    }
+  });
+});

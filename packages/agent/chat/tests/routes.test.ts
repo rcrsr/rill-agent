@@ -467,7 +467,7 @@ describe('GET /metrics', () => {
       }
     ).requests;
 
-    expect(after).toBeGreaterThanOrEqual(before + 2);
+    expect(after).toBe(before + 2);
   });
 
   it('increments errors counter after a validation failure', async () => {

@@ -6,6 +6,12 @@ import type { ChatMessage } from './types.js';
 
 const VALID_ROLES = ['system', 'user', 'assistant'] as const;
 
+/** Maximum number of messages accepted per chat request. */
+const MAX_MESSAGES = 10_000;
+
+/** Maximum character length accepted for a single message's content. */
+const MAX_CONTENT_LENGTH = 32_000;
+
 // ============================================================
 // VALIDATION
 // ============================================================
@@ -24,6 +30,13 @@ export function validateMessages(
 
   if (value.length === 0) {
     return { valid: false, error: 'messages must be a non-empty array' };
+  }
+
+  if (value.length > MAX_MESSAGES) {
+    return {
+      valid: false,
+      error: `messages must not exceed ${MAX_MESSAGES} items`,
+    };
   }
 
   const messages: ChatMessage[] = [];
@@ -51,6 +64,13 @@ export function validateMessages(
       return {
         valid: false,
         error: `messages[${i}].content must be a string`,
+      };
+    }
+
+    if (record['content'].length > MAX_CONTENT_LENGTH) {
+      return {
+        valid: false,
+        error: `messages[${i}].content must not exceed ${MAX_CONTENT_LENGTH} characters`,
       };
     }
 

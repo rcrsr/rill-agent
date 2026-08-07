@@ -13,6 +13,15 @@ export interface ChatStreamOptions {
    * method is called when the client disconnects (ReadableStream cancel).
    */
   readonly abortController: AbortController;
+  /**
+   * Invoked only for a genuine post-first-chunk handler failure caught while
+   * the client is still connected, so the caller can record it in its own
+   * error metrics. Not invoked when the failure is a rejection caused by the
+   * client disconnecting (the controller is already closed at that point).
+   * The pre-first-chunk failure path does not call this either — it throws
+   * synchronously instead and the caller accounts for it directly.
+   */
+  readonly onError?: ((err: unknown) => void) | undefined;
 }
 
 // ============================================================
@@ -151,19 +160,30 @@ export async function createChatStreamResponse(
         controller.enqueue(DONE_FRAME);
         controller.close();
       })().catch((err: unknown) => {
+        // Guard against the stream having been cancelled by the consumer.
+        // options.abortController is aborted synchronously by this stream's
+        // own cancel() below, so this reliably distinguishes a cancellation
+        // (no handler failure involved — absorbed silently, no logging or
+        // error accounting) from a genuine mid-stream handler exception.
+        // desiredSize === null is a secondary guard for the (non-cancellation)
+        // case where the controller was independently closed/errored.
+        if (
+          options.abortController.signal.aborted ||
+          controller.desiredSize === null
+        ) {
+          return;
+        }
         // Post-first-chunk failure: emit in-band error frame then [DONE].
         // The real error is logged server-side; the client only sees the
         // generic message built by buildErrorChunk.
         console.error(err);
-        // Guard against the stream having been cancelled by the consumer
-        // before this catch runs (controller.desiredSize is null when closed).
-        if (controller.desiredSize === null) return;
+        options.onError?.(err);
         try {
           controller.enqueue(encodeChunk(buildErrorChunk(defaults)));
           controller.enqueue(DONE_FRAME);
           controller.close();
         } catch {
-          // Stream was cancelled between the desiredSize check and enqueue.
+          // Stream was cancelled between the guard check and enqueue.
         }
       });
     },

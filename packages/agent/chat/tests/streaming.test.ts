@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import type { RunContext } from '@rcrsr/rill-agent';
+import type { AgentHandler, RunContext } from '@rcrsr/rill-agent';
+import { createChatHarness } from '../src/harness.js';
 import type { ChatChunk } from '../src/types.js';
 import {
   defaultBody,
   harnessFor,
   jsonPost,
+  makeRouter,
   parseSseFrames,
   readBody,
 } from './_fixtures.js';
@@ -200,6 +202,113 @@ describe('post-first-chunk handler error', () => {
     expect(errorChunk.error?.message).toBe('Internal server error');
 
     expect(frames[frames.length - 1]).toBe('data: [DONE]');
+  });
+
+  it('increments the errors metric for a genuine post-first-chunk handler failure', async () => {
+    const harness = await harnessFor({
+      throwAfter: {
+        chunks: [textChunk('first chunk')],
+        error: new Error('mid-stream failure'),
+      },
+    });
+
+    const before = (
+      (await (await harness.app.request('/metrics')).json()) as {
+        errors: number;
+      }
+    ).errors;
+
+    const res = await harness.app.request(
+      '/v1/chat/completions',
+      defaultBody({ stream: true })
+    );
+    await readSse(res);
+
+    const after = (
+      (await (await harness.app.request('/metrics')).json()) as {
+        errors: number;
+      }
+    ).errors;
+
+    expect(after).toBe(before + 1);
+  });
+});
+
+// ============================================================
+// CLIENT DISCONNECT — NO SPURIOUS ERROR METRIC
+// ============================================================
+
+describe('client disconnect mid-stream', () => {
+  it('does not increment the errors metric when the client cancels the stream', async () => {
+    // A handler that yields a first chunk, then hangs indefinitely awaiting
+    // an external release signal before yielding a second chunk. The test
+    // cancels the client-side reader while the handler is still hung, so
+    // any errors increment observed afterward is a regression caused by the
+    // cancellation rejection being mistaken for a genuine handler failure.
+    let releaseHang: (() => void) | undefined;
+    const hang = new Promise<void>((resolve) => {
+      releaseHang = resolve;
+    });
+
+    const handler: AgentHandler = {
+      describe() {
+        return {
+          name: 't',
+          params: [
+            {
+              name: 'messages',
+              type: 'list(dict(role: string, content: string))',
+              required: true,
+            },
+          ],
+          returnType:
+            'stream(dict(choices: list(dict(delta: dict(role: string, content: string), finish_reason: string)))):string',
+        };
+      },
+      async init() {},
+      async execute(_request, context?: RunContext) {
+        await context?.onChunk?.(textChunk('first chunk'));
+        await hang;
+        await context?.onChunk?.(textChunk('second chunk'));
+        return { state: 'completed', result: null, streamed: true };
+      },
+      async dispose() {},
+    };
+    const router = await makeRouter({
+      agents: new Map<string, AgentHandler>([['t', handler]]),
+      defaultAgent: 't',
+    });
+    const harness = createChatHarness(router);
+
+    const before = (
+      (await (await harness.app.request('/metrics')).json()) as {
+        errors: number;
+      }
+    ).errors;
+
+    const res = await harness.app.request(
+      '/v1/chat/completions',
+      defaultBody({ stream: true })
+    );
+    expect(res.status).toBe(200);
+
+    const reader = res.body!.getReader();
+    // Read past the first chunk, then cancel — simulating a client
+    // disconnect mid-stream while the handler is still awaiting `hang`.
+    await reader.read();
+    await reader.cancel();
+    releaseHang?.();
+
+    // Give the harness's async pump and stream catch handler a tick to run.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const after = (
+      (await (await harness.app.request('/metrics')).json()) as {
+        errors: number;
+      }
+    ).errors;
+
+    expect(after).toBe(before);
   });
 });
 
