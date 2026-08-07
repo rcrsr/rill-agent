@@ -1,0 +1,616 @@
+import { describe, it, expect } from 'vitest';
+import type { AgentHandler, RunContext } from '@rcrsr/rill-agent';
+import { createChatHarness } from '../src/harness.js';
+import type { ChatChunk } from '../src/types.js';
+import {
+  defaultBody,
+  harnessFor,
+  jsonPost,
+  makeRouter,
+  parseSseFrames,
+  readBody,
+} from './_fixtures.js';
+
+// ============================================================
+// LOCAL HELPERS
+// ============================================================
+
+/**
+ * SSE-shaped chat chunk used by the wire-format tests. Differs from the
+ * shared makeChunk fixture in that finish_reason stays null so the test can
+ * inspect the harness's emitted [DONE] marker without an interleaving stop.
+ */
+function textChunk(content: string): ChatChunk {
+  return {
+    choices: [{ index: 0, delta: { content }, finish_reason: null }],
+  };
+}
+
+async function readSse(response: Response): Promise<string[]> {
+  const body = await readBody(response);
+  return parseSseFrames(body);
+}
+
+function parseDataLine(frame: string): string {
+  const m = frame.match(/^data: (.*)$/s);
+  return m && m[1] !== undefined ? m[1] : '';
+}
+
+// ============================================================
+// SSE WIRE FORMAT — EACH CHUNK AS SEPARATE FRAME
+// ============================================================
+
+describe('SSE wire format — each chunk as separate frame', () => {
+  it('emits one data frame per handler chunk followed by [DONE]', async () => {
+    const harness = await harnessFor({
+      chunks: [textChunk('A'), textChunk('B'), textChunk('C')],
+    });
+
+    const res = await harness.app.request(
+      '/v1/chat/completions',
+      defaultBody({ stream: true })
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/event-stream');
+
+    const frames = await readSse(res);
+    expect(frames.length).toBe(4);
+
+    for (let i = 0; i < 3; i++) {
+      const frame = frames[i] ?? '';
+      expect(frame.startsWith('data: ')).toBe(true);
+      const chunk = JSON.parse(parseDataLine(frame)) as ChatChunk;
+      expect(Array.isArray(chunk.choices)).toBe(true);
+      expect(typeof chunk.id).toBe('string');
+      expect(typeof chunk.created).toBe('number');
+      expect(typeof chunk.model).toBe('string');
+    }
+
+    expect(frames[3]).toBe('data: [DONE]');
+  });
+
+  it('fills id/object/created/model when handler omits them', async () => {
+    const harness = await harnessFor({
+      chunks: [{ choices: [{ delta: { content: 'hi' } }] }],
+    });
+
+    const res = await harness.app.request(
+      '/v1/chat/completions',
+      defaultBody({ stream: true })
+    );
+    const frames = await readSse(res);
+    const chunk = JSON.parse(parseDataLine(frames[0] ?? '')) as ChatChunk;
+
+    expect(chunk.id).toMatch(/^chatcmpl-/);
+    expect(chunk.object).toBe('chat.completion.chunk');
+    expect(typeof chunk.created).toBe('number');
+    expect(chunk.model).toBe('t');
+  });
+
+  it('preserves id/object/created/model when handler provides them', async () => {
+    const fixedId = 'chatcmpl-fixed-abc';
+    const fixedCreated = 1700000000;
+
+    const harness = await harnessFor({
+      chunks: [
+        {
+          id: fixedId,
+          object: 'chat.completion.chunk',
+          created: fixedCreated,
+          model: 'override-model',
+          choices: [{ delta: { content: 'hi' } }],
+        },
+      ],
+    });
+
+    const res = await harness.app.request(
+      '/v1/chat/completions',
+      defaultBody({ stream: true })
+    );
+    const frames = await readSse(res);
+    const chunk = JSON.parse(parseDataLine(frames[0] ?? '')) as ChatChunk;
+
+    expect(chunk.id).toBe(fixedId);
+    expect(chunk.created).toBe(fixedCreated);
+    expect(chunk.model).toBe('override-model');
+  });
+});
+
+// ============================================================
+// PRE-FIRST-CHUNK ERROR — HTTP 500 JSON
+// ============================================================
+
+describe('pre-first-chunk handler error', () => {
+  it('returns HTTP 500 with JSON error body when handler throws before yielding', async () => {
+    const harness = await harnessFor({
+      throwBefore: new Error('handler blew up early'),
+    });
+
+    const res = await harness.app.request(
+      '/v1/chat/completions',
+      defaultBody({ stream: true })
+    );
+
+    expect(res.status).toBe(500);
+    expect(res.headers.get('content-type')).toContain('application/json');
+
+    const body = (await res.json()) as { error: { message: string } };
+    expect(typeof body.error.message).toBe('string');
+    expect(body.error.message).not.toContain('handler blew up early');
+    expect(body.error.message).toBe('Internal server error');
+  });
+
+  it('returns HTTP 500 when execute() throws synchronously', async () => {
+    // throwBefore throws inside the async execute() body, which is equivalent
+    // to a synchronous reject from the chat harness's perspective: the
+    // promise rejects before any chunk reaches the SSE writer.
+    const harness = await harnessFor({
+      throwBefore: new Error('sync throw from execute'),
+    });
+
+    const res = await harness.app.request(
+      '/v1/chat/completions',
+      defaultBody({ stream: true })
+    );
+
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as { error: { message: string } };
+    expect(typeof body.error.message).toBe('string');
+    expect(body.error.message).not.toContain('sync throw from execute');
+    expect(body.error.message).toBe('Internal server error');
+  });
+});
+
+// ============================================================
+// POST-FIRST-CHUNK ERROR — IN-BAND SSE ERROR FRAME
+// ============================================================
+
+describe('post-first-chunk handler error', () => {
+  it('returns HTTP 200 SSE with in-band error frame then [DONE]', async () => {
+    const harness = await harnessFor({
+      throwAfter: {
+        chunks: [textChunk('first chunk')],
+        error: new Error('mid-stream failure'),
+      },
+    });
+
+    const res = await harness.app.request(
+      '/v1/chat/completions',
+      defaultBody({ stream: true })
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/event-stream');
+
+    const frames = await readSse(res);
+    expect(frames.length).toBeGreaterThanOrEqual(3);
+
+    const firstChunk = JSON.parse(parseDataLine(frames[0] ?? '')) as ChatChunk;
+    expect(firstChunk.choices[0]?.delta?.content).toBe('first chunk');
+
+    const doneIdx = frames.findIndex((f) => f === 'data: [DONE]');
+    expect(doneIdx).toBeGreaterThan(0);
+
+    const errorFrame = frames[doneIdx - 1] ?? '';
+    const errorChunk = JSON.parse(parseDataLine(errorFrame)) as ChatChunk & {
+      error?: { message: string };
+    };
+    expect(errorChunk.choices[0]?.finish_reason).toBe('error');
+    expect(typeof errorChunk.error?.message).toBe('string');
+    expect(errorChunk.error?.message).not.toContain('mid-stream failure');
+    expect(errorChunk.error?.message).toBe('Internal server error');
+
+    expect(frames[frames.length - 1]).toBe('data: [DONE]');
+  });
+
+  it('increments the errors metric for a genuine post-first-chunk handler failure', async () => {
+    const harness = await harnessFor({
+      throwAfter: {
+        chunks: [textChunk('first chunk')],
+        error: new Error('mid-stream failure'),
+      },
+    });
+
+    const before = (
+      (await (await harness.app.request('/metrics')).json()) as {
+        errors: number;
+      }
+    ).errors;
+
+    const res = await harness.app.request(
+      '/v1/chat/completions',
+      defaultBody({ stream: true })
+    );
+    await readSse(res);
+
+    const after = (
+      (await (await harness.app.request('/metrics')).json()) as {
+        errors: number;
+      }
+    ).errors;
+
+    expect(after).toBe(before + 1);
+  });
+});
+
+// ============================================================
+// CLIENT DISCONNECT — NO SPURIOUS ERROR METRIC
+// ============================================================
+
+describe('client disconnect mid-stream', () => {
+  it('does not increment the errors metric when the client cancels the stream', async () => {
+    // A handler that yields a first chunk, then hangs indefinitely awaiting
+    // an external release signal before yielding a second chunk. The test
+    // cancels the client-side reader while the handler is still hung, so
+    // any errors increment observed afterward is a regression caused by the
+    // cancellation rejection being mistaken for a genuine handler failure.
+    let releaseHang: (() => void) | undefined;
+    const hang = new Promise<void>((resolve) => {
+      releaseHang = resolve;
+    });
+
+    const handler: AgentHandler = {
+      describe() {
+        return {
+          name: 't',
+          params: [
+            {
+              name: 'messages',
+              type: 'list(dict(role: string, content: string))',
+              required: true,
+            },
+          ],
+          returnType:
+            'stream(dict(choices: list(dict(delta: dict(role: string, content: string), finish_reason: string)))):string',
+        };
+      },
+      async init() {},
+      async execute(_request, context?: RunContext) {
+        await context?.onChunk?.(textChunk('first chunk'));
+        await hang;
+        await context?.onChunk?.(textChunk('second chunk'));
+        return { state: 'completed', result: null, streamed: true };
+      },
+      async dispose() {},
+    };
+    const router = await makeRouter({
+      agents: new Map<string, AgentHandler>([['t', handler]]),
+      defaultAgent: 't',
+    });
+    const harness = createChatHarness(router);
+
+    const before = (
+      (await (await harness.app.request('/metrics')).json()) as {
+        errors: number;
+      }
+    ).errors;
+
+    const res = await harness.app.request(
+      '/v1/chat/completions',
+      defaultBody({ stream: true })
+    );
+    expect(res.status).toBe(200);
+
+    const reader = res.body!.getReader();
+    // Read past the first chunk, then cancel — simulating a client
+    // disconnect mid-stream while the handler is still awaiting `hang`.
+    await reader.read();
+    await reader.cancel();
+    releaseHang?.();
+
+    // Give the harness's async pump and stream catch handler a tick to run.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const after = (
+      (await (await harness.app.request('/metrics')).json()) as {
+        errors: number;
+      }
+    ).errors;
+
+    expect(after).toBe(before);
+  });
+});
+
+// ============================================================
+// PERFORMANCE — REQUEST-TO-FIRST-CHUNK OVERHEAD
+// ============================================================
+
+describe('request-to-first-chunk overhead', () => {
+  it('delivers first chunk within 50ms for a sync-yielding handler', async () => {
+    // Target is 10ms; 50ms tolerance for CI variance.
+    const harness = await harnessFor({ chunks: [textChunk('immediate')] });
+
+    const start = performance.now();
+    const res = await harness.app.request(
+      '/v1/chat/completions',
+      defaultBody({ stream: true })
+    );
+    expect(res.status).toBe(200);
+
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    let firstFrame: string | undefined;
+
+    while (firstFrame === undefined) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const idx = buf.indexOf('\n\n');
+      if (idx !== -1) firstFrame = buf.slice(0, idx);
+    }
+
+    const elapsed = performance.now() - start;
+    reader.cancel();
+
+    expect(firstFrame).toBeDefined();
+    expect(elapsed).toBeLessThan(50);
+  });
+});
+
+// ============================================================
+// CONCURRENCY — NO HARNESS-IMPOSED CAP
+// ============================================================
+
+describe('concurrent connections — no harness-imposed cap', () => {
+  it('serves 60 concurrent streaming requests without errors', async () => {
+    const CONCURRENCY = 60;
+    const harness = await harnessFor({
+      chunks: [textChunk('chunk-a'), textChunk('chunk-b')],
+    });
+
+    const requests = Array.from({ length: CONCURRENCY }, () =>
+      harness.app.request('/v1/chat/completions', defaultBody({ stream: true }))
+    );
+    const responses = await Promise.all(requests);
+    for (const res of responses) expect(res.status).toBe(200);
+
+    const allFrames = await Promise.all(responses.map((res) => readSse(res)));
+    for (const frames of allFrames) {
+      expect(frames[frames.length - 1]).toBe('data: [DONE]');
+      expect(frames.length).toBe(3);
+    }
+  });
+});
+
+// ============================================================
+// THROUGHPUT — STABLE ACROSS MESSAGE ARRAY SIZES
+// ============================================================
+
+describe('throughput stability across message array sizes', () => {
+  async function measureFirstChunkMs(messageCount: number): Promise<number> {
+    const harness = await harnessFor({ chunks: [textChunk('response')] });
+
+    const messages = Array.from({ length: messageCount }, (_, i) => ({
+      role: i % 2 === 0 ? 'user' : 'assistant',
+      content: `message content number ${i}`,
+    }));
+
+    const start = performance.now();
+    const res = await harness.app.request(
+      '/v1/chat/completions',
+      jsonPost({ model: 't', messages, stream: true })
+    );
+    expect(res.status).toBe(200);
+
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      if (buf.indexOf('\n\n') !== -1) break;
+    }
+    reader.cancel();
+    return performance.now() - start;
+  }
+
+  it('first-chunk time at N=10000 messages stays within 4x of N=1', async () => {
+    const t1 = await measureFirstChunkMs(1);
+    const t10k = await measureFirstChunkMs(10_000);
+    const budget = Math.max(t1 * 4, 200);
+    expect(t10k).toBeLessThan(budget);
+  });
+
+  it('all three sizes (N=1, N=100, N=10000) complete under 500ms', async () => {
+    const t1 = await measureFirstChunkMs(1);
+    const t100 = await measureFirstChunkMs(100);
+    const t10k = await measureFirstChunkMs(10_000);
+    expect(t1).toBeLessThan(500);
+    expect(t100).toBeLessThan(500);
+    expect(t10k).toBeLessThan(500);
+  });
+});
+
+// ============================================================
+// MESSAGES FORWARDED UNCHANGED
+// ============================================================
+
+describe('messages forwarded unchanged to handler', () => {
+  it('passes the exact messages array to execute()', async () => {
+    let receivedMessages: unknown;
+    const harness = await harnessFor({
+      chunks: [textChunk('ok')],
+      onInvoke: (request) => {
+        receivedMessages = (request as { params?: { messages?: unknown[] } })
+          .params?.messages;
+      },
+    });
+
+    const inputMessages = [
+      { role: 'system', content: 'You are helpful.' },
+      { role: 'user', content: 'Tell me about streaming.' },
+      { role: 'assistant', content: 'Streaming sends data incrementally.' },
+    ];
+
+    const res = await harness.app.request(
+      '/v1/chat/completions',
+      jsonPost({ model: 't', messages: inputMessages, stream: true })
+    );
+    await readSse(res);
+
+    expect(receivedMessages).toEqual(inputMessages);
+  });
+
+  it('forwards a 10000-message array with no mutations', async () => {
+    let receivedCount = 0;
+    const harness = await harnessFor({
+      chunks: [textChunk('ok')],
+      onInvoke: (request) => {
+        const msgs = (request as { params?: { messages?: unknown[] } }).params
+          ?.messages;
+        receivedCount = Array.isArray(msgs) ? msgs.length : 0;
+      },
+    });
+
+    const large = Array.from({ length: 10_000 }, (_, i) => ({
+      role: i % 2 === 0 ? 'user' : 'assistant',
+      content: `msg ${i}`,
+    }));
+
+    const res = await harness.app.request(
+      '/v1/chat/completions',
+      jsonPost({ model: 't', messages: large, stream: true })
+    );
+    await readSse(res);
+
+    expect(receivedCount).toBe(10_000);
+  });
+});
+
+// ============================================================
+// WIRE FORMAT COMPATIBILITY — SIMULATED PARSER ASSERTIONS
+// ============================================================
+
+describe('wire format compatibility — simulated client parsers', () => {
+  async function captureFrames(): Promise<string[]> {
+    const harness = await harnessFor({
+      chunks: [textChunk('hello'), textChunk(' world')],
+    });
+    const res = await harness.app.request(
+      '/v1/chat/completions',
+      defaultBody({ stream: true })
+    );
+    return readSse(res);
+  }
+
+  it('openai SDK parser: each frame is "data: <json>" and terminal is "data: [DONE]"', async () => {
+    const frames = await captureFrames();
+    expect(frames[frames.length - 1]).toBe('data: [DONE]');
+
+    for (const frame of frames.slice(0, -1)) {
+      expect(frame).toMatch(/^data: /);
+      const parsed = JSON.parse(parseDataLine(frame)) as ChatChunk;
+      expect(Array.isArray(parsed.choices)).toBe(true);
+    }
+  });
+
+  it('LiteLLM parser: same format as openai SDK (proxied SSE)', async () => {
+    const frames = await captureFrames();
+    expect(frames[frames.length - 1]).toBe('data: [DONE]');
+    for (const frame of frames.slice(0, -1)) {
+      expect(frame.startsWith('data: ')).toBe(true);
+      expect(() => JSON.parse(parseDataLine(frame))).not.toThrow();
+    }
+  });
+
+  it('Vercel AI SDK parser: accepts "data: <json>" framing with \\n\\n terminators', async () => {
+    const harness = await harnessFor({ chunks: [textChunk('v')] });
+
+    const res = await harness.app.request(
+      '/v1/chat/completions',
+      defaultBody({ stream: true })
+    );
+    const rawText = await res.text();
+    const rawFrames = rawText.split('\n\n').filter((f) => f.length > 0);
+
+    for (const frame of rawFrames) {
+      expect(frame.startsWith('data: ')).toBe(true);
+    }
+
+    const jsonFrames = rawFrames.filter((f) => f !== 'data: [DONE]');
+    expect(jsonFrames.length).toBeGreaterThan(0);
+    for (const frame of jsonFrames) {
+      expect(() => JSON.parse(parseDataLine(frame))).not.toThrow();
+    }
+    expect(rawFrames[rawFrames.length - 1]).toBe('data: [DONE]');
+  });
+
+  it('curl frame parser: SSE compliance — "data: " prefix and \\n\\n terminators', async () => {
+    const frames = await captureFrames();
+    for (const frame of frames) {
+      expect(frame.startsWith('data: ')).toBe(true);
+    }
+    expect(frames[frames.length - 1]).toBe('data: [DONE]');
+    for (const frame of frames.slice(0, -1)) {
+      expect(() => JSON.parse(parseDataLine(frame))).not.toThrow();
+    }
+  });
+});
+
+// ============================================================
+// HARNESS LOADS CORRECTLY — PARTIAL BUNDLE CHECK
+// ============================================================
+
+describe('harness loads correctly (partial bundle verification)', () => {
+  it('createChatHarness returns a harness with app, listen, and close', async () => {
+    const harness = await harnessFor({ chunks: [textChunk('ok')] });
+    expect(typeof harness.app).toBe('object');
+    expect(typeof harness.listen).toBe('function');
+    expect(typeof harness.close).toBe('function');
+  });
+
+  it('harness responds to requests from the Hono app instance', async () => {
+    const harness = await harnessFor({ chunks: [textChunk('bundle-ok')] });
+    const res = await harness.app.request('/health');
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('OK');
+  });
+});
+
+// ============================================================
+// CLIENT DISCONNECT — STREAM CANCELLATION
+// ============================================================
+
+describe('client disconnect — stream cancellation', () => {
+  it('aborts the handler-visible signal when the response reader is cancelled', async () => {
+    let captured: RunContext | undefined;
+    const harness = await harnessFor({
+      chunks: [
+        textChunk('first'),
+        textChunk('second'),
+        textChunk('third'),
+        textChunk('fourth'),
+      ],
+      onInvoke: (_request, context) => {
+        captured = context;
+      },
+    });
+
+    const res = await harness.app.request(
+      '/v1/chat/completions',
+      defaultBody({ stream: true })
+    );
+    expect(res.status).toBe(200);
+    expect(res.body).not.toBeNull();
+
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+
+    // Consume one frame, then cancel — exercises the cancel path mid-stream.
+    while (buf.indexOf('\n\n') === -1) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+    }
+
+    expect(captured?.signal instanceof AbortSignal).toBe(true);
+
+    await reader.cancel();
+
+    expect(captured?.signal?.aborted).toBe(true);
+  });
+});

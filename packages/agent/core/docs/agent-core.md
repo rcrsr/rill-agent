@@ -18,7 +18,7 @@
 | `HandlerDescription` | type | Static handler metadata returned by `describe()` |
 | `InitContext` | type | Init payload: `globalVars`, `ahiResolver` |
 | `RunRequest` | type | `{ params?, timeout? }` |
-| `RunContext` | type | `{ sessionVars?, onLog?, onChunk? }` |
+| `RunContext` | type | `{ sessionVars?, onLog?, onChunk?, signal? }` |
 | `RunResponse` | type | `{ state, result, streamed? }` |
 
 ### HTTP entry — `@rcrsr/rill-agent-http`

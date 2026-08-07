@@ -11,24 +11,40 @@ Use this repo when you have a rill script and want to run it as a long-lived ser
 
 ## Documentation
 
-| Guide | Description |
-|-------|-------------|
-| [Getting Started](doc/getting-started.md) | Build and run your first agent |
-| [Concepts](doc/concepts.md) | Manifests, composition, extensions, sessions, AHI |
-| [Architecture](doc/architecture.md) | Package map, dependency graph, data flow |
-| [Deployment](doc/deployment.md) | HTTP, stdio, serverless, Docker patterns |
-| [CLI Reference](doc/cli-reference.md) | All commands and flags |
+Each package documents its own surface:
+
+| Package | Docs |
+|---------|------|
+| `@rcrsr/rill-agent` | [agent-core.md](packages/agent/core/docs/agent-core.md) |
+| `@rcrsr/rill-agent-http` | [README](packages/agent/http/README.md) |
+| `@rcrsr/rill-agent-foundry` | [agent-foundry.md](packages/agent/foundry/docs/agent-foundry.md), [deploy-foundry-agent.md](packages/agent/foundry/docs/deploy-foundry-agent.md) |
+| `@rcrsr/rill-agent-chat` | [agent-chat.md](packages/agent/chat/docs/agent-chat.md) |
+| `@rcrsr/rill-agent-ext-ahi` | [agent-ahi.md](packages/agent/ahi/docs/agent-ahi.md) |
+
+## Demos
+
+Runnable examples live under [`demo/`](demo), each a rill 0.20 bundle you start
+with `rill init && rill run` (needs [`@rcrsr/rill-cli`](https://github.com/rcrsr/rill-cli) ≥ 0.20 on `PATH`):
+
+| Demo | Harness | Shows |
+|------|---------|-------|
+| [`chat-echo`](demo/chat-echo) | `@rcrsr/rill-agent-chat` | OpenAI-compatible streaming chat |
+| [`http-echo`](demo/http-echo) | `@rcrsr/rill-agent-http` | `GET /agents`, `POST /run` |
+| [`foundry-echo`](demo/foundry-echo) | `@rcrsr/rill-agent-foundry` | Foundry Responses API |
+| [`ahi-caller`](demo/ahi-caller) | `@rcrsr/rill-agent-http` | agent-to-agent invocation via AHI |
 
 ## Packages
 
-All packages are published under `@rcrsr/` on npm and share a synchronized version.
+All packages are published under `@rcrsr/` on npm. Every publishable package
+shares the same `major.minor`; patch versions may differ per package.
 
 | Category | Package | npm | Docs | Description |
 |----------|---------|-----|------|-------------|
 | **Runtime** | [`rill-agent`](packages/agent/core) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent)](https://www.npmjs.com/package/@rcrsr/rill-agent) | [docs](packages/agent/core/docs/agent-core.md) | Manifest loader and router |
 | **Extensions** | [`rill-agent-ext-ahi`](packages/agent/ahi) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent-ext-ahi)](https://www.npmjs.com/package/@rcrsr/rill-agent-ext-ahi) | [docs](packages/agent/ahi/docs/agent-ahi.md) | Agent-to-agent invocation |
-| **Hosting** | [`rill-agent-http`](packages/agent/http) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent-http)](https://www.npmjs.com/package/@rcrsr/rill-agent-http) | [docs](packages/agent/core/docs/agent-core.md) | HTTP harness for `AgentRouter` |
+| **Hosting** | [`rill-agent-http`](packages/agent/http) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent-http)](https://www.npmjs.com/package/@rcrsr/rill-agent-http) | [docs](packages/agent/http/README.md) | HTTP harness for `AgentRouter` |
 | | [`rill-agent-foundry`](packages/agent/foundry) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent-foundry)](https://www.npmjs.com/package/@rcrsr/rill-agent-foundry) | [docs](packages/agent/foundry/docs/agent-foundry.md) | Azure Foundry Responses API harness |
+| | [`rill-agent-chat`](packages/agent/chat) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent-chat)](https://www.npmjs.com/package/@rcrsr/rill-agent-chat) | [docs](packages/agent/chat/docs/agent-chat.md) | OpenAI-compatible chat completions harness (SSE) |
 
 ## Usage
 
@@ -44,14 +60,18 @@ await harness.listen(3000);
 
 ## Versioning
 
-All agent packages share a synchronized version. Every release bumps all packages to the same version number.
+Every publishable package sits at the same `major.minor` as the root manifest,
+which is the version a release tag matches; patch versions may differ per
+package. `pnpm check:versions` enforces this. `@rcrsr/rill` peer ranges match the
+runtime by minor. See [CLAUDE.md](CLAUDE.md#versioning-and-release).
 
 ## Development
 
 ```bash
-pnpm install
-pnpm -r build
-pnpm -r test
+pnpm install       # also wires git hooks
+pnpm build         # build the publishable packages
+pnpm test          # run all tests
+pnpm check         # full validation (build, types, lint, format, deps, tests, standards)
 ```
 
 ## Related

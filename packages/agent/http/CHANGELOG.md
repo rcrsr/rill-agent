@@ -7,6 +7,11 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Default-export `RillHarness` adapter for rill 0.20 bundle mode: `serve` assembles a router from the bundle's compiled packages and hosts it over the HTTP harness on `config.port` (default 3000); `postBuild` asserts each package emitted `handler.js`
+- `rill.role: "harness"` package.json declaration for the rill 0.20 `rill install` gate
+
 ## [0.19.0] - 2026-05-02
 
 ### Changed

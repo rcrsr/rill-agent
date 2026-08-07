@@ -1,0 +1,13 @@
+|messages: list(dict(role: string, content: string))| {
+  $messages[-1] => $last
+  $last.content => $text
+
+  [
+    choices: [[
+      delta: [role: "assistant", content: $text],
+      finish_reason: "stop"
+    ]]
+  ] -> yield
+
+  $text
+}:stream(dict(choices: list(dict(delta: dict(role: string, content: string), finish_reason: string)))):string => $chat

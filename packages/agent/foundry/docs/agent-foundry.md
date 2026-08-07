@@ -20,6 +20,32 @@
 | `streamFoundryResponse()` | function | SSE stream emitter |
 | `initTelemetry()`, `getTracer()`, `shutdownTelemetry()` | function | OpenTelemetry lifecycle |
 | `CapacityError`, `CredentialError`, `InputError`, `PersistenceError` | class | Typed errors |
+| `default` | `RillHarness` | rill 0.20 bundle-harness adapter (`serve` + `postBuild`) |
+
+## Bundle harness (rill 0.20)
+
+The package's default export is a rill-CLI `RillHarness`, letting a bundle host
+its agents with `rill run`. Declare it in `rill-bundle.json`:
+
+```json
+{
+  "name": "my-bundle",
+  "version": "0.0.0",
+  "harness": "@rcrsr/rill-agent-foundry",
+  "config": { "port": 3000 },
+  "packages": [{ "mount": "my-agent", "project": "." }]
+}
+```
+
+```bash
+rill install @rcrsr/rill-agent-foundry --replace   # role: "harness" gate
+rill run                                             # build + serve on config.port
+```
+
+`serve` assembles a router from the bundle's compiled packages and hosts it over
+the Foundry harness on `config.port` (default 3000); `postBuild` asserts each
+package emitted `handler.js`. Foundry's own `PORT`/env fallbacks apply only to
+the direct `createFoundryHarness` path, not the bundle `config.port`.
 
 ## Configuration
 

@@ -132,7 +132,7 @@ async function invokeAgent(
   const params = extractParams(args);
   const metadata = ctx.metadata ?? {};
 
-  // AC-5 / AC-22: forward remaining budget when it is less than the
+  // Forward remaining budget when it is less than the
   // configured default. Read timeoutDeadline set by host.ts / handler.ts.
   const deadlineRaw = metadata['timeoutDeadline'];
   const deadlineMs =
@@ -159,7 +159,7 @@ async function invokeAgent(
   });
 
   // Build AbortController only when a non-zero timeout is configured.
-  // AC-21: timeout 0 means no deadline — skip AbortController entirely.
+  // Timeout 0 means no deadline — skip AbortController entirely.
   let controller: AbortController | undefined;
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
@@ -214,11 +214,11 @@ async function invokeAgent(
     if (err instanceof RuntimeError) {
       throw err;
     }
-    // EC-7: AbortController signal fired → timeout exceeded
+    // AbortController signal fired → timeout exceeded
     if (err instanceof Error && err.name === 'AbortError') {
       throw new RuntimeError('RILL-R030', 'AHI: timeout exceeded');
     }
-    // EC-8: Network failure (DNS, connection refused)
+    // Network failure (DNS, connection refused)
     if (err instanceof TypeError) {
       throw new RuntimeError('RILL-R031', 'AHI: connection refused');
     }
@@ -244,7 +244,7 @@ async function invokeAgent(
  *
  * @param config - AHI extension configuration
  * @returns ExtensionResult with one function per agent
- * @throws Error if any agent URL contains an unset env variable (EC-2)
+ * @throws Error if any agent URL contains an unset env variable
  *
  * @example
  * ```typescript
@@ -289,7 +289,7 @@ export function createAhiExtension(
       args: RillValue[],
       ctx: { readonly metadata?: Record<string, string> | undefined }
     ): Promise<RillValue> => {
-      // AC-11: reject calls after dispose
+      // Reject calls after dispose
       if (disposed) {
         throw new RuntimeError('RILL-R033', 'AHI: extension disposed');
       }
@@ -301,7 +301,7 @@ export function createAhiExtension(
   // DISPOSE
   // ============================================================
 
-  // AC-11: cancel all in-flight requests and block further calls
+  // Cancel all in-flight requests and block further calls
   const dispose = (): void => {
     disposed = true;
     for (const ctrl of inFlight) {
@@ -335,7 +335,7 @@ export const configSchema: ExtensionConfigSchema = {
 /**
  * Create a CallableFn that invokes a target agent in-process via runner.
  *
- * IR-9: Calls runner.runForAgent() with caller trigger metadata and
+ * Calls runner.runForAgent() with caller trigger metadata and
  * propagated timeout deadline. Maps capacity errors to RILL-R032 and
  * failed state to RILL-R029.
  *
@@ -362,7 +362,7 @@ function createInProcessCallFn(
     const callerSessionId = metadata['sessionId'] ?? '';
     const callerCorrelationId = metadata['correlationId'];
 
-    // AC-5 / AC-22: propagate remaining budget when it is less than the
+    // Propagate remaining budget when it is less than the
     // configured default. Mirror the same logic used in invokeAgent().
     const deadlineRaw = metadata['timeoutDeadline'];
     const deadlineMs =
@@ -393,7 +393,7 @@ function createInProcessCallFn(
         timeout: effectiveTimeout,
       });
     } catch (err) {
-      // EC-12: capacity error from host → RILL-R032 rate limited
+      // Capacity error from host → RILL-R032 rate limited
       // Duck-type check: ahi cannot import AgentHostError directly.
       if (
         err instanceof Error &&
@@ -406,7 +406,7 @@ function createInProcessCallFn(
       throw err;
     }
 
-    // EC-13: downstream execution failed → RILL-R029
+    // Downstream execution failed → RILL-R029
     if (response.state === 'failed') {
       throw new RuntimeError('RILL-R029', 'AHI: downstream execution failed');
     }
@@ -451,7 +451,7 @@ export function createInProcessFunction(
 /**
  * Standard extension manifest for @rcrsr/rill-agent-ext-ahi.
  * Wraps createAhiExtension so that loadProject() can validate the
- * bundle output config at build time (dry-run validation, AC-49).
+ * bundle output config at build time (dry-run validation).
  *
  * The factory accepts AhiExtensionConfig and returns the extension's
  * callable dict as the mounted RillValue.

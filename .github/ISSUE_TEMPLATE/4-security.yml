@@ -1,0 +1,59 @@
+# Pre-sets the native Issue Type. Security WINS over Bug/Feature/Chore when the
+# issue is fundamentally about a harness executing machine-generated agents with
+# host credentials: request forgery (SSRF via a proxied call), auth bypass,
+# credential or header leakage across the harness boundary, or
+# resource-exhaustion halts. Harnesses run LLM-generated rill agents over the
+# network, so this is a first-class concern.
+name: Security
+description: Request forgery, auth bypass, credential/header leakage, or resource exhaustion at the harness boundary
+type: Security
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        **Do not post working exploit payloads against a live host.** Describe
+        the class of issue and a minimal reproduction. If this is a disclosed
+        vulnerability in a published `@rcrsr/rill-agent*` release, prefer private
+        disclosure over a public issue.
+  - type: textarea
+    id: concern
+    attributes:
+      label: The concern
+      description: What a request or agent can reach or expose that it should not, and the execution path involved (which endpoint, which router or resolver call).
+    validations:
+      required: true
+  - type: textarea
+    id: surface
+    attributes:
+      label: Threat surface
+      description: Which boundary is at stake (credential storage/logging, outbound URL/host allowlisting, request timeouts and size limits, auth token handling, untrusted agent parameters)?
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Supporting context
+      description: >-
+        Optional. Related issues (#N) and pointers to the execution path /
+        relevant source. What to look at. Do not post the fix here: the codebase
+        changes and a solution in the ticket ages.
+    validations:
+      required: false
+  - type: dropdown
+    id: areas
+    attributes:
+      label: Area(s)
+      description: Which package or surface, becomes the area:* labels at triage.
+      multiple: true
+      options:
+        - core
+        - http
+        - foundry
+        - chat
+        - ahi
+        - shared
+        - demo
+        - docs
+        - dx
+    validations:
+      required: true

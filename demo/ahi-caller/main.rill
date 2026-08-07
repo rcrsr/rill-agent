@@ -1,0 +1,5 @@
+|text: string| {
+  use<ext:ahi> => $ahi
+  $ahi.echo([input: $text]) => $reply
+  $reply
+}:string => $caller

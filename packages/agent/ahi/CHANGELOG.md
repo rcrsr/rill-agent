@@ -7,6 +7,14 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `@rcrsr/rill` peer dependency bumped from `~0.19.2` to `~0.20.0` (rill 0.20 minor-compat rule)
+
+### Added
+
+- `rill.role: "extension"` package.json declaration required by the rill 0.20 `rill install` gate
+
 ## [0.19.0] - 2026-05-02
 
 ### Changed

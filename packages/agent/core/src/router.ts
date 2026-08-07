@@ -87,6 +87,7 @@ export async function createRouter(
   }
 
   return {
+    manifest,
     run,
     describe,
     agents,

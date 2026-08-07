@@ -1,0 +1,57 @@
+# Pre-sets the native Issue Type so issues filed from the web UI land correctly
+# typed without scripts (gh CLI can set types since 2.94; forms also can).
+# Taxonomy: .github/labeler.yml header.
+name: Bug report
+description: A harness returns a wrong status, drops a stream frame, or a router/manifest misbehaves
+type: Bug
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: >-
+        What you observed vs. what you expected, the symptom, not a guess at the
+        cause or the fix. If it is about a harness executing machine-generated
+        agents with host credentials (request forgery, auth bypass,
+        credential/header leakage, resource exhaustion), file it as a Security
+        issue instead. Security wins over Bug.
+      placeholder: Include the package, the endpoint or router call, the actual result, and the expected result.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: A minimal manifest, request, or agent that triggers it, the package version, and the `@rcrsr/rill` version.
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Supporting context
+      description: >-
+        Optional. Status codes, response bodies, stack traces, related issues
+        (#N), and pointers to relevant source. Do not propose a fix: the
+        codebase changes and a solution in the ticket ages.
+    validations:
+      required: false
+  - type: dropdown
+    id: areas
+    attributes:
+      label: Area(s)
+      description: >-
+        Which package or surface the work lives in, becomes the area:* labels at
+        triage (forms cannot apply per-answer labels).
+      multiple: true
+      options:
+        - core
+        - http
+        - foundry
+        - chat
+        - ahi
+        - shared
+        - demo
+        - docs
+        - dx
+    validations:
+      required: true

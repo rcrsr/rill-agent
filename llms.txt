@@ -10,7 +10,7 @@ manifest -> router -> harness -> serve
 
 1. `loadManifest(dir)` auto-detects single-agent, nested single-agent, or multi-agent layouts and imports each `handler.js`.
 2. `createRouter(manifest, options?)` calls `describe()` on every handler, builds an AHI resolver, and runs `init()` concurrently.
-3. A harness wraps the router in a Hono server. Choose `httpHarness` for plain HTTP or `createFoundryHarness` for the Azure AI Foundry Responses API.
+3. A harness wraps the router in a Hono server: `httpHarness` for plain HTTP, `createFoundryHarness` for the Azure AI Foundry Responses API, or `createChatHarness` for the OpenAI-compatible chat completions API. All three also ship a default-export `RillHarness` adapter consumed by the rill CLI's bundle mode.
 
 ## Core (2 packages)
 
@@ -39,22 +39,36 @@ Exports: `createFoundryHarness`, `FoundryHarness`, `FoundryHarnessOptions`, `Fou
 
 Deployment guide: [deploy-foundry-agent.md](packages/agent/foundry/docs/deploy-foundry-agent.md)
 
+## Chat (1 package)
+
+OpenAI-compatible chat completions harness. Wraps an `AgentRouter` in a Hono server exposing `POST /v1/chat/completions` (with SSE streaming), consumable by the openai SDK, LiteLLM, and the Vercel AI SDK.
+
+| Package | Docs |
+|---------|------|
+| `@rcrsr/rill-agent-chat` | [agent-chat.md](packages/agent/chat/docs/agent-chat.md) |
+
+Exports: `createChatHarness`, `ChatHarness`
+
 ## AHI, Agent Host Interface (1 package)
 
-rill extension that lets an agent call other agents by name. Registers `ahi::<agentName>` functions in the runtime context. Co-located agents skip HTTP via in-process invocation; remote agents resolve through static URLs.
+rill extension that lets an agent call other agents by name. Mounts a dict of `<agentName>` callables; a script hoists it with `use<ext:ahi> => $ahi` and calls `$ahi.<name>(params)`. Static URL mode resolves remote agents over HTTP; `createInProcessFunction` binds co-located agents in-process.
 
 | Package | Docs |
 |---------|------|
 | `@rcrsr/rill-agent-ext-ahi` | [agent-ahi.md](packages/agent/ahi/docs/agent-ahi.md) |
 
-Exports: `createAhiExtension`
+Exports: `createAhiExtension`, `createInProcessFunction`, `configSchema`, `extensionManifest`
 
 ## Dependency graph
 
 ```
-core ← http (dep)
-core ← foundry (dep)
+core     ← http     (dep)
+core     ← foundry  (dep)
+core     ← chat     (dep)
+hono-kit ← http     (dep)
+hono-kit ← foundry  (dep)
+hono-kit ← chat     (dep)
 ahi
 ```
 
-`core` is self-contained with no runtime dependencies on `hono`. `http` and `foundry` each depend on `@rcrsr/rill-agent` and carry the `hono` / `@hono/node-server` runtime dependencies. `ahi` uses `@rcrsr/rill` as a peer dependency and has no other workspace dependencies.
+`core` is self-contained with no runtime dependency on `hono`. `http`, `foundry`, and `chat` each depend on `@rcrsr/rill-agent` and the private `@rcrsr/rill-agent-hono-kit`, and carry the `hono` / `@hono/node-server` runtime dependencies. `ahi` uses `@rcrsr/rill` as a peer dependency and has no other workspace dependencies.

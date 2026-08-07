@@ -1,0 +1,22 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignore": ["packages/agent/*/dts-bundle-generator.config.cjs"],
+  "workspaces": {
+    "packages/agent/chat": {
+      "ignoreDependencies": ["@hono/node-server"]
+    },
+    "packages/agent/http": {
+      "ignoreDependencies": ["@hono/node-server"]
+    },
+    "packages/agent/foundry": {
+      "ignoreDependencies": ["@hono/node-server"]
+    },
+    "demo/ahi-caller": {
+      "ignoreDependencies": [
+        "@rcrsr/rill-agent",
+        "@rcrsr/rill-agent-http",
+        "@rcrsr/rill-agent-ext-ahi"
+      ]
+    }
+  }
+}

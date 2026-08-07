@@ -1,0 +1,15 @@
+{
+  "name": "foundry-echo",
+  "version": "0.0.0",
+  "harness": "@rcrsr/rill-agent-foundry",
+  "defaultPackage": "foundry-echo",
+  "config": {
+    "port": 3002
+  },
+  "packages": [
+    {
+      "mount": "foundry-echo",
+      "project": "."
+    }
+  ]
+}

@@ -1,0 +1,143 @@
+# =============================================================================
+# THE RILL-AGENT ISSUE TAXONOMY, in one place. Four axes; one is a label set.
+#
+#   1. AREA (where) -- `area:*` labels, the glob map below. Each area maps to a
+#      package or surface in the monorepo. Path-derivable, so PRs get them
+#      automatically (actions/labeler via .github/workflows/pr-labels.yml). On
+#      issues the filer sets them. The labeler is additive and mechanical: a
+#      cross-cutting PR collects one label per touched area. Pick ONE primary
+#      area, the one that owns the work, and add a second only when genuinely
+#      co-owned.
+#
+#   Nine areas, mapped to the packages in CLAUDE.md plus the support surfaces:
+#     area:core     packages/agent/core (@rcrsr/rill-agent) -- manifest loader,
+#                   AgentRouter, validateParams, routerErrorToStatus.
+#     area:http     packages/agent/http (@rcrsr/rill-agent-http) -- the Hono
+#                   HTTP harness.
+#     area:foundry  packages/agent/foundry (@rcrsr/rill-agent-foundry) -- the
+#                   Foundry Responses API harness, sessions, conversations,
+#                   OTEL telemetry.
+#     area:chat     packages/agent/chat (@rcrsr/rill-agent-chat) -- the
+#                   OpenAI-compatible chat completions harness.
+#     area:ahi      packages/agent/ahi (@rcrsr/rill-agent-ext-ahi) -- the Agent
+#                   Host Interface extension for agent-to-agent invocation.
+#     area:shared   packages/shared/hono-kit (@rcrsr/rill-agent-hono-kit,
+#                   private) -- the shared Hono lifecycle and serve glue every
+#                   harness bundles.
+#     area:demo     demo/** -- runnable example agents and bundles.
+#     area:docs     documentation -- packages/*/docs, doc/**, README, CHANGELOG.
+#                   Overlap with a package area is intentional: a package's docs
+#                   are both docs and that package's reference.
+#     area:dx       CI, toolchain, lint/format rules, and root workspace config.
+#                   Anything no consumer of a published package sees. A root
+#                   deps bump or an oxlint-config change touches none of the
+#                   package source globs above, so it would otherwise get no
+#                   area at all.
+#
+#   2. STATUS (why not now) -- the `on-hold` label, issues-only, optional. The
+#      one state GitHub has no native home for (unprefixed, matching
+#      needs-triage): valid, shaped work deliberately parked. Not low priority
+#      (that is Priority Low) and not blocked-on-a-specific-issue. Blocked on a
+#      SPECIFIC issue: use the native issue dependency ("Mark as blocked by")
+#      and NO label. Deliberate park with no single blocker: on-hold.
+#
+#   3. TYPE (what kind) -- native org-level Issue Type, NOT a label, issues-only:
+#        Bug . Feature . Chore . Security . Idea
+#      Feature = net-new capability a host or agent author sees: a new harness
+#      endpoint, a router option, a manifest capability. Chore = robustness work
+#      on existing machinery: debt, refactors, shared-package internals, test
+#      suites, perf, dependency sweeps with no visible surface change. Decision
+#      rule: "would a host integrator notice it in a release note? Feature.
+#      Otherwise Chore." Bug = existing behavior is wrong: a router returns the
+#      wrong status, a harness drops an SSE frame, a manifest fails to load.
+#      Security wins over Bug/Feature/Chore when the issue is fundamentally
+#      about a harness executing machine-generated agents with host credentials:
+#      request forgery, auth bypass, header/credential leakage, or
+#      resource-exhaustion halts. Idea = captured but not yet shaped; still
+#      carries >=1 area: (best guess), Priority unset. Promotion = change the
+#      Type to what it became. Documentation work is NOT a type: it is area:docs
+#      on a Bug/Feature/Chore.
+#
+#   4. PRIORITY (how urgent) -- native org-level Priority Issue Field, NOT a
+#      label, issues-only, optional: High = the queue . Medium = this cycle .
+#      Low = someday. Unset = not yet triaged.
+#
+# TITLES: issues are titled `[<primary-area>] <title>`, lowercase, bare area
+# name without the `area:` prefix: "[http] run endpoint drops trailing frame",
+# "[core] assembleManifest rejects nested layout". PR titles do NOT take the
+# bracket: they keep conventional-commit format (`feat(http): ...`), where the
+# scope already names the primary area.
+#
+# COLORS: one signal per axis; label text is the load-bearing distinction
+# (WCAG 1.4.1, color reinforces, never the only signal). area:* uniform blue
+# #1d76db; on-hold gray #d2dae1 (parked); needs-triage yellow #fbca04
+# (pending). Create the labels with .github/scripts/sync-labels.sh.
+#
+# Rule (enforced advisorily by .github/workflows/issue-labels.yml): every open
+# issue carries >=1 area: label + exactly one Type; Priority is set at triage;
+# on-hold is optional and never satisfies the area requirement. Issue forms
+# (.github/ISSUE_TEMPLATE/) pre-set the Type when filing from the web UI. PRs
+# carry only area labels; the linked issue holds Type/Priority/on-hold. The
+# rcrsr org must have Issue Types (Bug/Feature/Chore/Security/Idea) and the
+# Priority field enabled for the native axes to apply.
+# This file doubles as the one-stop taxonomy doc.
+# =============================================================================
+
+'area:core':
+  - changed-files:
+      - any-glob-to-any-file: 'packages/agent/core/**'
+
+'area:http':
+  - changed-files:
+      - any-glob-to-any-file: 'packages/agent/http/**'
+
+'area:foundry':
+  - changed-files:
+      - any-glob-to-any-file: 'packages/agent/foundry/**'
+
+'area:chat':
+  - changed-files:
+      - any-glob-to-any-file: 'packages/agent/chat/**'
+
+'area:ahi':
+  - changed-files:
+      - any-glob-to-any-file: 'packages/agent/ahi/**'
+
+'area:shared':
+  - changed-files:
+      - any-glob-to-any-file: 'packages/shared/**'
+
+'area:demo':
+  - changed-files:
+      - any-glob-to-any-file: 'demo/**'
+
+'area:docs':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'doc/**'
+          - 'packages/**/docs/**'
+          - 'packages/**/README.md'
+          - 'packages/**/CHANGELOG.md'
+          - 'README.md'
+          - 'CHANGELOG.md'
+          - 'llms.txt'
+
+'area:dx':
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/**'
+          - '.claude/**'
+          - 'scripts/**'
+          # Root and workspace toolchain inputs. A root-only deps or
+          # toolchain-config bump touches none of the package source globs
+          # above, so it would otherwise get no area at all.
+          - 'package.json'
+          - 'pnpm-lock.yaml'
+          - 'pnpm-workspace.yaml'
+          - 'tsconfig*.json'
+          - '.oxlintrc.json'
+          - '.oxfmtrc.json'
+          - 'knip.json'
+          - 'lefthook.yml'
+          - '.node-version'
+          - '.nvmrc'

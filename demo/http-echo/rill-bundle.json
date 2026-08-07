@@ -1,0 +1,15 @@
+{
+  "name": "http-echo",
+  "version": "0.0.0",
+  "harness": "@rcrsr/rill-agent-http",
+  "defaultPackage": "http-echo",
+  "config": {
+    "port": 3001
+  },
+  "packages": [
+    {
+      "mount": "http-echo",
+      "project": "."
+    }
+  ]
+}

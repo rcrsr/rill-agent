@@ -1,10 +1,13 @@
 {
   "name": "@rcrsr/rill-agent-http",
-  "version": "0.19.0",
+  "version": "0.20.0",
   "description": "rill agent HTTP harness — Hono-based HTTP server wrapping AgentRouter",
   "license": "MIT",
   "author": "Andre Bremer",
   "type": "module",
+  "rill": {
+    "role": "harness"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -15,7 +18,7 @@
     "build": "tsup && dts-bundle-generator --config dts-bundle-generator.config.cjs && node -e \"const fs=require('fs');const walk=(d)=>fs.readdirSync(d,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(d+'/'+e.name):[d+'/'+e.name]);const hits=walk('dist').filter(f=>fs.readFileSync(f,'utf8').includes('@rcrsr/rill-agent-hono-kit'));if(hits.length){console.error('hono-kit leak in dist:',hits);process.exit(1);}\"",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint --config ../../../eslint.config.js src/",
+    "lint": "oxlint --config ../../../.oxlintrc.json src/ tests/",
     "check": "pnpm run build && pnpm run test && pnpm run lint"
   },
   "dependencies": {

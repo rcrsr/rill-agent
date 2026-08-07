@@ -1,6 +1,6 @@
 # @rcrsr/rill-agent
 
-Core agent runtime for the [rill](https://github.com/rcrsr/rill) language. Loads agent manifests, builds an `AgentRouter`, and serves agents over HTTP via the included Hono harness. Supports single-agent and multi-agent deployments.
+Core agent runtime for the [rill](https://github.com/rcrsr/rill) language. Loads agent manifests, builds an `AgentRouter`, and validates parameters. Transport-agnostic: pair it with a harness package (`@rcrsr/rill-agent-http`, `-foundry`, or `-chat`) to serve agents. Supports single-agent and multi-agent deployments.
 
 ## Install
 

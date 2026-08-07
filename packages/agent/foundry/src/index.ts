@@ -88,3 +88,42 @@ export { initTelemetry, getTracer, shutdownTelemetry } from './telemetry.js';
 
 export type { FoundryHarness } from './harness.js';
 export { createFoundryHarness } from './harness.js';
+
+// ============================================================
+// RILL CLI HARNESS ADAPTER
+// ============================================================
+
+import { createRouter, assembleManifest } from '@rcrsr/rill-agent';
+import {
+  runRillServe,
+  readHarnessPort,
+  assertCompiledHandlers,
+  type RillHarness,
+} from '@rcrsr/rill-agent-hono-kit';
+import { createFoundryHarness } from './harness.js';
+
+const HARNESS_NAME = '@rcrsr/rill-agent-foundry';
+
+/**
+ * Default export consumed by the rill CLI (`rill install --replace`,
+ * `rill run`) when this package is declared as a bundle harness. `serve`
+ * assembles a router from the bundle's compiled packages and hosts it over the
+ * Foundry Responses harness on `config.port` (default 3000).
+ */
+const harness: RillHarness = {
+  name: HARNESS_NAME,
+  postBuild: async (ctx) => {
+    assertCompiledHandlers(ctx);
+  },
+  serve: (ctx) =>
+    runRillServe(ctx, async (entries) => {
+      const router = await createRouter(await assembleManifest(entries));
+      const port = readHarnessPort(ctx.config, 3000);
+      const server = createFoundryHarness(router, { port });
+      await server.listen();
+      ctx.logger.info(`[${HARNESS_NAME}] listening on :${port}`);
+      return server;
+    }),
+};
+
+export default harness;

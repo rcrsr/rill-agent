@@ -87,15 +87,10 @@ describe('createFoundryHarness — port validation', () => {
 // MISSING RILL-CONFIG  [AC-38]
 // ============================================================
 
-describe('createFoundryHarness — rill-config loading', () => {
-  // [SPEC] AC-38 targets the CLI startup layer, not the harness factory.
-  // The harness factory receives a pre-built AgentRouter — it never loads
-  // rill-config.json directly. The missing-config exit behavior belongs to
-  // the CLI runner that constructs the router before calling createFoundryHarness().
-  it.skip('AC-38: missing rill-config exits non-zero with path — tested at CLI layer, not harness factory', () => {
-    // No-op: this AC applies to the CLI startup path.
-  });
-});
+// The missing-rill-config exit behavior is out of scope for the harness
+// factory: it receives a pre-built AgentRouter and never loads rill-config.json
+// directly. That path belongs to the CLI runner that constructs the router
+// before calling createFoundryHarness(), and is covered there.
 
 // ============================================================
 // CONVERSATIONS API FAILURE  [AC-39, EC-7]

@@ -1,0 +1,8 @@
+{
+  "name": "chat-echo",
+  "version": "0.1.0",
+  "main": "main.rill:chat",
+  "extensions": {
+    "mounts": {}
+  }
+}

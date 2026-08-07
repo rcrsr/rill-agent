@@ -8,6 +8,13 @@ export interface HandlerDescription {
     readonly description?: string | undefined;
     readonly defaultValue?: unknown;
   }>;
+  /**
+   * Handler return type annotation, formatted with the same grammar as
+   * parameter type strings (e.g. `stream(dict(content: string)):string`).
+   * Undefined when the handler closure has no `:T` annotation, or when the
+   * rill-build emitting the handler is too old to expose the field.
+   */
+  readonly returnType?: string | undefined;
 }
 
 export interface InitContext {
@@ -26,6 +33,7 @@ export interface RunContext {
   readonly sessionVars?: Record<string, string> | undefined;
   readonly onLog?: ((message: string) => void) | undefined;
   readonly onChunk?: ((chunk: unknown) => Promise<void>) | undefined;
+  readonly signal?: AbortSignal | undefined;
 }
 
 export interface RunResponse {
@@ -47,6 +55,7 @@ export interface AgentManifest {
 }
 
 export interface AgentRouter {
+  readonly manifest: AgentManifest;
   run(
     agentName: string,
     request: RunRequest,
