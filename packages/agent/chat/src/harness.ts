@@ -13,26 +13,11 @@ import {
 } from './stream.js';
 import { validateMessages } from './validate.js';
 import type {
-  AhiResolver,
   ChatChunk,
   ChatHarness,
   ChatHarnessOptions,
   ChatRequest,
 } from './types.js';
-
-// ============================================================
-// TYPES
-// ============================================================
-
-/**
- * Local structural view that reads the ahiResolver field from the router
- * implementation without importing runtime values from core. The field is
- * optional because the AgentRouter interface declares it as a deferred
- * extension hook.
- */
-interface RouterExtensionView {
-  readonly ahiResolver?: AhiResolver | undefined;
-}
 
 // ============================================================
 // HELPERS
@@ -158,9 +143,8 @@ export function createChatHarness(
   }
 
   // AHI resolver is wired into agent handlers via createRouter()'s init step;
-  // the chat harness no longer threads it per-request because handlers invoke
+  // the chat harness does not thread it per-request because handlers invoke
   // sibling agents through the resolver they captured at init time.
-  void (router as unknown as RouterExtensionView).ahiResolver;
 
   const lifecycle = createHarnessLifecycle();
   const app = lifecycle.app;
@@ -320,22 +304,23 @@ export function createChatHarness(
   }
 
   // ============================================================
-  // CHAT REQUEST HANDLER
+  // BODY PARSING HELPER
   // ============================================================
 
-  async function handleChatRequest(
-    c: Context,
-    agentName: string,
-    defaultFallback: boolean
-  ): Promise<Response> {
-    // Parse body
-    let body: Record<string, unknown>;
+  /**
+   * Parses and validates the request body as a JSON object. Returns the
+   * parsed body, or an error Response ready to be returned directly by the
+   * caller. Callers own the errors/requests counter accounting for the
+   * parse-failure path so each route's metrics stay consistent with its
+   * other early-return branches.
+   */
+  async function parseChatBody(
+    c: Context
+  ): Promise<Record<string, unknown> | Response> {
     try {
       const parsed: unknown = await c.req.json();
-      body = assertJsonObject(parsed);
+      return assertJsonObject(parsed);
     } catch (err) {
-      errors++;
-      requests++;
       return c.json(
         {
           error: {
@@ -345,7 +330,26 @@ export function createChatHarness(
         400
       );
     }
+  }
 
+  // ============================================================
+  // CHAT REQUEST HANDLER
+  // ============================================================
+
+  /**
+   * Shared handler for all three chat routes. `body` is already parsed by
+   * the caller via parseChatBody. `agentName` is the caller-resolved agent
+   * name to target (a route param, the default agent name, or the OpenAI
+   * `model` field); `defaultFallback` controls whether an unknown/ineligible
+   * `agentName` falls back to the default agent (500 if the default is also
+   * missing/ineligible) or returns a 404 (per-agent route only).
+   */
+  async function handleChatRequest(
+    c: Context,
+    body: Record<string, unknown>,
+    agentName: string,
+    defaultFallback: boolean
+  ): Promise<Response> {
     // Validate messages
     const validation = validateMessages(body['messages']);
     if (!validation.valid) {
@@ -425,100 +429,44 @@ export function createChatHarness(
 
   if (routeFlags.perAgent) {
     app.post('/agents/:name/chat', async (c) => {
+      const body = await parseChatBody(c);
+      if (body instanceof Response) {
+        errors++;
+        requests++;
+        return body;
+      }
       const name = c.req.param('name');
-      return handleChatRequest(c, name, false);
+      return handleChatRequest(c, body, name, false);
     });
   }
 
   if (routeFlags.openai) {
     app.post('/v1/chat/completions', async (c) => {
-      // Resolve agent from request body's model field. Missing/empty/unknown
-      // model falls back to the default agent.
-      let body: Record<string, unknown>;
-      try {
-        const parsed: unknown = await c.req.json();
-        body = assertJsonObject(parsed);
-      } catch (err) {
+      const body = await parseChatBody(c);
+      if (body instanceof Response) {
         errors++;
         requests++;
-        return c.json(
-          {
-            error: {
-              message: err instanceof Error ? err.message : 'Invalid JSON',
-            },
-          },
-          400
-        );
+        return body;
       }
-
-      const modelName =
+      // Resolve agent from request body's model field. Missing/empty/unknown
+      // model falls back to the default agent.
+      const agentName =
         typeof body['model'] === 'string' && body['model'] !== ''
           ? body['model']
           : defaultAgentName;
-
-      // Re-use a synthetic context to pass the already-parsed body.
-      // Since handleChatRequest re-parses the body from c.req.json(), we
-      // need a different approach: call the resolution inline here.
-      const validation = validateMessages(body['messages']);
-      if (!validation.valid) {
-        errors++;
-        requests++;
-        return c.json({ error: { message: validation.error } }, 400);
-      }
-
-      // Resolve agent: model field names the agent; fall back to default.
-      let resolvedAgent = modelName;
-      if (
-        !router.agents().includes(resolvedAgent) ||
-        !eligibleAgents.has(resolvedAgent)
-      ) {
-        if (eligibleAgents.has(defaultAgentName)) {
-          resolvedAgent = defaultAgentName;
-        } else {
-          errors++;
-          requests++;
-          return c.json(
-            { error: { message: `Agent "${modelName}" not found` } },
-            404
-          );
-        }
-      }
-
-      const abortController = new AbortController();
-
-      const handler = getHandlerFromRouter(router, resolvedAgent);
-      if (handler === undefined) {
-        errors++;
-        requests++;
-        return c.json(
-          {
-            error: {
-              message: `Agent "${resolvedAgent}" handler not accessible`,
-            },
-          },
-          500
-        );
-      }
-
-      const source = invokeHandlerAsStream(
-        handler,
-        validation.messages,
-        abortController
-      );
-
-      const wantsStream = body['stream'] === true;
-      return dispatchChatResponse(
-        source,
-        resolvedAgent,
-        abortController,
-        wantsStream
-      );
+      return handleChatRequest(c, body, agentName, true);
     });
   }
 
   if (routeFlags.defaultAgent) {
     app.post('/chat', async (c) => {
-      return handleChatRequest(c, defaultAgentName, true);
+      const body = await parseChatBody(c);
+      if (body instanceof Response) {
+        errors++;
+        requests++;
+        return body;
+      }
+      return handleChatRequest(c, body, defaultAgentName, true);
     });
   }
 

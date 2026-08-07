@@ -205,7 +205,7 @@ describe('post-first-chunk handler error', () => {
 
 describe('request-to-first-chunk overhead', () => {
   it('delivers first chunk within 50ms for a sync-yielding handler', async () => {
-    // Target is 10ms (NFR-CHAT-1); 50ms tolerance for CI variance.
+    // Target is 10ms; 50ms tolerance for CI variance.
     const harness = await harnessFor({ chunks: [textChunk('immediate')] });
 
     const start = performance.now();

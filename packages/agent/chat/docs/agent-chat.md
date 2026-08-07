@@ -163,16 +163,19 @@ These are thrown synchronously by `createChatHarness` before the server starts.
 | Error | Cause |
 |-------|-------|
 | `TypeError('router is required')` | `router` argument is `null` or `undefined` |
-| `ChatSignatureError` | `options.routes.defaultAgent` is enabled but the default agent is missing or lacks a `chat()` method |
+| `ChatSignatureError` | `options.routes.defaultAgent` is enabled but the default agent is missing or its declared signature is not chat-eligible (see `inspectChatHandler`) |
 
 ### Request-time errors
 
-| Error | HTTP | Cause |
-|-------|------|-------|
-| `ChatValidationError` | 400 | `messages` array is missing, empty, or contains invalid entries |
-| `ChatNotFoundError` | 404 | Request targets an agent name that does not exist or is not chat-eligible |
-| Handler exception (pre-first-chunk) | 500 JSON | Handler throws synchronously or rejects before yielding any chunk |
-| Handler exception (post-first-chunk) | In-band SSE error frame | Handler throws after streaming has begun; the harness emits a final SSE error event followed by `data: [DONE]` |
+These are not backed by error classes: the routes return a literal JSON error response (`{ "error": { "message": "..." } }`) with the given status code directly.
+
+| HTTP | Cause |
+|------|-------|
+| 400 | `messages` array is missing, empty, or contains invalid entries |
+| 404 | `/agents/:name/chat` targets an agent name that does not exist or is not chat-eligible |
+| 500 | Default agent fallback is missing or not chat-eligible |
+| 500 JSON | Handler throws synchronously or rejects before yielding any chunk |
+| In-band SSE error frame | Handler throws after streaming has begun; the harness emits a final SSE error event followed by `data: [DONE]` |
 
 Pre-first-chunk errors return a JSON body:
 

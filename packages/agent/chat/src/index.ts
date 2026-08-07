@@ -23,11 +23,7 @@ export type {
 // ERRORS
 // ============================================================
 
-export {
-  ChatNotFoundError,
-  ChatSignatureError,
-  ChatValidationError,
-} from './errors.js';
+export { ChatSignatureError } from './errors.js';
 
 // ============================================================
 // INTERNALS (exported for testing)
