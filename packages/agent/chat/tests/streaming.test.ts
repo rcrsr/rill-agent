@@ -135,7 +135,8 @@ describe('pre-first-chunk handler error', () => {
 
     const body = (await res.json()) as { error: { message: string } };
     expect(typeof body.error.message).toBe('string');
-    expect(body.error.message).toContain('handler blew up early');
+    expect(body.error.message).not.toContain('handler blew up early');
+    expect(body.error.message).toBe('Internal server error');
   });
 
   it('returns HTTP 500 when execute() throws synchronously', async () => {
@@ -153,7 +154,9 @@ describe('pre-first-chunk handler error', () => {
 
     expect(res.status).toBe(500);
     const body = (await res.json()) as { error: { message: string } };
-    expect(body.error.message).toContain('sync throw from execute');
+    expect(typeof body.error.message).toBe('string');
+    expect(body.error.message).not.toContain('sync throw from execute');
+    expect(body.error.message).toBe('Internal server error');
   });
 });
 

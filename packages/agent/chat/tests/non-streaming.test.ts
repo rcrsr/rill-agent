@@ -161,7 +161,9 @@ describe('pre-first-chunk handler error on the buffered path', () => {
     expect(res.headers.get('content-type')).toContain('application/json');
 
     const body = (await res.json()) as ChatErrorBody;
-    expect(body.error.message).toContain('buffered handler blew up early');
+    expect(typeof body.error.message).toBe('string');
+    expect(body.error.message).not.toContain('buffered handler blew up early');
+    expect(body.error.message).toBe('Internal server error');
   });
 });
 

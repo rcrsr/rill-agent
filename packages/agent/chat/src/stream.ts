@@ -1,3 +1,4 @@
+import { ChatChunkError } from './errors.js';
 import type { ChatChunk, UsageMetadata } from './types.js';
 
 // ============================================================
@@ -183,7 +184,7 @@ export interface ChatCompletionOptions {
 function checkChunkForError(chunk: ChatChunk): void {
   const finishReason = chunk.choices[0]?.finish_reason;
   if (finishReason === 'error' || chunk.error !== undefined) {
-    throw new Error(chunk.error?.message ?? 'stream error');
+    throw new ChatChunkError(chunk.error?.message ?? 'stream error');
   }
 }
 

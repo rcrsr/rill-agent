@@ -5,7 +5,7 @@ import {
   createHarnessLifecycle,
 } from '@rcrsr/rill-agent-hono-kit';
 import type { AgentHandler, AgentRouter } from '@rcrsr/rill-agent';
-import { ChatSignatureError } from './errors.js';
+import { ChatChunkError, ChatSignatureError } from './errors.js';
 import { inspectChatHandler } from './eligibility.js';
 import {
   createChatCompletionResponse,
@@ -244,14 +244,19 @@ export function createChatHarness(
         abortController,
       });
     } catch (err) {
-      // The handler threw before yielding its first chunk.
+      // The handler threw before yielding its first chunk. The exception
+      // detail is logged server-side only; the client receives a generic
+      // message so internals (stack traces, error text) are not exposed.
+      console.error(err);
       errors++;
       requests++;
-      const msg = err instanceof Error ? err.message : String(err);
-      return new Response(JSON.stringify({ error: { message: msg } }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return new Response(
+        JSON.stringify({ error: { message: 'Internal server error' } }),
+        {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
     }
   }
 
@@ -276,11 +281,28 @@ export function createChatHarness(
       });
     } catch (err) {
       errors++;
-      const msg = err instanceof Error ? err.message : String(err);
-      return new Response(JSON.stringify({ error: { message: msg } }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      // A ChatChunkError carries a handler-emitted in-band error signal
+      // (finish_reason: 'error'), not internal exception detail, so it is
+      // safe to surface verbatim. Any other exception is logged server-side
+      // only; the client receives a generic message so internals are not
+      // exposed.
+      if (err instanceof ChatChunkError) {
+        return new Response(
+          JSON.stringify({ error: { message: err.message } }),
+          {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+          }
+        );
+      }
+      console.error(err);
+      return new Response(
+        JSON.stringify({ error: { message: 'Internal server error' } }),
+        {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
     } finally {
       activeConnections--;
       requests++;
