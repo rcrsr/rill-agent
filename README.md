@@ -3,9 +3,33 @@
 [![CI](https://github.com/rcrsr/rill-agent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/rcrsr/rill-agent/actions/workflows/ci.yml?query=branch%3Amain)
 [![License](https://img.shields.io/github/license/rcrsr/rill-agent)](https://github.com/rcrsr/rill-agent/blob/main/LICENSE)
 
-Host framework that turns compiled [rill](https://github.com/rcrsr/rill) scripts into callable agents. A rill script becomes an `AgentHandler` exposing `describe`, `init`, `execute`, and `dispose`. The runtime loads one or more handlers from a manifest, builds a router that wires up agent-to-agent invocation, and serves the router over HTTP or through a third-party agent framework integration.
+Write an agent once as a typed [rill](https://github.com/rcrsr/rill) closure. Serve it over plain HTTP, an OpenAI-compatible chat endpoint, or the Azure AI Foundry Responses API by changing one field in a config file. The same rill package moves between transports without touching the code.
 
-You write the behavior once as a typed rill closure. The framework validates parameters against the closure's declared types, routes requests to the right agent, and exposes it over the transport you pick: plain HTTP, an OpenAI-compatible chat endpoint, or the Azure AI Foundry Responses API. The same rill package moves between transports by changing one line of config.
+- **One closure, three transports.** The rill source is identical for HTTP, OpenAI-chat, and Foundry; only the `harness` field in `rill-bundle.json` differs.
+- **Validation for free.** `describe()` embeds the closure's parameter types, so a wrong-typed request returns HTTP 400 before your code runs. You write no validation.
+- **Compose by config, not code.** Co-located agents call each other in-process; remote agents resolve by URL. Moving one across the network is a config change.
+- **Run and test in three commands.** `pnpm install && rill init && rill run`, then curl the endpoint — the loop every demo uses. Production deploy to Azure Foundry follows a [documented path](packages/agent/foundry/docs/deploy-foundry-agent.md).
+
+A rill script becomes an `AgentHandler` exposing `describe`, `init`, `execute`, and `dispose`. The runtime loads one or more handlers from a manifest, builds a router that wires up agent-to-agent invocation, and serves it over HTTP or a third-party agent framework integration.
+
+## Try it
+
+Clone, install, and hit a live agent in under a minute:
+
+```bash
+cd demo/http-echo
+pnpm install    # links the HTTP harness into node_modules
+rill init       # bootstraps .rill/ (gitignored); one-time
+rill run        # builds the package, serves on :3001
+
+# from another shell:
+curl -X POST http://localhost:3001/run \
+  -H 'Content-Type: application/json' \
+  -d '{"params":{"input":"hello"}}'
+# {"state":"completed","result":"hello","streamed":false}
+```
+
+Swap the `harness` field in `rill-bundle.json` for `@rcrsr/rill-agent-chat` or `@rcrsr/rill-agent-foundry` and the same closure answers on an OpenAI or Foundry endpoint instead. Requires [`@rcrsr/rill-cli`](https://github.com/rcrsr/rill-cli) ≥ 0.20 on `PATH`.
 
 ## The pipeline
 
@@ -53,7 +77,7 @@ The harness's `serve` hook receives the bundle's compiled packages, assembles a 
 |-----------------|-----------------------------|
 | `@rcrsr/rill-agent-http` | `GET /agents`, `POST /run`, `POST /agents/:name/run` |
 | `@rcrsr/rill-agent-chat` | `POST /v1/chat/completions` (SSE), `/health`, `/metrics` |
-| `@rcrsr/rill-agent-foundry` | `POST /responses` (sync or SSE), `/liveness`, `/readiness` |
+| `@rcrsr/rill-agent-foundry` | `POST /responses` (or `POST /runs`) (sync or SSE), `/liveness`, `/readiness`, `/metrics` |
 
 > Requires [`@rcrsr/rill-cli`](https://github.com/rcrsr/rill-cli) ≥ 0.20 on `PATH`. Published harnesses record into `.rill/npm/` via `rill install <harness> --replace`; the harness declares `"role": "harness"`, which the install gate requires.
 
@@ -127,7 +151,7 @@ The harness validates the closure's signature at construction (`describe()` must
 
 ### 3. Host on Azure AI Foundry
 
-Point the bundle at `@rcrsr/rill-agent-foundry` and the router speaks the Foundry Responses API: `POST /responses`, `input` as a string or a Responses-API input array, sync or SSE by toggling `"stream": true`. The harness adds Azure AI Conversations session persistence, OpenTelemetry tracing, Entra ID auth, liveness/readiness probes, and Prometheus metrics on top of the same router.
+Point the bundle at `@rcrsr/rill-agent-foundry` and the router speaks the Foundry Responses API: `POST /responses`, `input` as a string or a Responses-API input array, sync or SSE by toggling `"stream": true`. The harness adds Azure AI Conversations session persistence, OpenTelemetry tracing, Entra ID auth, liveness/readiness probes, and a JSON `/metrics` endpoint on top of the same router.
 
 ```bash
 curl -X POST http://localhost:3002/responses \
