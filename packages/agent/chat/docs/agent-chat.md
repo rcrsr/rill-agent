@@ -175,7 +175,7 @@ These are not backed by error classes: the routes return a literal JSON error re
 | 404 | `/agents/:name/chat` targets an agent name that does not exist or is not chat-eligible |
 | 500 | Default agent fallback is missing or not chat-eligible |
 | 500 JSON | Handler throws synchronously or rejects before yielding any chunk; the response carries a generic message (the handler's error text is not surfaced to the client — it is logged server-side) |
-| In-band SSE error frame | Handler throws after streaming has begun; the harness emits a final SSE error event followed by `data: [DONE]` |
+| In-band SSE error frame | Handler throws after streaming has begun; the harness emits a final SSE error event followed by `data: [DONE]`. The frame carries a generic message — the exception detail is not surfaced to the client, only logged server-side |
 
 Pre-first-chunk errors return a JSON body:
 

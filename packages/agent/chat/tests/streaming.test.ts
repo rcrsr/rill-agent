@@ -196,7 +196,8 @@ describe('post-first-chunk handler error', () => {
     };
     expect(errorChunk.choices[0]?.finish_reason).toBe('error');
     expect(typeof errorChunk.error?.message).toBe('string');
-    expect(errorChunk.error?.message).toContain('mid-stream failure');
+    expect(errorChunk.error?.message).not.toContain('mid-stream failure');
+    expect(errorChunk.error?.message).toBe('Internal server error');
 
     expect(frames[frames.length - 1]).toBe('data: [DONE]');
   });

@@ -66,20 +66,24 @@ function encodeChunk(chunk: ChatChunk): Uint8Array {
 const DONE_FRAME = encoder.encode('data: [DONE]\n\n');
 
 /**
- * Builds an in-band error chunk for post-first-chunk failures.
+ * Builds an in-band error chunk for post-first-chunk failures. The message
+ * is a fixed generic string, not derived from the underlying exception:
+ * this path is only reached for a genuinely thrown handler exception, so
+ * exposing its detail would leak internal exception/stack text to the
+ * client. The real error is logged server-side by the caller.
  */
-function buildErrorChunk(
-  err: unknown,
-  defaults: { id: string; created: number; model: string }
-): ChatChunk {
-  const message = err instanceof Error ? err.message : String(err);
+function buildErrorChunk(defaults: {
+  id: string;
+  created: number;
+  model: string;
+}): ChatChunk {
   return {
     id: defaults.id,
     object: 'chat.completion.chunk',
     created: defaults.created,
     model: defaults.model,
     choices: [{ index: 0, delta: {}, finish_reason: 'error' }],
-    error: { message },
+    error: { message: 'Internal server error' },
   };
 }
 
@@ -148,11 +152,14 @@ export async function createChatStreamResponse(
         controller.close();
       })().catch((err: unknown) => {
         // Post-first-chunk failure: emit in-band error frame then [DONE].
+        // The real error is logged server-side; the client only sees the
+        // generic message built by buildErrorChunk.
+        console.error(err);
         // Guard against the stream having been cancelled by the consumer
         // before this catch runs (controller.desiredSize is null when closed).
         if (controller.desiredSize === null) return;
         try {
-          controller.enqueue(encodeChunk(buildErrorChunk(err, defaults)));
+          controller.enqueue(encodeChunk(buildErrorChunk(defaults)));
           controller.enqueue(DONE_FRAME);
           controller.close();
         } catch {
