@@ -87,14 +87,14 @@ importers:
   packages/agent/chat:
     dependencies:
       '@hono/node-server':
-        specifier: ^2.0.1
-        version: 2.0.1(hono@4.12.16)
+        specifier: ^2.1.0
+        version: 2.1.0(hono@4.13.0)
       '@rcrsr/rill-agent':
         specifier: workspace:~
         version: link:../core
       hono:
-        specifier: ^4.12.16
-        version: 4.12.16
+        specifier: ^4.13.0
+        version: 4.13.0
     devDependencies:
       '@rcrsr/rill-agent-hono-kit':
         specifier: workspace:^
@@ -114,8 +114,8 @@ importers:
         specifier: ^4.10.0
         version: 4.13.1
       '@hono/node-server':
-        specifier: ^2.0.1
-        version: 2.0.1(hono@4.12.16)
+        specifier: ^2.1.0
+        version: 2.1.0(hono@4.13.0)
       '@opentelemetry/exporter-trace-otlp-http':
         specifier: ^0.216.0
         version: 0.216.0(@opentelemetry/api@1.9.1)
@@ -129,8 +129,8 @@ importers:
         specifier: workspace:~
         version: link:../core
       hono:
-        specifier: ^4.12.16
-        version: 4.12.16
+        specifier: ^4.13.0
+        version: 4.13.0
     devDependencies:
       '@opentelemetry/api':
         specifier: ^1.9.0
@@ -148,14 +148,14 @@ importers:
   packages/agent/http:
     dependencies:
       '@hono/node-server':
-        specifier: ^2.0.1
-        version: 2.0.1(hono@4.12.16)
+        specifier: ^2.1.0
+        version: 2.1.0(hono@4.13.0)
       '@rcrsr/rill-agent':
         specifier: workspace:~
         version: link:../core
       hono:
-        specifier: ^4.12.16
-        version: 4.12.16
+        specifier: ^4.13.0
+        version: 4.13.0
     devDependencies:
       '@rcrsr/rill-agent-hono-kit':
         specifier: workspace:^
@@ -170,11 +170,11 @@ importers:
   packages/shared/hono-kit:
     dependencies:
       '@hono/node-server':
-        specifier: ^2.0.1
-        version: 2.0.1(hono@4.12.16)
+        specifier: ^2.1.0
+        version: 2.1.0(hono@4.13.0)
       hono:
-        specifier: ^4.12.16
-        version: 4.12.16
+        specifier: ^4.13.0
+        version: 4.13.0
 
 packages:
 
@@ -552,8 +552,8 @@ packages:
     engines: {node: '>=6'}
     hasBin: true
 
-  '@hono/node-server@2.0.1':
-    resolution: {integrity: sha512-jI9yMDyFpqBeSighf/zlXnQG/nl9AyBc6aAgy4XtxJMyt/CNyJpvPfzDD+bCc2zAOmhhqtF6TnmIaY+xV4mIrw==}
+  '@hono/node-server@2.1.0':
+    resolution: {integrity: sha512-XovyyCCnBzW+zKu+z/zq8hwNs4KOR5rEMAOxo2f40Q5xoOI37IMm6MIg2COOUtUApo0i6850MTBKH2u4QLGIqg==}
     engines: {node: '>=20'}
     peerDependencies:
       hono: ^4
@@ -1747,8 +1747,8 @@ packages:
   get-tsconfig@4.14.0:
     resolution: {integrity: sha512-yTb+8DXzDREzgvYmh6s9vHsSVCHeC0G3PI5bEXNBHtmshPnO+S5O7qgLEOn0I5QvMy6kpZN8K1NKGyilLb93wA==}
 
-  hono@4.12.16:
-    resolution: {integrity: sha512-jN0ZewiNAWSe5khM3EyCmBb250+b40wWbwNILNfEvq84VREWwOIkuUsFONk/3i3nqkz7Oe1PcpM2mwQEK2L9Kg==}
+  hono@4.13.0:
+    resolution: {integrity: sha512-jhunvfHWxd7J5EFfSgH4xsYJzSe/lfqbUCxiyyeaQasUsXeEHXtzVid+7EOGByc5JnFa23SSFL3Y2RV/z1T+eQ==}
     engines: {node: '>=16.9.0'}
 
   http-proxy-agent@7.0.2:
@@ -2572,9 +2572,9 @@ snapshots:
       protobufjs: 7.5.4
       yargs: 17.7.2
 
-  '@hono/node-server@2.0.1(hono@4.12.16)':
+  '@hono/node-server@2.1.0(hono@4.13.0)':
     dependencies:
-      hono: 4.12.16
+      hono: 4.13.0
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
@@ -3496,7 +3496,7 @@ snapshots:
     dependencies:
       resolve-pkg-maps: 1.0.0
 
-  hono@4.12.16: {}
+  hono@4.13.0: {}
 
   http-proxy-agent@7.0.2:
     dependencies:
