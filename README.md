@@ -5,21 +5,187 @@
 
 Host framework that turns compiled [rill](https://github.com/rcrsr/rill) scripts into callable agents. A rill script becomes an `AgentHandler` exposing `describe`, `init`, `execute`, and `dispose`. The runtime loads one or more handlers from a manifest, builds a router that wires up agent-to-agent invocation, and serves the router over HTTP or through a third-party agent framework integration.
 
-Azure AI Foundry is the first supported third-party agent framework, via [`@rcrsr/rill-agent-foundry`](packages/agent/foundry), which speaks the Foundry Responses API and adds session persistence, SSE streaming, and OTEL observability. Additional framework integrations will follow.
+You write the behavior once as a typed rill closure. The framework validates parameters against the closure's declared types, routes requests to the right agent, and exposes it over the transport you pick: plain HTTP, an OpenAI-compatible chat endpoint, or the Azure AI Foundry Responses API. The same rill package moves between transports by changing one line of config.
 
-Use this repo when you have a rill script and want to run it as a long-lived service with parameter validation and agent routing. The core HTTP harness provides request and parameter validation plus a single JSON response path; features such as session persistence, streaming responses, and observability depend on the hosting integration you choose. Single-agent and multi-agent deployments use the same router. Co-located agents call each other in-process; remote agents resolve via static URLs.
+## The pipeline
 
-## Documentation
+```
+manifest -> router -> harness -> serve
+```
 
-Each package documents its own surface:
+1. **`loadManifest(dir)`** auto-detects the layout (single-agent `handler.js`, nested single-agent, or multi-agent `manifest.json`) and imports each handler module.
+2. **`createRouter(manifest, options?)`** calls `describe()` on every handler, builds an in-process AHI resolver, runs `init()` concurrently, and returns an `AgentRouter`.
+3. **A harness** wraps the router in a Hono server. `httpHarness` speaks plain HTTP, `createChatHarness` speaks the OpenAI chat completions API, `createFoundryHarness` speaks the Foundry Responses API.
+4. **`serve`** listens on a port. Either you call `harness.listen(port)` from your own `server.js`, or the rill CLI's bundle mode calls the harness for you.
 
-| Package | Docs |
-|---------|------|
-| `@rcrsr/rill-agent` | [agent-core.md](packages/agent/core/docs/agent-core.md) |
-| `@rcrsr/rill-agent-http` | [README](packages/agent/http/README.md) |
-| `@rcrsr/rill-agent-foundry` | [agent-foundry.md](packages/agent/foundry/docs/agent-foundry.md), [deploy-foundry-agent.md](packages/agent/foundry/docs/deploy-foundry-agent.md) |
-| `@rcrsr/rill-agent-chat` | [agent-chat.md](packages/agent/chat/docs/agent-chat.md) |
-| `@rcrsr/rill-agent-ext-ahi` | [agent-ahi.md](packages/agent/ahi/docs/agent-ahi.md) |
+## Two ways to host: `rill run` vs a library host
+
+Every harness package ships **two entry points into the same code**:
+
+- A named factory (`httpHarness`, `createChatHarness`, `createFoundryHarness`) you wire by hand in a `server.js`.
+- A default-export `RillHarness` adapter the **rill CLI** drives in bundle mode.
+
+They produce the same running server. Pick by how much control you want over process startup.
+
+### rill CLI bundle mode (recommended)
+
+`rill run` reads `rill-bundle.json`, builds every package it lists, then hands the compiled output to the harness named in `harness`. No `server.js`, no manual `loadManifest`/`createRouter`. This is where **rill-cli composition** happens: the bundle file is the single place that names the transport, the port, and which rill packages get hosted together.
+
+```json
+{
+  "name": "my-agent",
+  "harness": "@rcrsr/rill-agent-http",
+  "defaultPackage": "my-agent",
+  "config": { "port": 3001 },
+  "packages": [{ "mount": "my-agent", "project": "." }]
+}
+```
+
+```bash
+pnpm install    # links the harness into node_modules
+rill init       # bootstraps .rill/ (gitignored); one-time per checkout
+rill run        # builds every package, then serves via the declared harness
+```
+
+The harness's `serve` hook receives the bundle's compiled packages, assembles a router from them (`assembleManifest` maps each `mount` to an agent name), and listens on `config.port`. Swap the transport by editing one field:
+
+| `harness` value | Endpoint the bundle exposes |
+|-----------------|-----------------------------|
+| `@rcrsr/rill-agent-http` | `GET /agents`, `POST /run`, `POST /agents/:name/run` |
+| `@rcrsr/rill-agent-chat` | `POST /v1/chat/completions` (SSE), `/health`, `/metrics` |
+| `@rcrsr/rill-agent-foundry` | `POST /responses` (sync or SSE), `/liveness`, `/readiness` |
+
+> Requires [`@rcrsr/rill-cli`](https://github.com/rcrsr/rill-cli) ≥ 0.20 on `PATH`. Published harnesses record into `.rill/npm/` via `rill install <harness> --replace`; the harness declares `"role": "harness"`, which the install gate requires.
+
+### Library host (manual control)
+
+When you need custom middleware, a shared process, or startup logic the bundle does not express, wire the router yourself:
+
+```typescript
+import { loadManifest, createRouter } from '@rcrsr/rill-agent';
+import { httpHarness } from '@rcrsr/rill-agent-http';
+
+const manifest = await loadManifest('./build');
+const router = await createRouter(manifest, {
+  globalVars: { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? '' },
+});
+const harness = httpHarness(router);
+
+// harness.app is the underlying Hono instance — add routes or middleware here
+await harness.listen(3000);
+```
+
+Produce `build/` with `rill run` (or `rill build`) once, then start the host with `node server.js`. Every demo ships both a `server.js` and a `rill-bundle.json` so you can compare the two paths side by side.
+
+## Use cases
+
+### 1. Ship a rill script as an HTTP service
+
+You have a typed rill closure and want it reachable over HTTP with parameter validation. The whole agent is the closure plus a bundle file.
+
+`main.rill` — a closure that takes a string and returns a string:
+
+```rill
+|input: string| {
+  $input
+}:string => $echo
+```
+
+`rill-bundle.json` names the HTTP harness and a port. `rill run` serves it:
+
+```bash
+curl -X POST http://localhost:3001/run \
+  -H 'Content-Type: application/json' \
+  -d '{"params":{"input":"hello"}}'
+# {"state":"completed","result":"hello","streamed":false}
+```
+
+`describe()` embeds the closure's `input: string` signature, so a request with the wrong param type returns HTTP 400 before the closure runs. See [`demo/http-echo`](demo/http-echo).
+
+### 2. Expose an agent to any OpenAI client
+
+Declare `@rcrsr/rill-agent-chat` as the harness and the same router answers on `POST /v1/chat/completions` with SSE streaming. The `model` field selects the agent by name, so the openai SDK, LiteLLM, and the Vercel AI SDK talk to your rill agent unmodified.
+
+The rill closure declares the full chat signature and yields OpenAI-shaped chunks:
+
+```rill
+|messages: list(dict(role: string, content: string))| {
+  $messages[-1] => $last
+  $last.content => $text
+  [ choices: [[ delta: [role: "assistant", content: $text], finish_reason: "stop" ]] ] -> yield
+  $text
+}:stream(dict(choices: list(dict(delta: dict(role: string, content: string), finish_reason: string)))):string => $chat
+```
+
+```bash
+curl -N -X POST http://localhost:3000/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"chat-echo","messages":[{"role":"user","content":"hello rill"}]}'
+```
+
+The harness validates the closure's signature at construction (`describe()` must declare `messages` and the stream chunk shape) and throws `ChatSignatureError` on a mismatch, so a malformed agent fails at startup rather than on the first request. See [`demo/chat-echo`](demo/chat-echo).
+
+### 3. Host on Azure AI Foundry
+
+Point the bundle at `@rcrsr/rill-agent-foundry` and the router speaks the Foundry Responses API: `POST /responses`, `input` as a string or a Responses-API input array, sync or SSE by toggling `"stream": true`. The harness adds Azure AI Conversations session persistence, OpenTelemetry tracing, Entra ID auth, liveness/readiness probes, and Prometheus metrics on top of the same router.
+
+```bash
+curl -X POST http://localhost:3002/responses \
+  -H 'Content-Type: application/json' \
+  -d '{"input":"hello"}'
+```
+
+The rill source is identical to the HTTP case (a `|input: string|` closure); only the harness field in `rill-bundle.json` differs. See [`demo/foundry-echo`](demo/foundry-echo) and the [deployment guide](packages/agent/foundry/docs/deploy-foundry-agent.md).
+
+### 4. Compose several agents in one bundle
+
+The `packages` array in `rill-bundle.json` takes more than one entry. Each becomes an agent in a **single router hosted by one harness on one port**. `assembleManifest` maps every package's `mount` to an agent name; the router's default agent answers `/run`, and each agent has its own `/agents/:name/run`.
+
+```json
+{
+  "name": "content-pipeline",
+  "harness": "@rcrsr/rill-agent-http",
+  "defaultPackage": "router-agent",
+  "config": { "port": 3001 },
+  "packages": [
+    { "mount": "router-agent", "project": "./router" },
+    { "mount": "classifier",   "project": "./classifier" },
+    { "mount": "summarizer",   "project": "./summarizer" }
+  ]
+}
+```
+
+Co-located agents call each other **in-process**: `createRouter` builds an AHI resolver that calls `router.run(name, request)` directly, so an agent invoking a sibling skips the HTTP hop and the JSON round-trip. A `router-agent` that classifies text, then summarizes it, is three rill closures sharing one process, wired by name rather than by URL.
+
+### 5. Fan out to agents on other hosts
+
+When agents live in separate processes or on separate machines, the AHI extension resolves them by static URL. Mount `ahi` in `rill-config.json` and give it an `agents` map; the calling closure hoists the mount and invokes a peer by name:
+
+```rill
+|text: string| {
+  use<ext:ahi> => $ahi
+  $ahi.echo([input: $text]) => $reply
+  $reply
+}:string => $caller
+```
+
+```json
+{
+  "extensions": {
+    "mounts": { "ahi": "@rcrsr/rill-agent-ext-ahi" },
+    "config": {
+      "ahi": {
+        "agents": { "echo": { "url": "http://localhost:3001" } },
+        "timeout": 10000
+      }
+    }
+  }
+}
+```
+
+Each call sends `POST /run` to the peer's URL, propagates the caller's agent name and session id for tracing, and forwards the smaller of the remaining deadline or the configured timeout so a downstream agent never outlives its caller. URLs support `${VAR_NAME}` substitution, so the same bundle points at localhost in dev and service DNS in production. Connection failures surface as typed rill halts (`RILL-R028` unreachable, `RILL-R031` transport). See [`demo/ahi-caller`](demo/ahi-caller).
+
+The same `$ahi.<name>` script runs unchanged whether the peer is in-process (use case 4) or across the network (use case 5). Moving an agent between the two is a config change, not a code change.
 
 ## Demos
 
@@ -28,10 +194,12 @@ with `rill init && rill run` (needs [`@rcrsr/rill-cli`](https://github.com/rcrsr
 
 | Demo | Harness | Shows |
 |------|---------|-------|
-| [`chat-echo`](demo/chat-echo) | `@rcrsr/rill-agent-chat` | OpenAI-compatible streaming chat |
-| [`http-echo`](demo/http-echo) | `@rcrsr/rill-agent-http` | `GET /agents`, `POST /run` |
-| [`foundry-echo`](demo/foundry-echo) | `@rcrsr/rill-agent-foundry` | Foundry Responses API |
-| [`ahi-caller`](demo/ahi-caller) | `@rcrsr/rill-agent-http` | agent-to-agent invocation via AHI |
+| [`http-echo`](demo/http-echo) | `@rcrsr/rill-agent-http` | `GET /agents`, `POST /run` (use case 1) |
+| [`chat-echo`](demo/chat-echo) | `@rcrsr/rill-agent-chat` | OpenAI-compatible streaming chat (use case 2) |
+| [`foundry-echo`](demo/foundry-echo) | `@rcrsr/rill-agent-foundry` | Foundry Responses API (use case 3) |
+| [`ahi-caller`](demo/ahi-caller) | `@rcrsr/rill-agent-http` | agent-to-agent invocation via AHI (use case 5) |
+
+Each demo ships both a `rill-bundle.json` (the `rill run` path) and, where relevant, a `server.js` (the library-host path), so you can read the composition two ways.
 
 ## Packages
 
@@ -46,17 +214,19 @@ shares the same `major.minor`; patch versions may differ per package.
 | | [`rill-agent-foundry`](packages/agent/foundry) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent-foundry)](https://www.npmjs.com/package/@rcrsr/rill-agent-foundry) | [docs](packages/agent/foundry/docs/agent-foundry.md) | Azure Foundry Responses API harness |
 | | [`rill-agent-chat`](packages/agent/chat) | [![npm](https://img.shields.io/npm/v/@rcrsr/rill-agent-chat)](https://www.npmjs.com/package/@rcrsr/rill-agent-chat) | [docs](packages/agent/chat/docs/agent-chat.md) | OpenAI-compatible chat completions harness (SSE) |
 
-## Usage
+`@rcrsr/rill-agent` is transport-agnostic and has no runtime dependency on `hono`. The three harness packages each depend on it and carry the `hono` runtime deps. `ahi` uses `@rcrsr/rill` as a peer dependency.
 
-```typescript
-import { loadManifest, createRouter } from '@rcrsr/rill-agent';
-import { httpHarness } from '@rcrsr/rill-agent-http';
+## Documentation
 
-const manifest = await loadManifest('./build');
-const router = await createRouter(manifest);
-const harness = httpHarness(router);
-await harness.listen(3000);
-```
+Each package documents its own surface:
+
+| Package | Docs |
+|---------|------|
+| `@rcrsr/rill-agent` | [agent-core.md](packages/agent/core/docs/agent-core.md) |
+| `@rcrsr/rill-agent-http` | [README](packages/agent/http/README.md) |
+| `@rcrsr/rill-agent-foundry` | [agent-foundry.md](packages/agent/foundry/docs/agent-foundry.md), [deploy-foundry-agent.md](packages/agent/foundry/docs/deploy-foundry-agent.md) |
+| `@rcrsr/rill-agent-chat` | [agent-chat.md](packages/agent/chat/docs/agent-chat.md) |
+| `@rcrsr/rill-agent-ext-ahi` | [agent-ahi.md](packages/agent/ahi/docs/agent-ahi.md) |
 
 ## Versioning
 
@@ -77,6 +247,7 @@ pnpm check         # full validation (build, types, lint, format, deps, tests, s
 ## Related
 
 - [rill](https://github.com/rcrsr/rill) — Core language runtime
+- [rill-cli](https://github.com/rcrsr/rill-cli) — Build and bundle tooling (`rill run`, bundle mode)
 - [rill-ext](https://github.com/rcrsr/rill-ext) — Vendor extensions
 
 ## License
