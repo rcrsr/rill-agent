@@ -33,6 +33,7 @@ export interface RunContext {
   readonly sessionVars?: Record<string, string> | undefined;
   readonly onLog?: ((message: string) => void) | undefined;
   readonly onChunk?: ((chunk: unknown) => Promise<void>) | undefined;
+  readonly signal?: AbortSignal | undefined;
 }
 
 export interface RunResponse {

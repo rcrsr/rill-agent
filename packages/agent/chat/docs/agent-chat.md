@@ -4,7 +4,7 @@
 
 `@rcrsr/rill-agent-chat` wraps an `AgentRouter` from `@rcrsr/rill-agent` in a Hono server that speaks the OpenAI Chat Completions wire format over Server-Sent Events (SSE). It is stateless and provider-independent — no Azure, no vendor SDK required at runtime.
 
-The package exposes a single factory, `createChatHarness`, that registers configurable routes, manages per-request `AbortSignal` propagation, and collects lightweight request counters. Handlers return an `AsyncIterable<ChatChunk>` or a `ReadableStream<ChatChunk>`; the harness handles SSE framing and client disconnects automatically.
+The package exposes a single factory, `createChatHarness`, that registers configurable routes, propagates a per-request `AbortSignal` to the handler's `RunContext.signal` (and cancels the SSE stream pump on abort), and collects lightweight request counters. Handlers return an `AsyncIterable<ChatChunk>` or a `ReadableStream<ChatChunk>`; the harness handles SSE framing and client disconnects automatically.
 
 All routes can be toggled independently via `options.routes`. Two observability routes (`/health` and `/metrics`) are always registered and cannot be disabled.
 

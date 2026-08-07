@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { RunContext } from '@rcrsr/rill-agent';
 import type { ChatChunk } from '../src/types.js';
 import {
   defaultBody,
@@ -461,16 +462,8 @@ describe('harness loads correctly (partial bundle verification)', () => {
 // ============================================================
 
 describe('client disconnect — stream cancellation', () => {
-  // [DEVIATION] RunContext does not currently expose an AbortSignal to the
-  // handler. The chat harness aborts its own AbortController on stream
-  // cancellation, but that signal isn't threaded into execute(). Until
-  // RunContext.signal is added (and rill-build forwards it to the rill
-  // runtime), the handler cannot observe client disconnects.
-  //
-  // The visible behavior we CAN test: cancelling the response body reader
-  // closes the SSE stream without throwing. The pump's TransformStream
-  // writes that fail after cancel are swallowed by the harness.
-  it('cancelling the response reader closes the stream cleanly', async () => {
+  it('aborts the handler-visible signal when the response reader is cancelled', async () => {
+    let captured: RunContext | undefined;
     const harness = await harnessFor({
       chunks: [
         textChunk('first'),
@@ -478,6 +471,9 @@ describe('client disconnect — stream cancellation', () => {
         textChunk('third'),
         textChunk('fourth'),
       ],
+      onInvoke: (_request, context) => {
+        captured = context;
+      },
     });
 
     const res = await harness.app.request(
@@ -498,6 +494,10 @@ describe('client disconnect — stream cancellation', () => {
       buf += decoder.decode(value, { stream: true });
     }
 
-    await expect(reader.cancel()).resolves.toBeUndefined();
+    expect(captured?.signal instanceof AbortSignal).toBe(true);
+
+    await reader.cancel();
+
+    expect(captured?.signal?.aborted).toBe(true);
   });
 });

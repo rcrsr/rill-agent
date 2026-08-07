@@ -57,7 +57,7 @@ function getHandlerFromRouter(
 function invokeHandlerAsStream(
   handler: AgentHandler,
   messages: unknown,
-  signal: AbortSignal
+  abortController: AbortController
 ): ReadableStream<ChatChunk> {
   return new ReadableStream<ChatChunk>({
     start(controller) {
@@ -66,8 +66,9 @@ function invokeHandlerAsStream(
           await handler.execute(
             { params: { messages } },
             {
+              signal: abortController.signal,
               onChunk: async (chunk: unknown) => {
-                if (signal.aborted) return;
+                if (abortController.signal.aborted) return;
                 controller.enqueue(chunk as ChatChunk);
               },
             }
@@ -79,8 +80,7 @@ function invokeHandlerAsStream(
       })();
     },
     cancel() {
-      // Reader released; nothing to clean up. The handler's execute() has no
-      // signal hook in RunContext yet; cancellation is best-effort.
+      abortController.abort();
     },
   });
 }
@@ -222,6 +222,7 @@ export function createChatHarness(
       try {
         if (Symbol.asyncIterator in source) {
           for await (const chunk of source as AsyncIterable<ChatChunk>) {
+            if (abortController.signal.aborted) break;
             await writer.write(chunk);
           }
         } else {
@@ -229,6 +230,10 @@ export function createChatHarness(
           try {
             let result = await reader.read();
             while (!result.done) {
+              if (abortController.signal.aborted) {
+                await reader.cancel();
+                break;
+              }
               await writer.write(result.value);
               result = await reader.read();
             }
@@ -236,7 +241,9 @@ export function createChatHarness(
             reader.releaseLock();
           }
         }
-        await writer.close();
+        if (!abortController.signal.aborted) {
+          await writer.close();
+        }
       } catch (err) {
         await writer.abort(err);
       } finally {
@@ -381,9 +388,8 @@ export function createChatHarness(
         : {}),
     };
 
-    // AbortController: aborted on client disconnect. Currently surfaced only
-    // to the stream pump; RunContext does not yet carry an AbortSignal for the
-    // handler itself (see [LIB] follow-up).
+    // AbortController: aborted on client disconnect. Surfaced to both the
+    // stream pump and the handler via RunContext.signal.
     const abortController = new AbortController();
 
     const handler = getHandlerFromRouter(router, resolvedAgent);
@@ -401,7 +407,7 @@ export function createChatHarness(
     const source = invokeHandlerAsStream(
       handler,
       chatReq.messages,
-      abortController.signal
+      abortController
     );
 
     const wantsStream = chatReq.stream === true;
@@ -497,7 +503,7 @@ export function createChatHarness(
       const source = invokeHandlerAsStream(
         handler,
         validation.messages,
-        abortController.signal
+        abortController
       );
 
       const wantsStream = body['stream'] === true;
