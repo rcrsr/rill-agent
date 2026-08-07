@@ -11,9 +11,7 @@ export { createChatHarness } from './harness.js';
 export type {
   AhiResolver,
   ChatChunk,
-  ChatCtx,
   ChatDelta,
-  ChatHandler,
   ChatHarness,
   ChatHarnessOptions,
   ChatMessage,

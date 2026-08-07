@@ -113,7 +113,7 @@ A streaming LLM agent follows the same shape — pipe each token from a streamin
 
 The `model` field on the inbound request reaches the harness for agent selection on `/v1/chat/completions`; the rill script sees only the `messages` parameter and any other fields it declares.
 
-See the [rill streams guide](https://rill.run/docs/guide-examples-streams) for `yield`, `seq`, and `:stream(T):R` semantics, and the [agent build guide](https://rill.run/docs/guide-make) for the full project layout. TypeScript-authored handlers remain supported: any module that satisfies the `AgentHandler` interface with a `chat(req: ChatRequest, ctx: ChatCtx): AsyncIterable<ChatChunk> | ReadableStream<ChatChunk>` method works identically.
+See the [rill streams guide](https://rill.run/docs/guide-examples-streams) for `yield`, `seq`, and `:stream(T):R` semantics, and the [agent build guide](https://rill.run/docs/guide-make) for the full project layout.
 
 ## Exposed routes
 
@@ -148,31 +148,11 @@ const harness = createChatHarness(router, {
 });
 ```
 
-## Handler context (`ChatCtx`)
-
-Each request receives a `ChatCtx` object:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `signal` | `AbortSignal` | Always present. Aborted when the client disconnects. Pass to any async sub-call. |
-| `ahi` | `AhiResolver \| undefined` | AHI resolver when the router has the AHI extension configured; `undefined` otherwise. |
-| `history` | `ChatMessage[] \| undefined` | Reserved for a future session feature; always `undefined` in v1. |
-| `sessionId` | `string \| undefined` | Reserved for a future session feature; always `undefined` in v1. |
-
-Handlers should check `ctx.signal.aborted` or pass `ctx.signal` to downstream `fetch()` or streaming calls so they stop work promptly when the client disconnects.
-
 ## AHI integration
 
-When the router is configured with the `@rcrsr/rill-agent-ext-ahi` extension, `ctx.ahi` is a resolver function. Calling `ctx.ahi(agentName, request)` invokes a sibling agent in-process without an HTTP round-trip. When the AHI extension is not configured, `ctx.ahi` is `undefined`.
+Agent-to-agent invocation (AHI) is provided by the `@rcrsr/rill-agent-ext-ahi` extension, not by the chat harness. When the router is built with that extension, sibling agents are reachable in-process — no HTTP round-trip — from within a rill agent handler via the runtime's `ahi::<agentName>(...)` functions, wired at `createRouter()` init time. The chat harness does not pass an AHI handle per request; co-located agents resolve AHI through the resolver captured at router init, independent of any given chat request.
 
-```typescript
-async *chat(req: ChatRequest, ctx: ChatCtx): AsyncIterable<ChatChunk> {
-  if (ctx.ahi !== undefined) {
-    const result = await ctx.ahi('summarizer', { params: { text: '...' } });
-    yield { choices: [{ delta: { content: result.result as string }, finish_reason: 'stop' }] };
-  }
-}
-```
+See the `@rcrsr/rill-agent-ext-ahi` package documentation for the `ahi::<agentName>(...)` call idiom and extension setup.
 
 ## Error model
 

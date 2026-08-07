@@ -48,10 +48,6 @@ export interface ChatChunk {
   error?: { message: string } | undefined;
 }
 
-// ============================================================
-// HANDLER CONTEXT
-// ============================================================
-
 /**
  * AHI resolver function — same shape as the resolver produced by createRouter
  * in @rcrsr/rill-agent. Defined here to avoid importing a runtime value for a
@@ -61,22 +57,6 @@ export type AhiResolver = (
   agentName: string,
   request: RunRequest
 ) => Promise<RunResponse>;
-
-export interface ChatCtx {
-  readonly signal: AbortSignal;
-  readonly ahi?: AhiResolver | undefined;
-  readonly history?: ChatMessage[] | undefined;
-  readonly sessionId?: string | undefined;
-}
-
-// ============================================================
-// CHAT HANDLER
-// ============================================================
-
-export type ChatHandler = (
-  req: ChatRequest,
-  ctx: ChatCtx
-) => AsyncIterable<ChatChunk> | ReadableStream<ChatChunk>;
 
 // ============================================================
 // HARNESS OPTIONS AND INTERFACE
