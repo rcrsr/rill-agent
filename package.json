@@ -39,7 +39,7 @@
   "devDependencies": {
     "@rcrsr/rill-dev": "^0.2.0",
     "@types/node": "^26.1.2",
-    "knip": "^6.29.0",
+    "knip": "^6.32.2",
     "lefthook": "^2.1.10",
     "oxfmt": "^0.61.0",
     "oxlint": "^1.76.0",
