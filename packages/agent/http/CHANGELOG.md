@@ -7,6 +7,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Dependencies:** Bump hono to ^4.13.5 and @hono/node-server to ^2.1.1. ([#63](https://github.com/rcrsr/rill-agent/pull/63))
+
 ### Fixed
 
 - **Run routes:** both now share consistent error handling; request params must be an object and timeout finite positive. ([#62](https://github.com/rcrsr/rill-agent/pull/62))

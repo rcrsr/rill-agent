@@ -7,6 +7,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Dependencies:** Bump hono to ^4.13.5 and @hono/node-server to ^2.1.1. ([#63](https://github.com/rcrsr/rill-agent/pull/63))
+
 ### Fixed
 
 - **Chunk guarding and disconnect handling:** handler chunks are guarded against malformed data; buffered streaming aborts on disconnect; ineligible agents return 4xx instead of 404. ([#62](https://github.com/rcrsr/rill-agent/pull/62))
