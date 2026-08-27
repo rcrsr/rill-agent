@@ -7,6 +7,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Dependencies:** Bump hono to ^4.13.5 and @hono/node-server to ^2.1.1. ([#63](https://github.com/rcrsr/rill-agent/pull/63))
+
 ### Fixed
 
 - **Session and error handling:** Fixed session slot leakage with malformed response IDs and properly enforced maxConcurrentSessions limits. Malformed input now returns 400 instead of 500, streaming emits correct error codes, and SSE emission is guarded on stream cancellation. ([#62](https://github.com/rcrsr/rill-agent/pull/62))

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Dependency baseline:** Refreshed dependencies and shared tooling. ([#63](https://github.com/rcrsr/rill-agent/pull/63))
+
 ### Fixed
 
 - **25 open bug fixes:** Resolved session leaks, HTTP status codes, casts, error classification, and process.exit. ([#62](https://github.com/rcrsr/rill-agent/pull/62))
