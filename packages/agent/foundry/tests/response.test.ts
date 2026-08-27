@@ -29,9 +29,16 @@ describe('buildSyncResponse — debugErrors threading', () => {
     expect(response.error?.message).toBe('raw internal failure detail');
   });
 
-  it('does not affect the output text, only the error.message field', () => {
+  it('also redacts the output text when debugErrors is false', () => {
     const response = buildSyncResponse(failed, 'resp_debug_output', false);
-    // Output content still carries the coerced result text.
+    expect(response.output[0]?.content[0]?.text).toBe('Internal server error');
+    expect(response.output[0]?.content[0]?.text).not.toContain(
+      'raw internal failure'
+    );
+  });
+
+  it('passes the raw output text through verbatim when debugErrors is true', () => {
+    const response = buildSyncResponse(failed, 'resp_debug_output_on', true);
     expect(response.output[0]?.content[0]?.text).toBe(
       'raw internal failure detail'
     );

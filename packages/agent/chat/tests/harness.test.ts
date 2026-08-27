@@ -458,7 +458,7 @@ describe('createChatHarness — request validation', () => {
     expect(res.status).toBe(400);
   });
 
-  it('POST /agents/:name/chat returns a reason-bearing 4xx for a known but chat-ineligible agent', async () => {
+  it('POST /agents/:name/chat returns a reason-bearing 403 for a known but chat-ineligible agent', async () => {
     const router = await makeRouter({
       agents: new Map([
         ['agent', makeChatHandler({ name: 'agent' })],
@@ -473,9 +473,7 @@ describe('createChatHarness — request validation', () => {
       jsonPost({ messages: VALID_MESSAGES })
     );
 
-    expect(res.status).toBeGreaterThanOrEqual(400);
-    expect(res.status).toBeLessThan(500);
-    expect(res.status).not.toBe(404);
+    expect(res.status).toBe(403);
     const body = (await res.json()) as { error: { message: string } };
     expect(body.error.message).toContain('rpc');
   });

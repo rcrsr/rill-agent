@@ -63,8 +63,10 @@ export function createSessionManager(
   // sessionId/conversationId, so two concurrent acquisitions for the same
   // conversationId occupy two independent slots instead of collapsing into
   // one (a client can legitimately have overlapping in-flight requests on
-  // the same conversation).
+  // the same conversation). tokensBySession is a reverse index so release()
+  // can pop a token in O(1) instead of scanning activeTokens.
   const activeTokens = new Map<string, string>();
+  const tokensBySession = new Map<string, Set<string>>();
 
   return {
     acquire(conversationId: string | undefined): string {
@@ -74,16 +76,30 @@ export function createSessionManager(
       const sessionId = conversationId ?? generateId('sess_');
       const token = generateId('tok_');
       activeTokens.set(token, sessionId);
+      const tokens = tokensBySession.get(sessionId);
+      if (tokens === undefined) {
+        tokensBySession.set(sessionId, new Set([token]));
+      } else {
+        tokens.add(token);
+      }
       return sessionId;
     },
 
     release(sessionId: string): void {
-      for (const [token, id] of activeTokens) {
-        if (id === sessionId) {
-          activeTokens.delete(token);
-          return;
-        }
+      const tokens = tokensBySession.get(sessionId);
+      if (tokens === undefined) {
+        return;
       }
+      const iterResult = tokens.values().next();
+      if (iterResult.done) {
+        return;
+      }
+      const token = iterResult.value;
+      tokens.delete(token);
+      if (tokens.size === 0) {
+        tokensBySession.delete(sessionId);
+      }
+      activeTokens.delete(token);
     },
 
     activeCount(): number {

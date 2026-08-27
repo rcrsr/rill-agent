@@ -45,8 +45,9 @@ export function coerceResult(result: unknown): string {
  * When `debugErrors` is false (default), a failed-state error message is
  * redacted with the same generic message `buildErrorResponse` uses for
  * SERVER_ERROR, so internal detail does not leak through the sync response
- * path when it is suppressed everywhere else. When true, the raw message is
- * passed through verbatim.
+ * path when it is suppressed everywhere else. The same redaction is applied
+ * to the output message `text`, since it otherwise carries the same raw
+ * failure detail. When true, the raw message is passed through verbatim.
  */
 export function buildSyncResponse(
   result: RunResponse,
@@ -54,11 +55,12 @@ export function buildSyncResponse(
   debugErrors = false
 ): FoundryResponse {
   const status = result.state === 'completed' ? 'completed' : 'failed';
-  const text = coerceResult(result.result);
+  const rawText = coerceResult(result.result);
   const msgId = generateId('msg_');
   const errorMessage = debugErrors
-    ? text
+    ? rawText
     : (GENERIC_MESSAGES['SERVER_ERROR'] ?? FALLBACK_MESSAGE);
+  const text = status === 'failed' && !debugErrors ? errorMessage : rawText;
 
   return {
     id: responseId,

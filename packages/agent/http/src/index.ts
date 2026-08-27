@@ -70,7 +70,8 @@ export function httpHarness(router: AgentRouter): HttpHarness {
 
     let params: Record<string, unknown>;
     try {
-      params = assertJsonObject(body['params'] ?? {});
+      params =
+        body['params'] === undefined ? {} : assertJsonObject(body['params']);
     } catch {
       return c.json({ error: 'Parameter "params" must be a JSON object' }, 400);
     }

@@ -114,12 +114,12 @@ function resolveAgentUrl(rawUrl: string): string {
   try {
     parsed = new URL(resolved);
   } catch {
-    throw new Error(`AHI: invalid agent URL: ${resolved}`);
+    throw new Error(`AHI: invalid agent URL: ${rawUrl}`);
   }
 
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new Error(
-      `AHI: unsupported protocol "${parsed.protocol}" for agent URL: ${resolved}`
+      `AHI: unsupported protocol "${parsed.protocol}" for agent URL: ${rawUrl}`
     );
   }
 
@@ -345,9 +345,9 @@ export function createAhiExtension(
 
   const { agents, timeout = 30000 } = config;
 
-  if (typeof timeout !== 'number' || !Number.isFinite(timeout)) {
+  if (typeof timeout !== 'number' || !Number.isFinite(timeout) || timeout < 0) {
     throw new Error(
-      `AHI: config.timeout must be a finite number, got: ${String(timeout)}`
+      `AHI: config.timeout must be a finite number >= 0, got: ${String(timeout)}`
     );
   }
 
@@ -355,6 +355,15 @@ export function createAhiExtension(
   const resolvedAgents = new Map<string, { url: string }>();
 
   for (const [name, agentConfig] of Object.entries(agents)) {
+    if (
+      agentConfig === null ||
+      typeof agentConfig !== 'object' ||
+      typeof (agentConfig as { url?: unknown }).url !== 'string'
+    ) {
+      throw new Error(
+        `AHI: config.agents.${name} must be an object with a string "url" field`
+      );
+    }
     resolvedAgents.set(name, { url: resolveAgentUrl(agentConfig.url) });
   }
 
