@@ -1,19 +1,36 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { createServer } from 'node:net';
 import path from 'node:path';
 
 import {
   assertCompiledHandlers,
   compiledPackageEntries,
+  createHarnessLifecycle,
   readHarnessPort,
   runRillServe,
 } from '../src/index.js';
 import type {
+  HarnessLifecycle,
   RillCompiledPackage,
   RillServeContext,
   ServerHandle,
 } from '../src/index.js';
+
+/** Ask the OS for an unused TCP port by binding then releasing it. */
+async function getFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = createServer();
+    probe.once('error', reject);
+    probe.listen(0, () => {
+      const address = probe.address();
+      const port =
+        typeof address === 'object' && address !== null ? address.port : 0;
+      probe.close(() => resolve(port));
+    });
+  });
+}
 
 // ============================================================
 // TEMP DIR MANAGEMENT
@@ -53,8 +70,14 @@ function makeServeContext(
 ): {
   ctx: RillServeContext;
   fireShutdown: () => Promise<void>;
+  /** Resolves once a shutdown handler has been registered via onShutdown. */
+  shutdownRegistered: Promise<void>;
 } {
   const shutdownHandlers: Array<() => void | Promise<void>> = [];
+  let resolveRegistered: () => void;
+  const shutdownRegistered = new Promise<void>((resolve) => {
+    resolveRegistered = resolve;
+  });
   const ctx: RillServeContext = {
     config,
     logger: noopLogger,
@@ -63,6 +86,7 @@ function makeServeContext(
     args: [],
     onShutdown: (h) => {
       shutdownHandlers.push(h);
+      resolveRegistered();
     },
     onSourceChange: () => undefined,
   };
@@ -71,6 +95,7 @@ function makeServeContext(
     fireShutdown: async () => {
       for (const h of shutdownHandlers) await h();
     },
+    shutdownRegistered,
   };
 }
 
@@ -148,6 +173,57 @@ describe('assertCompiledHandlers', () => {
 });
 
 // ============================================================
+// createHarnessLifecycle listen/close
+// ============================================================
+
+describe('createHarnessLifecycle listen/close', () => {
+  const lifecycles: HarnessLifecycle[] = [];
+
+  afterEach(async () => {
+    for (const lc of lifecycles.splice(0)) {
+      await lc.close().catch(() => undefined);
+    }
+  });
+
+  function make(): HarnessLifecycle {
+    const lc = createHarnessLifecycle();
+    lifecycles.push(lc);
+    return lc;
+  }
+
+  it('rejects with EADDRINUSE when the port is already bound', async () => {
+    const port = await getFreePort();
+    const first = make();
+    await first.listen(port);
+
+    const second = make();
+    await expect(second.listen(port)).rejects.toThrow(/EADDRINUSE/);
+  });
+
+  it('close resolves promptly even with an open SSE-style connection', async () => {
+    const port = await getFreePort();
+    const lc = make();
+    lc.app.get('/sse', () => {
+      const stream = new ReadableStream({
+        start() {
+          // Never closes — simulates a long-lived SSE connection that stays
+          // open past the point close() is called.
+        },
+      });
+      return new Response(stream, {
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    });
+    await lc.listen(port);
+
+    const response = await fetch(`http://localhost:${port}/sse`);
+    expect(response.body).not.toBeNull();
+
+    await expect(lc.close()).resolves.toBeUndefined();
+  });
+});
+
+// ============================================================
 // runRillServe
 // ============================================================
 
@@ -161,7 +237,7 @@ describe('runRillServe', () => {
     };
     let startedWith: ReadonlyArray<{ name: string; dir: string }> | undefined;
 
-    const { ctx, fireShutdown } = makeServeContext([
+    const { ctx, fireShutdown, shutdownRegistered } = makeServeContext([
       pkg('alpha', '/build/alpha'),
     ]);
 
@@ -170,9 +246,9 @@ describe('runRillServe', () => {
       return handle;
     });
 
-    // Let the start callback resolve.
-    await Promise.resolve();
-    await Promise.resolve();
+    // Wait deterministically for runRillServe to register its shutdown
+    // handler, rather than counting a fixed number of microtask ticks.
+    await shutdownRegistered;
 
     expect(startedWith).toEqual([{ name: 'alpha', dir: '/build/alpha' }]);
     expect(closed).toBe(false);

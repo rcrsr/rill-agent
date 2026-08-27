@@ -5,6 +5,12 @@ All notable changes to `@rcrsr/rill-agent-http` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Run routes:** both now share consistent error handling; request params must be an object and timeout finite positive. ([#62](https://github.com/rcrsr/rill-agent/pull/62))
+
 ## [0.20.0] - 2026-08-06
 
 ### Added

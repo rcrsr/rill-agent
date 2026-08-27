@@ -36,6 +36,36 @@ function parseDataLine(frame: string): string {
   return m && m[1] !== undefined ? m[1] : '';
 }
 
+/**
+ * Handler that emits a single caller-supplied value through onChunk without
+ * going through the ChatChunk type, exercising the harness's runtime shape
+ * guard against a handler that violates its declared chunk contract.
+ */
+function makeMalformedChunkHandler(malformedChunk: unknown): AgentHandler {
+  return {
+    describe() {
+      return {
+        name: 't',
+        params: [
+          {
+            name: 'messages',
+            type: 'list(dict(role: string, content: string))',
+            required: true,
+          },
+        ],
+        returnType:
+          'stream(dict(choices: list(dict(delta: dict(role: string, content: string), finish_reason: string)))):string',
+      };
+    },
+    async init() {},
+    async execute(_request, context?: RunContext) {
+      await context?.onChunk?.(malformedChunk);
+      return { state: 'completed', result: null, streamed: true };
+    },
+    async dispose() {},
+  };
+}
+
 // ============================================================
 // SSE WIRE FORMAT — EACH CHUNK AS SEPARATE FRAME
 // ============================================================
@@ -114,6 +144,52 @@ describe('SSE wire format — each chunk as separate frame', () => {
     expect(chunk.id).toBe(fixedId);
     expect(chunk.created).toBe(fixedCreated);
     expect(chunk.model).toBe('override-model');
+  });
+});
+
+// ============================================================
+// MALFORMED HANDLER CHUNK — SHAPE-GUARDED, NOT A RAW CRASH
+// ============================================================
+
+describe('malformed handler chunk shape', () => {
+  it('buffered path returns 500 JSON when the handler emits {}', async () => {
+    const router = await makeRouter({
+      agents: new Map<string, AgentHandler>([
+        ['t', makeMalformedChunkHandler({})],
+      ]),
+      defaultAgent: 't',
+    });
+    const harness = createChatHarness(router);
+
+    const res = await harness.app.request(
+      '/v1/chat/completions',
+      defaultBody({ stream: false })
+    );
+
+    expect(res.status).toBe(500);
+    expect(res.headers.get('content-type')).toContain('application/json');
+    const body = (await res.json()) as { error: { message: string } };
+    expect(typeof body.error.message).toBe('string');
+  });
+
+  it('streaming path returns 500 JSON when the handler emits {choices:[{}]}', async () => {
+    const router = await makeRouter({
+      agents: new Map<string, AgentHandler>([
+        ['t', makeMalformedChunkHandler({ choices: [{}] })],
+      ]),
+      defaultAgent: 't',
+    });
+    const harness = createChatHarness(router);
+
+    const res = await harness.app.request(
+      '/v1/chat/completions',
+      defaultBody({ stream: true })
+    );
+
+    expect(res.status).toBe(500);
+    expect(res.headers.get('content-type')).toContain('application/json');
+    const body = (await res.json()) as { error: { message: string } };
+    expect(typeof body.error.message).toBe('string');
   });
 });
 
@@ -299,8 +375,9 @@ describe('client disconnect mid-stream', () => {
     await reader.cancel();
     releaseHang?.();
 
-    // Give the harness's async pump and stream catch handler a tick to run.
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    // Yield to the event loop so the harness's async pump and stream catch
+    // handler complete, without depending on a fixed wall-clock delay.
+    await new Promise((resolve) => setImmediate(resolve));
 
     const after = (
       (await (await harness.app.request('/metrics')).json()) as {

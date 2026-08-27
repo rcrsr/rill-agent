@@ -12,12 +12,11 @@
 | `FoundryHarness` | type | `{ listen(), close(), app, metrics() }` |
 | `FoundryHarnessOptions` | type | `port`, `maxConcurrentSessions`, `agentName`, `agentVersion`, `debugErrors`, `forceSync` |
 | `FoundryMetrics` | type | Counters returned by `harness.metrics()` |
-| `createSessionManager()` | function | In-memory session store used by the harness |
+| `createSessionManager(options?)` | function | In-memory session store used by the harness |
 | `createConversationsClient(endpoint, credential)` | function | Azure AI Conversations REST client |
 | `createIdGenerator()`, `generateId()` | function | Foundry-compatible ID generators |
 | `extractInput(request)` | function | Pull `params` from a Foundry request body |
 | `buildSyncResponse()`, `buildErrorResponse()`, `generateToolDefinitions()` | function | Response shape builders |
-| `streamFoundryResponse()` | function | SSE stream emitter |
 | `initTelemetry()`, `getTracer()`, `shutdownTelemetry()` | function | OpenTelemetry lifecycle |
 | `CapacityError`, `CredentialError`, `InputError`, `PersistenceError` | class | Typed errors |
 | `default` | `RillHarness` | rill 0.20 bundle-harness adapter (`serve` + `postBuild`) |
@@ -76,7 +75,7 @@ Every response carries the `x-aml-foundry-agents-metadata` header required by th
 
 ## Request Handling
 
-`POST /responses` accepts a Foundry `CreateResponse` body. The harness extracts `params` via `extractInput`, validates them against `router.describe(agentName).params`, and routes to `router.run(agentName, request)`. When the request opts into streaming and `forceSync` is `false`, the harness emits SSE events through `streamFoundryResponse`. Otherwise it returns a synchronous JSON response built by `buildSyncResponse`.
+`POST /responses` accepts a Foundry `CreateResponse` body. The harness extracts `params` via `extractInput`, validates them against `router.describe(agentName).params`, and routes to `router.run(agentName, request)`. When the request opts into streaming and `forceSync` is `false`, the harness emits SSE events through `createFoundryStreamResponse`. Otherwise it returns a synchronous JSON response built by `buildSyncResponse`.
 
 Streaming events follow the Foundry Responses event taxonomy: `response.created`, `response.output_item.added`, `response.output_text.delta`, `response.completed`, and `response.failed`. Errors emit a `StreamErrorEvent`.
 

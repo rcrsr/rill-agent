@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import type { AgentRouter } from '@rcrsr/rill-agent';
+import { AgentNotFoundError } from '@rcrsr/rill-agent';
 import { createFoundryStreamResponse } from '../src/stream.js';
+import { createFoundryHarness } from '../src/harness.js';
 
 // ============================================================
 // SSE PARSING HELPERS
@@ -232,5 +235,41 @@ describe('createFoundryStreamResponse', () => {
       events.find((e) => e.event === 'response.output_text.done')?.data ?? '{}'
     ) as { text: string };
     expect(doneData.text).toBe('');
+  });
+});
+
+// ============================================================
+// HARNESS STREAMING ERROR CLASSIFICATION
+// ============================================================
+
+function makeUnknownAgentRouter(): AgentRouter {
+  return {
+    defaultAgent: () => 'default',
+    agents: () => ['default'],
+    describe: () => ({ name: 'handler', description: 'Test', params: [] }),
+    run: async () => {
+      throw new AgentNotFoundError(
+        'Agent "default" not found. Available: other'
+      );
+    },
+    dispose: async () => undefined,
+  };
+}
+
+describe('createFoundryHarness — streaming error classification', () => {
+  it('reports NOT_FOUND, not SERVER_ERROR, when a streaming request targets an unknown agent', async () => {
+    const harness = createFoundryHarness(makeUnknownAgentRouter());
+
+    const res = await harness.app.request('/responses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: 'hello', stream: true }),
+    });
+
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain('event: error');
+    expect(text).toContain('"code":"NOT_FOUND"');
+    expect(text).not.toContain('"code":"SERVER_ERROR"');
   });
 });

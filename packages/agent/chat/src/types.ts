@@ -11,7 +11,6 @@ export interface ChatMessage {
 }
 
 export interface ChatRequest {
-  model?: string | undefined;
   messages: ChatMessage[];
   stream?: boolean | undefined;
 }

@@ -5,6 +5,12 @@ All notable changes to `@rcrsr/rill-agent-chat` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Chunk guarding and disconnect handling:** handler chunks are guarded against malformed data; buffered streaming aborts on disconnect; ineligible agents return 4xx instead of 404. ([#62](https://github.com/rcrsr/rill-agent/pull/62))
+
 ## [0.20.0] - 2026-08-06
 
 ### Added

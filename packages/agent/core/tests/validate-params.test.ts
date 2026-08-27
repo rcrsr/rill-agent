@@ -9,6 +9,7 @@ import { validateParams } from '../src/validate-params.js';
 
 function makeRouter(desc: HandlerDescription | null): AgentRouter {
   return {
+    manifest: { defaultAgent: '', agents: new Map() },
     describe: (_agentName: string) => desc,
     run: () => Promise.reject(new Error('not implemented')),
     agents: () => [],
@@ -83,6 +84,39 @@ describe('validateParams', () => {
     const result = validateParams({ count: 'five' }, 'agent', router);
 
     expect(result).toBe('Parameter "count" must be number, got string');
+  });
+
+  it('returns null for a bool param given true', () => {
+    const router = makeRouter({
+      name: 'agent',
+      params: [{ name: 'flag', type: 'bool', required: false }],
+    });
+
+    const result = validateParams({ flag: true }, 'agent', router);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null for a bool param given false', () => {
+    const router = makeRouter({
+      name: 'agent',
+      params: [{ name: 'flag', type: 'bool', required: false }],
+    });
+
+    const result = validateParams({ flag: false }, 'agent', router);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns error for bool type mismatch', () => {
+    const router = makeRouter({
+      name: 'agent',
+      params: [{ name: 'flag', type: 'bool', required: false }],
+    });
+
+    const result = validateParams({ flag: 'yes' }, 'agent', router);
+
+    expect(result).toBe('Parameter "flag" must be bool, got string');
   });
 
   it('returns null when all params are valid (EC-1, EC-2)', () => {

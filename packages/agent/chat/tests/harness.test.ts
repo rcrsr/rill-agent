@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import type { AgentRouter, RunContext } from '@rcrsr/rill-agent';
+import type { AgentHandler, AgentRouter, RunContext } from '@rcrsr/rill-agent';
 import { createChatHarness, ChatSignatureError } from '../src/index.js';
 import {
   jsonPost,
@@ -456,5 +456,97 @@ describe('createChatHarness — request validation', () => {
       jsonPost({ model: 'agent' })
     );
     expect(res.status).toBe(400);
+  });
+
+  it('POST /agents/:name/chat returns a reason-bearing 403 for a known but chat-ineligible agent', async () => {
+    const router = await makeRouter({
+      agents: new Map([
+        ['agent', makeChatHandler({ name: 'agent' })],
+        ['rpc', makeRpcHandler('rpc')],
+      ]),
+      defaultAgent: 'agent',
+    });
+    const harness = createChatHarness(router);
+
+    const res = await harness.app.request(
+      '/agents/rpc/chat',
+      jsonPost({ messages: VALID_MESSAGES })
+    );
+
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { error: { message: string } };
+    expect(body.error.message).toContain('rpc');
+  });
+});
+
+// ============================================================
+// CLIENT DISCONNECT — BUFFERED PATH ABORTS HANDLER
+// ============================================================
+
+describe('createChatHarness — buffered path aborts on client disconnect', () => {
+  it('propagates request signal abort to the handler-visible RunContext.signal', async () => {
+    let captured: RunContext | undefined;
+    let executeStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      executeStarted = resolve;
+    });
+    let releaseHang: (() => void) | undefined;
+    const hang = new Promise<void>((resolve) => {
+      releaseHang = resolve;
+    });
+
+    const handler: AgentHandler = {
+      describe() {
+        return {
+          name: 't',
+          params: [
+            {
+              name: 'messages',
+              type: 'list(dict(role: string, content: string))',
+              required: true,
+            },
+          ],
+          returnType:
+            'stream(dict(choices: list(dict(delta: dict(role: string, content: string), finish_reason: string)))):string',
+        };
+      },
+      async init() {},
+      async execute(_request, context?: RunContext) {
+        captured = context;
+        executeStarted?.();
+        await hang;
+        return { state: 'completed', result: null, streamed: false };
+      },
+      async dispose() {},
+    };
+    const router = await makeRouter({
+      agents: new Map<string, AgentHandler>([['t', handler]]),
+      defaultAgent: 't',
+    });
+    const harness = createChatHarness(router);
+
+    const controller = new AbortController();
+    const resPromise = harness.app.request('/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 't',
+        messages: VALID_MESSAGES,
+        stream: false,
+      }),
+      signal: controller.signal,
+    });
+
+    await started;
+    expect(captured?.signal?.aborted).toBe(false);
+
+    controller.abort();
+    releaseHang?.();
+    await resPromise.catch(() => {
+      // The abort may surface as a rejected fetch on some environments;
+      // the assertion of interest is the handler-visible signal below.
+    });
+
+    expect(captured?.signal?.aborted).toBe(true);
   });
 });

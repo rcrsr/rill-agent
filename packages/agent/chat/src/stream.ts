@@ -31,21 +31,6 @@ export interface ChatStreamOptions {
 const encoder = new TextEncoder();
 
 /**
- * Normalizes a ReadableStream<ChatChunk> to AsyncIterable<ChatChunk>.
- * Native `for await...of` on ReadableStream is supported in Node 18+.
- */
-function toAsyncIterable(
-  source: AsyncIterable<ChatChunk> | ReadableStream<ChatChunk>
-): AsyncIterable<ChatChunk> {
-  if (Symbol.asyncIterator in source) {
-    return source as AsyncIterable<ChatChunk>;
-  }
-  // ReadableStream implements async iteration in Node 18+ but may not carry
-  // the Symbol.asyncIterator type in older typings — cast for compatibility.
-  return source as unknown as AsyncIterable<ChatChunk>;
-}
-
-/**
  * Fills omitted auto-fill fields on a chunk, preserving values the handler
  * already provided. A stable `id` and `created` are generated once per
  * stream and reused across all chunks.
@@ -114,7 +99,9 @@ export async function createChatStreamResponse(
   source: AsyncIterable<ChatChunk> | ReadableStream<ChatChunk>,
   options: ChatStreamOptions
 ): Promise<Response> {
-  const iterable = toAsyncIterable(source);
+  // ReadableStream implements Symbol.asyncIterator natively in Node 18+ but
+  // may not carry the type in older typings — cast for compatibility.
+  const iterable = source as AsyncIterable<ChatChunk>;
   const iter = iterable[Symbol.asyncIterator]();
 
   // Stable defaults computed once per stream.
@@ -165,8 +152,10 @@ export async function createChatStreamResponse(
         // own cancel() below, so this reliably distinguishes a cancellation
         // (no handler failure involved — absorbed silently, no logging or
         // error accounting) from a genuine mid-stream handler exception.
-        // desiredSize === null is a secondary guard for the (non-cancellation)
-        // case where the controller was independently closed/errored.
+        // desiredSize === null also covers the cancellation case (cancel()
+        // closes the controller), so it is not an exclusively non-cancellation
+        // guard — it is a general check against enqueuing on a controller
+        // that can no longer accept data (closed, errored, or cancelled).
         if (
           options.abortController.signal.aborted ||
           controller.desiredSize === null
@@ -227,7 +216,9 @@ export async function createChatCompletionResponse(
   source: AsyncIterable<ChatChunk> | ReadableStream<ChatChunk>,
   options: ChatCompletionOptions
 ): Promise<Response> {
-  const iterable = toAsyncIterable(source);
+  // ReadableStream implements Symbol.asyncIterator natively in Node 18+ but
+  // may not carry the type in older typings — cast for compatibility.
+  const iterable = source as AsyncIterable<ChatChunk>;
   const iter = iterable[Symbol.asyncIterator]();
 
   // Stable defaults computed once per response.

@@ -1,14 +1,36 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { assembleManifest, loadManifest } from '../src/manifest.js';
 import { createRouter } from '../src/router.js';
+import type { AgentHandler, AgentManifest } from '../src/types.js';
 
-const PKG_ROOT = path.dirname(
-  fileURLToPath(new URL('../package.json', import.meta.url))
-);
+// ============================================================
+// IN-MEMORY HANDLER FIXTURE
+// ============================================================
+
+function makeHandler(
+  name: string,
+  opts?: {
+    initError?: Error;
+    onDispose?: () => void;
+  }
+): AgentHandler {
+  return {
+    describe: () => ({ name, params: [] }),
+    init: async () => {
+      if (opts?.initError !== undefined) {
+        throw opts.initError;
+      }
+    },
+    execute: async () => ({ state: 'completed', result: name }),
+    dispose: async () => {
+      opts?.onDispose?.();
+    },
+  };
+}
 
 // ============================================================
 // TEMP DIR MANAGEMENT
@@ -17,8 +39,7 @@ const PKG_ROOT = path.dirname(
 const tmpDirs: string[] = [];
 
 async function makeTmpDir(): Promise<string> {
-  await mkdir(PKG_ROOT, { recursive: true });
-  const dir = await mkdtemp(path.join(PKG_ROOT, 'core-test-'));
+  const dir = await mkdtemp(path.join(tmpdir(), 'core-test-'));
   tmpDirs.push(dir);
   return dir;
 }
@@ -434,5 +455,53 @@ export async function dispose() {}
     expect(response.result).toBe('hello');
 
     await router.dispose();
+  });
+
+  it('disposes already-inited handlers when a later init() rejects', async () => {
+    const disposeCalls: string[] = [];
+    const manifest: AgentManifest = {
+      defaultAgent: 'a',
+      agents: new Map([
+        ['a', makeHandler('a', { onDispose: () => disposeCalls.push('a') })],
+        ['b', makeHandler('b', { onDispose: () => disposeCalls.push('b') })],
+        ['c', makeHandler('c', { initError: new Error('boom') })],
+      ]),
+    };
+
+    await expect(createRouter(manifest)).rejects.toThrow('boom');
+
+    expect(disposeCalls.sort()).toEqual(['a', 'b']);
+  });
+
+  it('dispose() attempts every handler and throws an aggregate if any fail', async () => {
+    const disposeAttempts: string[] = [];
+    const manifest: AgentManifest = {
+      defaultAgent: 'a',
+      agents: new Map([
+        [
+          'a',
+          makeHandler('a', {
+            onDispose: () => {
+              disposeAttempts.push('a');
+              throw new Error('dispose-a-failed');
+            },
+          }),
+        ],
+        [
+          'b',
+          makeHandler('b', {
+            onDispose: () => {
+              disposeAttempts.push('b');
+              throw new Error('dispose-b-failed');
+            },
+          }),
+        ],
+      ]),
+    };
+
+    const router = await createRouter(manifest);
+
+    await expect(router.dispose()).rejects.toThrow();
+    expect(disposeAttempts.sort()).toEqual(['a', 'b']);
   });
 });

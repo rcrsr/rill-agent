@@ -82,6 +82,12 @@ export interface AhiExtensionConfig {
 const ENV_VAR_PATTERN = /\$\{([^}]+)\}/g;
 
 /**
+ * Sentinel abort reason used by dispose() to distinguish a deliberate
+ * shutdown from a timeout-triggered abort in the invokeAgent catch branch.
+ */
+const AHI_DISPOSE_REASON = Symbol('ahi-dispose');
+
+/**
  * Resolve all ${VAR} tokens in a URL string using process.env.
  * Throws synchronously if any referenced variable is unset.
  */
@@ -93,6 +99,35 @@ function resolveEnvVars(url: string): string {
     }
     return value;
   });
+}
+
+/**
+ * Resolve ${VAR} tokens, then parse and normalize an agent base URL using
+ * the URL primitive (R5), rejecting any scheme other than http/https.
+ * The returned href always has a trailing slash so `new URL('run', base)`
+ * appends rather than replaces the last path segment.
+ */
+function resolveAgentUrl(rawUrl: string): string {
+  const resolved = resolveEnvVars(rawUrl);
+
+  let parsed: URL;
+  try {
+    parsed = new URL(resolved);
+  } catch {
+    throw new Error(`AHI: invalid agent URL: ${rawUrl}`);
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(
+      `AHI: unsupported protocol "${parsed.protocol}" for agent URL: ${rawUrl}`
+    );
+  }
+
+  if (!parsed.pathname.endsWith('/')) {
+    parsed.pathname = `${parsed.pathname}/`;
+  }
+
+  return parsed.href;
 }
 
 /**
@@ -176,7 +211,8 @@ async function invokeAgent(
   }
 
   try {
-    const response = await fetch(`${agentUrl}/run`, {
+    const endpoint = new URL('run', agentUrl).href;
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -193,29 +229,65 @@ async function invokeAgent(
         throw new RuntimeError('RILL-R027', `AHI: validation failed: ${text}`);
       }
       if (status === 404) {
+        await response.body?.cancel();
         throw new RuntimeError('RILL-R028', 'AHI: agent unreachable');
       }
       if (status === 429) {
+        await response.body?.cancel();
         throw new RuntimeError('RILL-R032', 'AHI: rate limited');
       }
       if (status === 500) {
+        await response.body?.cancel();
         throw new RuntimeError('RILL-R029', 'AHI: downstream execution failed');
       }
+      await response.body?.cancel();
       throw new RuntimeError(
         'RILL-R034',
         `AHI: downstream error: HTTP ${status}`
       );
     }
 
-    const json = (await response.json()) as { result: RillValue };
-    return json.result;
+    let json: unknown;
+    try {
+      json = await response.json();
+    } catch (err) {
+      throw new RuntimeError(
+        'RILL-R034',
+        `AHI: invalid response body from downstream agent: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+    }
+
+    // Boundary validation: never trust the downstream body shape without a
+    // runtime check first (R4). Reject anything that is not a JSON object
+    // carrying a `result` field.
+    if (!isDict(json as RillValue)) {
+      throw new RuntimeError(
+        'RILL-R034',
+        'AHI: downstream response body is not a JSON object'
+      );
+    }
+    const responseDict = json as Record<string, RillValue>;
+    if (!('result' in responseDict)) {
+      throw new RuntimeError(
+        'RILL-R034',
+        'AHI: downstream response missing "result" field'
+      );
+    }
+
+    return responseDict['result'] as RillValue;
   } catch (err) {
     // Re-throw structured errors immediately
     if (err instanceof RuntimeError) {
       throw err;
     }
-    // AbortController signal fired → timeout exceeded
+    // AbortController signal fired → timeout exceeded, unless the abort was
+    // triggered by dispose(), which is a lifecycle event, not a timeout.
     if (err instanceof Error && err.name === 'AbortError') {
+      if (controller?.signal.reason === AHI_DISPOSE_REASON) {
+        throw new RuntimeError('RILL-R033', 'AHI: extension disposed');
+      }
       throw new RuntimeError('RILL-R030', 'AHI: timeout exceeded');
     }
     // Network failure (DNS, connection refused)
@@ -258,14 +330,41 @@ async function invokeAgent(
 export function createAhiExtension(
   config: AhiExtensionConfig
 ): ExtensionResult {
+  // Boundary validation (R4): config arrives from bundle-config JSON and must
+  // not be trusted before Object.entries()/setTimeout() consume it.
+  const agentsRaw: unknown = (config as { agents?: unknown } | null)?.agents;
+  if (
+    agentsRaw === null ||
+    typeof agentsRaw !== 'object' ||
+    Array.isArray(agentsRaw)
+  ) {
+    throw new Error(
+      'AHI: config.agents must be a non-null object mapping agent names to endpoint config'
+    );
+  }
+
   const { agents, timeout = 30000 } = config;
+
+  if (typeof timeout !== 'number' || !Number.isFinite(timeout) || timeout < 0) {
+    throw new Error(
+      `AHI: config.timeout must be a finite number >= 0, got: ${String(timeout)}`
+    );
+  }
 
   // Static URL mode: validate and resolve env vars in each agent URL
   const resolvedAgents = new Map<string, { url: string }>();
 
   for (const [name, agentConfig] of Object.entries(agents)) {
-    const resolvedUrl = resolveEnvVars(agentConfig.url);
-    resolvedAgents.set(name, { url: resolvedUrl });
+    if (
+      agentConfig === null ||
+      typeof agentConfig !== 'object' ||
+      typeof (agentConfig as { url?: unknown }).url !== 'string'
+    ) {
+      throw new Error(
+        `AHI: config.agents.${name} must be an object with a string "url" field`
+      );
+    }
+    resolvedAgents.set(name, { url: resolveAgentUrl(agentConfig.url) });
   }
 
   // ============================================================
@@ -305,7 +404,7 @@ export function createAhiExtension(
   const dispose = (): void => {
     disposed = true;
     for (const ctrl of inFlight) {
-      ctrl.abort();
+      ctrl.abort(AHI_DISPOSE_REASON);
     }
     inFlight.clear();
   };
