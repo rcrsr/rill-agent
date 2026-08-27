@@ -1,4 +1,6 @@
+import { AgentNotFoundError } from './errors.js';
 import type {
+  AgentHandler,
   AgentManifest,
   AgentRouter,
   HandlerDescription,
@@ -6,6 +8,26 @@ import type {
   RunRequest,
   RunResponse,
 } from './types.js';
+
+/**
+ * Dispose every handler, even if some fail. Uses `Promise.allSettled` so a
+ * single failing `dispose()` cannot prevent the rest from being attempted.
+ * Throws an `AggregateError` wrapping every rejection if any handler failed.
+ */
+async function disposeAll(handlers: Iterable<AgentHandler>): Promise<void> {
+  const results = await Promise.allSettled(
+    Array.from(handlers, (handler) => handler.dispose())
+  );
+  const failures = results.filter(
+    (result): result is PromiseRejectedResult => result.status === 'rejected'
+  );
+  if (failures.length > 0) {
+    throw new AggregateError(
+      failures.map((failure) => failure.reason as unknown),
+      `${failures.length} handler(s) failed to dispose`
+    );
+  }
+}
 
 /**
  * Create a router from a loaded manifest.
@@ -36,15 +58,36 @@ export async function createRouter(
     return run(agentName, request);
   };
 
-  // Step 3: Initialize all agents concurrently
-  await Promise.all(
-    Array.from(manifest.agents.values()).map((handler) =>
+  // Step 3: Initialize all agents concurrently. On any rejection, dispose
+  // the handlers whose init() already succeeded before rethrowing, so a
+  // partially-initialized router never leaks resources.
+  const handlerEntries = Array.from(manifest.agents.values());
+  const initResults = await Promise.allSettled(
+    handlerEntries.map((handler) =>
       handler.init({
         globalVars: options?.globalVars,
         ahiResolver,
       })
     )
   );
+  const initFailures: unknown[] = [];
+  const initSucceeded: AgentHandler[] = [];
+  initResults.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      initFailures.push(result.reason);
+    } else {
+      initSucceeded.push(handlerEntries[index]!);
+    }
+  });
+  if (initFailures.length > 0) {
+    await disposeAll(initSucceeded).catch(() => undefined);
+    throw initFailures.length === 1
+      ? initFailures[0]
+      : new AggregateError(
+          initFailures,
+          `${initFailures.length} handler(s) failed to init`
+        );
+  }
 
   // Step 4: Build router
   async function run(
@@ -56,7 +99,7 @@ export async function createRouter(
     const handler = manifest.agents.get(resolvedName);
     if (handler === undefined) {
       const available = Array.from(manifest.agents.keys()).join(', ');
-      throw new Error(
+      throw new AgentNotFoundError(
         `Agent "${resolvedName}" not found. Available: ${available}`
       );
     }
@@ -81,9 +124,7 @@ export async function createRouter(
   }
 
   async function dispose(): Promise<void> {
-    for (const handler of manifest.agents.values()) {
-      await handler.dispose();
-    }
+    await disposeAll(manifest.agents.values());
   }
 
   return {

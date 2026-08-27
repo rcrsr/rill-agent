@@ -78,10 +78,16 @@ async function loadMultiAgent(
   dir: string,
   manifestPath: string
 ): Promise<AgentManifest> {
-  const raw = JSON.parse(readFileSync(manifestPath, 'utf-8')) as Record<
-    string,
-    unknown
-  >;
+  let raw: Record<string, unknown>;
+  try {
+    raw = JSON.parse(readFileSync(manifestPath, 'utf-8')) as Record<
+      string,
+      unknown
+    >;
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(`Malformed manifest.json at ${manifestPath}: ${reason}`);
+  }
 
   const defaultAgent = typeof raw['default'] === 'string' ? raw['default'] : '';
   const agentsConfig = raw['agents'];
@@ -115,17 +121,18 @@ async function loadMultiAgent(
     agents.set(name, handler);
   }
 
-  if (defaultAgent === '' && agents.size === 1) {
-    const firstName = agents.keys().next().value as string;
-    return { defaultAgent: firstName, agents };
+  if (agents.size === 0) {
+    throw new Error(`manifest.json at ${manifestPath} declares no agents`);
   }
 
   if (defaultAgent !== '' && !agents.has(defaultAgent)) {
     throw new Error(`Default agent "${defaultAgent}" not found in manifest`);
   }
 
+  const firstName = agents.keys().next().value as string;
+
   return {
-    defaultAgent: defaultAgent || (agents.keys().next().value as string),
+    defaultAgent: defaultAgent || firstName,
     agents,
   };
 }

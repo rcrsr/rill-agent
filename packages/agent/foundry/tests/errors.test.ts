@@ -317,7 +317,7 @@ describe('createFoundryHarness — handler execution failure', () => {
 // ============================================================
 
 describe('createFoundryHarness — startup credential check', () => {
-  it('calls process.exit(1) on listen() when managed identity returns null token [AC-40, EC-6]', async () => {
+  it('rejects listen() with CredentialError when managed identity returns null token, without exiting the process', async () => {
     process.env['FOUNDRY_PROJECT_ENDPOINT'] =
       'https://example.foundry.azure.com';
 
@@ -329,13 +329,13 @@ describe('createFoundryHarness — startup credential check', () => {
     const exitSpy = vi
       .spyOn(process, 'exit')
       .mockImplementation((_code?: string | number | null | undefined) => {
-        throw new Error('process.exit called');
+        throw new Error('process.exit called — library code must not exit');
       });
 
     const harness = createFoundryHarness(mockRouter, { port: 18092 });
 
-    await expect(harness.listen()).rejects.toThrow('process.exit called');
-    expect(exitSpy).toHaveBeenCalledWith(1);
+    await expect(harness.listen()).rejects.toThrow(CredentialError);
+    expect(exitSpy).not.toHaveBeenCalled();
   });
 
   it('throws CredentialError on listen() when managed identity getToken() throws [AC-40, EC-6]', async () => {

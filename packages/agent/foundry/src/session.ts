@@ -25,6 +25,17 @@ export interface SessionManager {
   activeCount(): number;
 }
 
+/**
+ * Options accepted by createSessionManager.
+ */
+export interface SessionManagerOptions {
+  /**
+   * Maximum number of concurrently open sessions. Overrides the
+   * MAX_CONCURRENT_SESSIONS env var when provided.
+   */
+  readonly maxConcurrentSessions?: number | undefined;
+}
+
 // ============================================================
 // FACTORY
 // ============================================================
@@ -34,31 +45,49 @@ const DEFAULT_MAX_SESSIONS = 10;
 /**
  * Create a bounded pool manager for concurrent rill sessions.
  *
- * Max capacity reads from MAX_CONCURRENT_SESSIONS env var, default 10.
+ * Max capacity resolution order: options.maxConcurrentSessions, then the
+ * MAX_CONCURRENT_SESSIONS env var, then DEFAULT_MAX_SESSIONS.
  */
-export function createSessionManager(): SessionManager {
+export function createSessionManager(
+  options?: SessionManagerOptions
+): SessionManager {
   const raw = process.env['MAX_CONCURRENT_SESSIONS'];
-  const parsed = raw !== undefined ? parseInt(raw, 10) : NaN;
-  const max =
-    Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_SESSIONS;
-  const active = new Set<string>();
+  const parsedEnv = raw !== undefined ? parseInt(raw, 10) : NaN;
+  const envMax =
+    Number.isFinite(parsedEnv) && parsedEnv > 0
+      ? parsedEnv
+      : DEFAULT_MAX_SESSIONS;
+  const max = options?.maxConcurrentSessions ?? envMax;
+
+  // Active slots are keyed by a per-request unique token, not by
+  // sessionId/conversationId, so two concurrent acquisitions for the same
+  // conversationId occupy two independent slots instead of collapsing into
+  // one (a client can legitimately have overlapping in-flight requests on
+  // the same conversation).
+  const activeTokens = new Map<string, string>();
 
   return {
     acquire(conversationId: string | undefined): string {
-      if (active.size >= max) {
+      if (activeTokens.size >= max) {
         throw new CapacityError(max);
       }
       const sessionId = conversationId ?? generateId('sess_');
-      active.add(sessionId);
+      const token = generateId('tok_');
+      activeTokens.set(token, sessionId);
       return sessionId;
     },
 
     release(sessionId: string): void {
-      active.delete(sessionId);
+      for (const [token, id] of activeTokens) {
+        if (id === sessionId) {
+          activeTokens.delete(token);
+          return;
+        }
+      }
     },
 
     activeCount(): number {
-      return active.size;
+      return activeTokens.size;
     },
   };
 }

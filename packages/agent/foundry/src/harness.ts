@@ -16,7 +16,11 @@ import type {
 import { CapacityError, CredentialError, InputError } from './errors.js';
 import { extractInput } from './extract.js';
 import { createIdGenerator, generateId } from './id.js';
-import { buildErrorResponse, buildSyncResponse } from './response.js';
+import {
+  buildErrorResponse,
+  buildSyncResponse,
+  coerceResult,
+} from './response.js';
 import { createSessionManager } from './session.js';
 import { createFoundryStreamResponse } from './stream.js';
 import {
@@ -70,7 +74,9 @@ function resolvePort(options?: FoundryHarnessOptions): number {
 
 /**
  * Resolve the conversationId from the request body field.
- * Accepts string or {id: string} object.
+ * Accepts string or {id: string} object. `body` is an unvalidated cast of
+ * inbound JSON, so `conversation.id` may carry any runtime type — reject
+ * anything that is not a string rather than propagating a malformed value.
  */
 function resolveConversationId(
   conversation: CreateResponse['conversation']
@@ -81,7 +87,39 @@ function resolveConversationId(
   if (typeof conversation === 'string') {
     return conversation;
   }
-  return conversation.id;
+  if (
+    typeof conversation === 'object' &&
+    conversation !== null &&
+    typeof (conversation as { id: unknown }).id === 'string'
+  ) {
+    return (conversation as { id: string }).id;
+  }
+  throw new InputError('conversation.id must be a string');
+}
+
+/**
+ * Resolve metadata.response_id from the request body field.
+ * `body.metadata` is an unvalidated cast of inbound JSON, so the field may
+ * carry any runtime type — reject anything that is not a string rather than
+ * propagating a malformed value into ID generation.
+ */
+function resolveMetadataResponseId(
+  metadata: CreateResponse['metadata']
+): string | undefined {
+  if (metadata === undefined || metadata === null) {
+    return undefined;
+  }
+  if (typeof metadata !== 'object') {
+    throw new InputError('metadata must be an object');
+  }
+  const responseId = (metadata as Record<string, unknown>)['response_id'];
+  if (responseId === undefined) {
+    return undefined;
+  }
+  if (typeof responseId !== 'string') {
+    throw new InputError('metadata.response_id must be a string');
+  }
+  return responseId;
 }
 
 // ============================================================
@@ -117,7 +155,9 @@ export function createFoundryHarness(
     agentVersion,
   });
 
-  const sessions = createSessionManager();
+  const sessions = createSessionManager({
+    maxConcurrentSessions: options?.maxConcurrentSessions,
+  });
 
   const projectEndpoint = process.env['FOUNDRY_PROJECT_ENDPOINT'];
   const azureCredential =
@@ -237,8 +277,22 @@ export function createFoundryHarness(
       );
     }
 
-    // Resolve conversation ID
-    const conversationId = resolveConversationId(body.conversation);
+    // Resolve conversation ID and metadata.response_id. Both are validated
+    // as string|absent here, before session acquisition, so a malformed
+    // value returns 400 without consuming a session slot.
+    let conversationId: string | undefined;
+    let metadataResponseId: string | undefined;
+    try {
+      conversationId = resolveConversationId(body.conversation);
+      metadataResponseId = resolveMetadataResponseId(body.metadata);
+    } catch (err) {
+      errorCount++;
+      const msg = err instanceof InputError ? err.message : String(err);
+      return c.json(
+        buildErrorResponse('INVALID_REQUEST', msg, debugErrors),
+        400
+      );
+    }
 
     // Resolve agent name early so validation can use it
     const agentName_ = extracted.targetAgent ?? router.defaultAgent();
@@ -281,12 +335,7 @@ export function createFoundryHarness(
 
     // Use response_id from request metadata (assigned by Foundry gateway)
     // or generate one for direct/test callers.
-    const idGen = createIdGenerator(
-      (body.metadata as Record<string, unknown> | undefined)?.[
-        'response_id'
-      ] as string | undefined,
-      conversationId
-    );
+    const idGen = createIdGenerator(metadataResponseId, conversationId);
     const responseId = idGen.responseId;
 
     // Session and invocation IDs for sidecar stream correlation.
@@ -400,8 +449,7 @@ export function createFoundryHarness(
       // The onChunk callback converts handler chunks to strings and
       // pushes them into the async iterable consumed by the SSE stream.
       const onChunk = async (chunk: unknown): Promise<void> => {
-        const text = typeof chunk === 'string' ? chunk : JSON.stringify(chunk);
-        pushChunk(text);
+        pushChunk(coerceResult(chunk));
       };
 
       const streamContext: RunContext = { ...runContext, onChunk };
@@ -418,13 +466,8 @@ export function createFoundryHarness(
           // If the handler did not stream (no onChunk support), emit
           // the flat result as a single chunk.
           if (!result.streamed) {
-            if (result.result !== null && result.result !== undefined) {
-              const text =
-                typeof result.result === 'string'
-                  ? result.result
-                  : JSON.stringify(result.result);
-              if (text !== '') pushChunk(text);
-            }
+            const text = coerceResult(result.result);
+            if (text !== '') pushChunk(text);
           }
 
           endChunks();
@@ -441,7 +484,6 @@ export function createFoundryHarness(
 
       return createFoundryStreamResponse(responseId, {
         chunks,
-        idGenerator: idGen,
         onError: (_err) => {
           errorCount++;
         },
@@ -485,7 +527,7 @@ export function createFoundryHarness(
       }
       span.end();
 
-      const response = buildSyncResponse(result, responseId);
+      const response = buildSyncResponse(result, responseId, debugErrors);
 
       // Conversations persistence.
       const shouldStore = body.store === true;
@@ -547,11 +589,11 @@ export function createFoundryHarness(
           );
         }
       } catch (err) {
-        if (!(err instanceof CredentialError)) {
-          const message = err instanceof Error ? err.message : String(err);
-          throw new CredentialError(message);
+        if (err instanceof CredentialError) {
+          throw err;
         }
-        process.exit(1);
+        const message = err instanceof Error ? err.message : String(err);
+        throw new CredentialError(message);
       }
     }
     await lifecycle.listen(port);

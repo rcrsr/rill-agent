@@ -1,14 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { loadManifest, createRouter } from '@rcrsr/rill-agent';
+import type { AgentRouter } from '@rcrsr/rill-agent';
 import { httpHarness } from '../src/index.js';
-
-const PKG_ROOT = path.dirname(
-  fileURLToPath(new URL('../package.json', import.meta.url))
-);
 
 // ============================================================
 // TEMP DIR MANAGEMENT
@@ -17,8 +14,7 @@ const PKG_ROOT = path.dirname(
 const tmpDirs: string[] = [];
 
 async function makeTmpDir(): Promise<string> {
-  await mkdir(PKG_ROOT, { recursive: true });
-  const dir = await mkdtemp(path.join(PKG_ROOT, 'http-test-'));
+  const dir = await mkdtemp(path.join(tmpdir(), 'http-test-'));
   tmpDirs.push(dir);
   return dir;
 }
@@ -26,6 +22,25 @@ async function makeTmpDir(): Promise<string> {
 afterEach(async () => {
   for (const dir of tmpDirs.splice(0)) {
     await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+  }
+});
+
+// ============================================================
+// ROUTER DISPOSAL
+// ============================================================
+
+const routers: AgentRouter[] = [];
+
+async function trackedRouter(dir: string): Promise<AgentRouter> {
+  const manifest = await loadManifest(dir);
+  const router = await createRouter(manifest);
+  routers.push(router);
+  return router;
+}
+
+afterEach(async () => {
+  for (const router of routers.splice(0)) {
+    await router.dispose().catch(() => undefined);
   }
 });
 
@@ -80,6 +95,30 @@ export async function dispose() {}
   return dir;
 }
 
+async function makeAgentThrowsNotFound(
+  name: string,
+  message: string
+): Promise<string> {
+  const dir = await makeTmpDir();
+  await writeFile(
+    path.join(dir, 'handler.js'),
+    `
+export function describe() {
+  return { name: ${JSON.stringify(name)}, params: [] };
+}
+export async function init() {}
+export async function execute(request) {
+  const err = new Error(${JSON.stringify(message)});
+  err.code = 'AGENT_NOT_FOUND';
+  throw err;
+}
+export async function dispose() {}
+`,
+    'utf-8'
+  );
+  return dir;
+}
+
 async function makeAgentThrows(name: string, message: string): Promise<string> {
   const dir = await makeTmpDir();
   await writeFile(
@@ -106,8 +145,7 @@ export async function dispose() {}
 describe('httpHarness', () => {
   it('POST /run executes default agent', async () => {
     const dir = await makeAgent('test-agent', 'test-result');
-    const manifest = await loadManifest(dir);
-    const router = await createRouter(manifest);
+    const router = await trackedRouter(dir);
     const harness = httpHarness(router);
 
     const res = await harness.app.request('/run', {
@@ -120,14 +158,11 @@ describe('httpHarness', () => {
     const body = (await res.json()) as Record<string, unknown>;
     expect(body['state']).toBe('completed');
     expect(body['result']).toBe('test-result');
-
-    await router.dispose();
   });
 
   it('POST /agents/:name/run executes named agent', async () => {
     const dir = await makeAgent('my-agent', 'named-result');
-    const manifest = await loadManifest(dir);
-    const router = await createRouter(manifest);
+    const router = await trackedRouter(dir);
     const harness = httpHarness(router);
 
     const res = await harness.app.request('/agents/my-agent/run', {
@@ -139,14 +174,11 @@ describe('httpHarness', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
     expect(body['result']).toBe('named-result');
-
-    await router.dispose();
   });
 
   it('GET /agents lists agents with descriptions', async () => {
     const dir = await makeAgent('listed-agent');
-    const manifest = await loadManifest(dir);
-    const router = await createRouter(manifest);
+    const router = await trackedRouter(dir);
     const harness = httpHarness(router);
 
     const res = await harness.app.request('/agents');
@@ -158,14 +190,11 @@ describe('httpHarness', () => {
     expect(body.agents).toHaveLength(1);
     expect(body.agents[0]!.name).toBe('listed-agent');
     expect(body.agents[0]!.default).toBe(true);
-
-    await router.dispose();
   });
 
   it('returns 400 for missing required param', async () => {
     const dir = await makeAgent('strict-agent');
-    const manifest = await loadManifest(dir);
-    const router = await createRouter(manifest);
+    const router = await trackedRouter(dir);
     const harness = httpHarness(router);
 
     const res = await harness.app.request('/run', {
@@ -177,14 +206,11 @@ describe('httpHarness', () => {
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
     expect(body.error).toContain('input');
-
-    await router.dispose();
   });
 
   it('returns 400 for wrong param type', async () => {
     const dir = await makeAgent('typed-agent');
-    const manifest = await loadManifest(dir);
-    const router = await createRouter(manifest);
+    const router = await trackedRouter(dir);
     const harness = httpHarness(router);
 
     const res = await harness.app.request('/run', {
@@ -196,14 +222,11 @@ describe('httpHarness', () => {
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
     expect(body.error).toContain('string');
-
-    await router.dispose();
   });
 
   it('returns 400 for malformed JSON body', async () => {
     const dir = await makeAgent('json-agent');
-    const manifest = await loadManifest(dir);
-    const router = await createRouter(manifest);
+    const router = await trackedRouter(dir);
     const harness = httpHarness(router);
 
     const res = await harness.app.request('/run', {
@@ -215,14 +238,11 @@ describe('httpHarness', () => {
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
     expect(body.error).toContain('JSON object');
-
-    await router.dispose();
   });
 
   it('returns 400 for non-object JSON body (array)', async () => {
     const dir = await makeAgent('array-agent');
-    const manifest = await loadManifest(dir);
-    const router = await createRouter(manifest);
+    const router = await trackedRouter(dir);
     const harness = httpHarness(router);
 
     const res = await harness.app.request('/run', {
@@ -234,14 +254,11 @@ describe('httpHarness', () => {
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
     expect(body.error).toContain('JSON object');
-
-    await router.dispose();
   });
 
   it('returns 400 for non-object JSON body (string)', async () => {
     const dir = await makeAgent('string-agent');
-    const manifest = await loadManifest(dir);
-    const router = await createRouter(manifest);
+    const router = await trackedRouter(dir);
     const harness = httpHarness(router);
 
     const res = await harness.app.request('/run', {
@@ -253,14 +270,11 @@ describe('httpHarness', () => {
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
     expect(body.error).toContain('JSON object');
-
-    await router.dispose();
   });
 
   it('returns 400 for null JSON body', async () => {
     const dir = await makeAgent('null-agent');
-    const manifest = await loadManifest(dir);
-    const router = await createRouter(manifest);
+    const router = await trackedRouter(dir);
     const harness = httpHarness(router);
 
     const res = await harness.app.request('/run', {
@@ -272,14 +286,11 @@ describe('httpHarness', () => {
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
     expect(body.error).toContain('JSON object');
-
-    await router.dispose();
   });
 
   it('returns 404 for unknown agent', async () => {
     const dir = await makeAgent('known-agent');
-    const manifest = await loadManifest(dir);
-    const router = await createRouter(manifest);
+    const router = await trackedRouter(dir);
     const harness = httpHarness(router);
 
     const res = await harness.app.request('/agents/nonexistent/run', {
@@ -289,14 +300,11 @@ describe('httpHarness', () => {
     });
 
     expect(res.status).toBe(404);
-
-    await router.dispose();
   });
 
   it('validateParams returns null when describe() returns null [AC-17]', async () => {
     const dir = await makeAgentNoDescribe('no-describe-agent');
-    const manifest = await loadManifest(dir);
-    const router = await createRouter(manifest);
+    const router = await trackedRouter(dir);
     const harness = httpHarness(router);
 
     const res = await harness.app.request('/run', {
@@ -306,14 +314,11 @@ describe('httpHarness', () => {
     });
 
     expect(res.status).toBe(200);
-
-    await router.dispose();
   });
 
   it('returns 500 for non-not-found router errors [EC-4]', async () => {
     const dir = await makeAgentThrows('error-agent', 'unexpected failure');
-    const manifest = await loadManifest(dir);
-    const router = await createRouter(manifest);
+    const router = await trackedRouter(dir);
     const harness = httpHarness(router);
 
     const res = await harness.app.request('/agents/error-agent/run', {
@@ -325,19 +330,178 @@ describe('httpHarness', () => {
     expect(res.status).toBe(500);
     const body = (await res.json()) as { error: string };
     expect(body.error).toContain('unexpected failure');
+  });
 
-    await router.dispose();
+  it('routes a structured not-found error through /run as 404, not the hardcoded 500', async () => {
+    const dir = await makeAgentThrowsNotFound('ghost-agent', 'ghost gone');
+    const router = await trackedRouter(dir);
+    const harness = httpHarness(router);
+
+    const res = await harness.app.request('/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ params: {} }),
+    });
+
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('ghost gone');
+  });
+
+  it('returns 404 for unknown agent on both routes identically', async () => {
+    const dir = await makeAgent('known-agent');
+    const router = await trackedRouter(dir);
+    const harness = httpHarness(router);
+
+    const res = await harness.app.request('/agents/nonexistent/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ params: {} }),
+    });
+
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('not found');
+  });
+
+  it('returns 400 for non-object params (number) on /run', async () => {
+    const dir = await makeAgent('params-agent');
+    const router = await trackedRouter(dir);
+    const harness = httpHarness(router);
+
+    const res = await harness.app.request('/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ params: 42 }),
+    });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('params');
+  });
+
+  it('returns 400 for non-object params (number) on /agents/:name/run', async () => {
+    const dir = await makeAgent('params-agent-2');
+    const router = await trackedRouter(dir);
+    const harness = httpHarness(router);
+
+    const res = await harness.app.request('/agents/params-agent-2/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ params: 42 }),
+    });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('params');
+  });
+
+  it('returns 400 for negative timeout', async () => {
+    const dir = await makeAgent('timeout-agent');
+    const router = await trackedRouter(dir);
+    const harness = httpHarness(router);
+
+    const res = await harness.app.request('/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ params: { input: 'hello' }, timeout: -1 }),
+    });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('timeout');
+  });
+
+  it('returns 400 for NaN timeout', async () => {
+    const dir = await makeAgent('timeout-nan-agent');
+    const router = await trackedRouter(dir);
+    const harness = httpHarness(router);
+
+    const res = await harness.app.request('/agents/timeout-nan-agent/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        params: { input: 'hello' },
+        timeout: Number.NaN,
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('timeout');
+  });
+
+  it('returns 400 for Infinity timeout', async () => {
+    const dir = await makeAgent('timeout-inf-agent');
+    const router = await trackedRouter(dir);
+    const harness = httpHarness(router);
+
+    const res = await harness.app.request('/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        params: { input: 'hello' },
+        timeout: Number.POSITIVE_INFINITY,
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('timeout');
+  });
+
+  it('accepts a valid positive finite timeout', async () => {
+    const dir = await makeAgent('timeout-ok-agent', 'timed-result');
+    const router = await trackedRouter(dir);
+    const harness = httpHarness(router);
+
+    const res = await harness.app.request('/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ params: { input: 'hello' }, timeout: 5000 }),
+    });
+
+    expect(res.status).toBe(200);
+  });
+
+  it('/run and /agents/:name/run return identical status and body shape for a router error', async () => {
+    const dirDefault = await makeAgentThrows('default-error-agent', 'boom');
+    const routerDefault = await trackedRouter(dirDefault);
+    const harnessDefault = httpHarness(routerDefault);
+
+    const resDefault = await harnessDefault.app.request('/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ params: {} }),
+    });
+
+    const dirNamed = await makeAgentThrows('named-error-agent', 'boom');
+    const routerNamed = await trackedRouter(dirNamed);
+    const harnessNamed = httpHarness(routerNamed);
+
+    const resNamed = await harnessNamed.app.request(
+      '/agents/named-error-agent/run',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ params: {} }),
+      }
+    );
+
+    expect(resDefault.status).toBe(resNamed.status);
+    expect(resDefault.status).toBe(500);
+    const bodyDefault = (await resDefault.json()) as { error: string };
+    const bodyNamed = (await resNamed.json()) as { error: string };
+    expect(bodyDefault.error).toBe('boom');
+    expect(bodyNamed.error).toBe('boom');
   });
 
   it('close() called twice does not throw [AC-20]', async () => {
     const dir = await makeAgent('close-agent');
-    const manifest = await loadManifest(dir);
-    const router = await createRouter(manifest);
+    const router = await trackedRouter(dir);
     const harness = httpHarness(router);
 
     await expect(harness.close()).resolves.toBeUndefined();
     await expect(harness.close()).resolves.toBeUndefined();
-
-    await router.dispose();
   });
 });

@@ -34,6 +34,27 @@ function getHandlerFromRouter(
 }
 
 /**
+ * Validates the minimal wire shape a chat chunk must have before it is
+ * queued for the SSE/buffered response builders: a non-empty `choices` array
+ * whose first entry carries a `delta` object. A handler that emits anything
+ * else (e.g. `{}` or `{choices: [{}]}`) is a handler defect, not a payload
+ * the downstream builders can render — rejecting it here surfaces a
+ * ChatChunkError instead of a raw TypeError deep inside the SSE encoder or a
+ * malformed frame reaching the client.
+ */
+function isValidChatChunkShape(
+  value: unknown
+): value is { choices: [{ delta: object }] } {
+  if (typeof value !== 'object' || value === null) return false;
+  const choices = (value as Record<string, unknown>)['choices'];
+  if (!Array.isArray(choices) || choices.length === 0) return false;
+  const first = choices[0];
+  if (typeof first !== 'object' || first === null) return false;
+  const delta = (first as Record<string, unknown>)['delta'];
+  return typeof delta === 'object' && delta !== null;
+}
+
+/**
  * Bridges the handler's push-style streaming (`onChunk` callback during
  * execute()) into a pull-style ReadableStream<ChatChunk> for the SSE response
  * builder. Errors thrown by execute() before the first chunk surface through
@@ -54,6 +75,15 @@ function invokeHandlerAsStream(
               signal: abortController.signal,
               onChunk: async (chunk: unknown) => {
                 if (abortController.signal.aborted) return;
+                if (!isValidChatChunkShape(chunk)) {
+                  controller.error(
+                    new ChatChunkError(
+                      'Malformed chunk from handler: choices must be a ' +
+                        'non-empty array whose first entry has a delta object'
+                    )
+                  );
+                  return;
+                }
                 controller.enqueue(chunk as ChatChunk);
               },
             }
@@ -192,7 +222,7 @@ export function createChatHarness(
    * errors and returns HTTP 500 JSON.
    */
   async function streamChatResponse(
-    source: AsyncIterable<ChatChunk> | ReadableStream<ChatChunk>,
+    source: ReadableStream<ChatChunk>,
     resolvedAgent: string,
     abortController: AbortController
   ): Promise<Response> {
@@ -206,26 +236,19 @@ export function createChatHarness(
     (async () => {
       const writer = writable.getWriter();
       try {
-        if (Symbol.asyncIterator in source) {
-          for await (const chunk of source as AsyncIterable<ChatChunk>) {
-            if (abortController.signal.aborted) break;
-            await writer.write(chunk);
-          }
-        } else {
-          const reader = (source as ReadableStream<ChatChunk>).getReader();
-          try {
-            let result = await reader.read();
-            while (!result.done) {
-              if (abortController.signal.aborted) {
-                await reader.cancel();
-                break;
-              }
-              await writer.write(result.value);
-              result = await reader.read();
+        const reader = source.getReader();
+        try {
+          let result = await reader.read();
+          while (!result.done) {
+            if (abortController.signal.aborted) {
+              await reader.cancel();
+              break;
             }
-          } finally {
-            reader.releaseLock();
+            await writer.write(result.value);
+            result = await reader.read();
           }
+        } finally {
+          reader.releaseLock();
         }
         if (abortController.signal.aborted) {
           await writer.abort();
@@ -277,7 +300,7 @@ export function createChatHarness(
    * a single JSON response is returned.
    */
   async function bufferedChatResponse(
-    source: AsyncIterable<ChatChunk> | ReadableStream<ChatChunk>,
+    source: ReadableStream<ChatChunk>,
     resolvedAgent: string
   ): Promise<Response> {
     activeConnections++;
@@ -321,7 +344,7 @@ export function createChatHarness(
    * value (including missing/non-boolean) selects the buffered JSON path.
    */
   function dispatchChatResponse(
-    source: AsyncIterable<ChatChunk> | ReadableStream<ChatChunk>,
+    source: ReadableStream<ChatChunk>,
     resolvedAgent: string,
     abortController: AbortController,
     wantsStream: boolean
@@ -370,7 +393,10 @@ export function createChatHarness(
    * name to target (a route param, the default agent name, or the OpenAI
    * `model` field); `defaultFallback` controls whether an unknown/ineligible
    * `agentName` falls back to the default agent (500 if the default is also
-   * missing/ineligible) or returns a 404 (per-agent route only).
+   * missing/ineligible), or — for the per-agent route (`defaultFallback ===
+   * false`) — returns 404 for a genuinely unknown agent name and a
+   * reason-bearing 403 for a name the router knows but that failed chat
+   * eligibility inspection.
    */
   async function handleChatRequest(
     c: Context,
@@ -401,6 +427,23 @@ export function createChatHarness(
           { error: { message: 'No default agent configured' } },
           500
         );
+      } else if (
+        router.agents().includes(agentName) &&
+        ineligibleReasons.has(agentName)
+      ) {
+        // The router knows this agent — it is simply not chat-eligible.
+        // Reporting 404 here would be misleading to a caller enumerating
+        // /agents; surface the eligibility rejection reason instead.
+        errors++;
+        requests++;
+        return c.json(
+          {
+            error: {
+              message: `Agent "${agentName}" is not chat-eligible: ${ineligibleReasons.get(agentName)}`,
+            },
+          },
+          403
+        );
       } else {
         errors++;
         requests++;
@@ -414,15 +457,24 @@ export function createChatHarness(
     // Build ChatRequest
     const chatReq: ChatRequest = {
       messages: validation.messages,
-      ...(typeof body['model'] === 'string' ? { model: body['model'] } : {}),
       ...(typeof body['stream'] === 'boolean'
         ? { stream: body['stream'] }
         : {}),
     };
 
-    // AbortController: aborted on client disconnect. Surfaced to both the
-    // stream pump and the handler via RunContext.signal.
+    // AbortController: aborted on client disconnect (either the stream
+    // consumer cancelling the ReadableStream, or the inbound HTTP request
+    // signal firing for the buffered path, which has no stream to cancel).
+    // Surfaced to both the stream pump and the handler via RunContext.signal.
     const abortController = new AbortController();
+    const requestSignal = c.req.raw.signal;
+    if (requestSignal.aborted) {
+      abortController.abort();
+    } else {
+      requestSignal.addEventListener('abort', () => abortController.abort(), {
+        once: true,
+      });
+    }
 
     const handler = getHandlerFromRouter(router, resolvedAgent);
     if (handler === undefined) {

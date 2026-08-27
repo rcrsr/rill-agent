@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createAhiExtension, type AhiExtensionConfig } from '../src/index.js';
+import type { RillValue } from '@rcrsr/rill';
 
 describe('createAhiExtension', () => {
   // ============================================================
@@ -88,21 +89,29 @@ describe('createAhiExtension', () => {
       expect('writer' in result).toBe(true);
     });
 
-    it('registered function is async', () => {
-      const result = createAhiExtension({
-        agents: { parser: { url: 'http://localhost:4001' } },
-      });
+    it('registered function is async', async () => {
+      const mockFetch = vi
+        .fn()
+        .mockResolvedValue(new Response(JSON.stringify({ result: null })));
+      vi.stubGlobal('fetch', mockFetch);
 
-      const fn = result['parser']!;
-      // fn returns a Promise (async function)
-      const returnValue = fn.fn(
-        [] as unknown as Record<string, import('@rcrsr/rill').RillValue>,
-        {} as never,
-        undefined
-      );
-      expect(returnValue).toBeInstanceOf(Promise);
-      // Reject the dangling promise to avoid unhandled rejection noise
-      void returnValue.catch(() => undefined);
+      try {
+        const result = createAhiExtension({
+          agents: { parser: { url: 'http://localhost:4001' } },
+        });
+
+        const fn = result['parser']!;
+        // fn returns a Promise (async function)
+        const returnValue = fn.fn(
+          [] as unknown as Record<string, import('@rcrsr/rill').RillValue>,
+          {} as never,
+          undefined
+        );
+        expect(returnValue).toBeInstanceOf(Promise);
+        await (returnValue as Promise<unknown>).catch(() => undefined);
+      } finally {
+        vi.unstubAllGlobals();
+      }
     });
 
     it('includes dispose method', () => {
@@ -199,6 +208,123 @@ describe('createAhiExtension', () => {
           agents: { svc: { url: 'http://${AHI_HOST}:${UNSET_PORT}/api' } },
         })
       ).toThrow('AHI: environment variable UNSET_PORT is not set');
+    });
+  });
+
+  // ============================================================
+  // #51: URL primitive resolution — no double slash, protocol validation
+  // ============================================================
+
+  describe('#51: agent URL resolution uses the URL primitive', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    async function callParser(
+      ext: ReturnType<typeof createAhiExtension>
+    ): Promise<void> {
+      const fn = (ext as Record<string, unknown>)['parser'] as {
+        fn: (
+          args: unknown,
+          ctx: { metadata: Record<string, string> }
+        ) => Promise<RillValue>;
+      };
+      await fn
+        .fn([], { metadata: { agentName: 'a', sessionId: 's' } })
+        .catch(() => undefined);
+    }
+
+    it('hits .../run without a double slash when the base URL has no trailing slash', async () => {
+      const mockFetch = vi
+        .fn()
+        .mockResolvedValue(new Response(JSON.stringify({ result: null })));
+      vi.stubGlobal('fetch', mockFetch);
+
+      const ext = createAhiExtension({
+        agents: { parser: { url: 'http://localhost:4001' } },
+      });
+
+      await callParser(ext);
+
+      const calledUrl = String(mockFetch.mock.calls[0]?.[0]);
+      expect(calledUrl).toBe('http://localhost:4001/run');
+    });
+
+    it('hits .../run without a double slash when the base URL has a trailing slash', async () => {
+      const mockFetch = vi
+        .fn()
+        .mockResolvedValue(new Response(JSON.stringify({ result: null })));
+      vi.stubGlobal('fetch', mockFetch);
+
+      const ext = createAhiExtension({
+        agents: { parser: { url: 'http://localhost:4001/' } },
+      });
+
+      await callParser(ext);
+
+      const calledUrl = String(mockFetch.mock.calls[0]?.[0]);
+      expect(calledUrl).toBe('http://localhost:4001/run');
+    });
+
+    it('throws for a file:// agent URL', () => {
+      expect(() =>
+        createAhiExtension({
+          agents: { parser: { url: 'file:///etc/passwd' } },
+        })
+      ).toThrow(/protocol/);
+    });
+
+    it('throws for an ftp:// agent URL', () => {
+      expect(() =>
+        createAhiExtension({
+          agents: { parser: { url: 'ftp://localhost/agent' } },
+        })
+      ).toThrow(/protocol/);
+    });
+  });
+
+  // ============================================================
+  // #52: config shape validation
+  // ============================================================
+
+  describe('#52: config shape validation', () => {
+    it('throws a descriptive error when agents is missing', () => {
+      expect(() =>
+        createAhiExtension({} as unknown as AhiExtensionConfig)
+      ).toThrow(/agents/);
+    });
+
+    it('throws a descriptive error when agents is not an object', () => {
+      expect(() =>
+        createAhiExtension({ agents: 5 } as unknown as AhiExtensionConfig)
+      ).toThrow(/agents/);
+    });
+
+    it('throws a descriptive error when timeout is not a finite number', () => {
+      expect(() =>
+        createAhiExtension({
+          agents: { parser: { url: 'http://localhost:4001' } },
+          timeout: '30s' as unknown as number,
+        })
+      ).toThrow(/timeout/);
+    });
+
+    it('throws a descriptive error when timeout is NaN', () => {
+      expect(() =>
+        createAhiExtension({
+          agents: { parser: { url: 'http://localhost:4001' } },
+          timeout: Number.NaN,
+        })
+      ).toThrow(/timeout/);
+    });
+
+    it('does not throw for a valid config', () => {
+      expect(() =>
+        createAhiExtension({
+          agents: { parser: { url: 'http://localhost:4001' } },
+          timeout: 5000,
+        })
+      ).not.toThrow();
     });
   });
 });

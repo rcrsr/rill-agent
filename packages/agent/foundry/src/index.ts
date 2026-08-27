@@ -46,7 +46,7 @@ export { extractInput } from './extract.js';
 // SESSION MANAGER
 // ============================================================
 
-export type { SessionManager } from './session.js';
+export type { SessionManager, SessionManagerOptions } from './session.js';
 export { createSessionManager } from './session.js';
 
 // ============================================================
@@ -58,12 +58,6 @@ export {
   buildSyncResponse,
   generateToolDefinitions,
 } from './response.js';
-
-// ============================================================
-// SSE STREAM EMITTER
-// ============================================================
-
-export { streamFoundryResponse } from './stream.js';
 
 // ============================================================
 // CONVERSATIONS CLIENT

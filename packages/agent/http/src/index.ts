@@ -13,7 +13,7 @@ import {
   type RillHarness,
 } from '@rcrsr/rill-agent-hono-kit';
 import type { AgentRouter, RunRequest } from '@rcrsr/rill-agent';
-import type { Hono } from 'hono';
+import type { Context, Hono } from 'hono';
 
 const HARNESS_NAME = '@rcrsr/rill-agent-http';
 
@@ -54,10 +54,12 @@ export function httpHarness(router: AgentRouter): HttpHarness {
     return c.json({ agents });
   });
 
-  // Run named agent
-  app.post('/agents/:name/run', async (c) => {
-    const name = c.req.param('name');
-
+  /**
+   * Shared run handler for both `/agents/:name/run` and `/run`. `name` is the
+   * empty string for the default-agent route; `router.run`/`describe`
+   * resolve `''` to the manifest's default agent internally.
+   */
+  async function handleRun(c: Context, name: string): Promise<Response> {
     let body: Record<string, unknown>;
     try {
       const parsed: unknown = await c.req.json();
@@ -66,18 +68,39 @@ export function httpHarness(router: AgentRouter): HttpHarness {
       return c.json({ error: 'Request body must be a JSON object' }, 400);
     }
 
-    const params = (body['params'] as Record<string, unknown>) ?? {};
+    let params: Record<string, unknown>;
+    try {
+      params = assertJsonObject(body['params'] ?? {});
+    } catch {
+      return c.json({ error: 'Parameter "params" must be a JSON object' }, 400);
+    }
 
     const validationError = validateParams(params, name, router);
     if (validationError !== null) {
       return c.json({ error: validationError }, 400);
     }
 
+    const rawTimeout = body['timeout'];
+    let timeout: number | undefined;
+    if (rawTimeout !== undefined) {
+      if (
+        typeof rawTimeout !== 'number' ||
+        !Number.isFinite(rawTimeout) ||
+        rawTimeout <= 0
+      ) {
+        return c.json(
+          {
+            error: 'Parameter "timeout" must be a finite number greater than 0',
+          },
+          400
+        );
+      }
+      timeout = rawTimeout;
+    }
+
     const request: RunRequest = {
       params,
-      ...(typeof body['timeout'] === 'number'
-        ? { timeout: body['timeout'] }
-        : {}),
+      ...(timeout !== undefined ? { timeout } : {}),
     };
 
     try {
@@ -86,43 +109,15 @@ export function httpHarness(router: AgentRouter): HttpHarness {
     } catch (err) {
       const status = routerErrorToStatus(err);
       const message = err instanceof Error ? err.message : String(err);
-      return c.json({ error: message }, status as 404 | 500);
+      return c.json({ error: message }, status);
     }
-  });
+  }
+
+  // Run named agent
+  app.post('/agents/:name/run', (c) => handleRun(c, c.req.param('name')));
 
   // Run default agent
-  app.post('/run', async (c) => {
-    let body: Record<string, unknown>;
-    try {
-      const parsed: unknown = await c.req.json();
-      body = assertJsonObject(parsed);
-    } catch {
-      return c.json({ error: 'Request body must be a JSON object' }, 400);
-    }
-
-    const params = (body['params'] as Record<string, unknown>) ?? {};
-    const defaultName = router.defaultAgent();
-
-    const validationError = validateParams(params, defaultName, router);
-    if (validationError !== null) {
-      return c.json({ error: validationError }, 400);
-    }
-
-    const request: RunRequest = {
-      params,
-      ...(typeof body['timeout'] === 'number'
-        ? { timeout: body['timeout'] }
-        : {}),
-    };
-
-    try {
-      const response = await router.run('', request);
-      return c.json(response);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return c.json({ error: message }, 500);
-    }
-  });
+  app.post('/run', (c) => handleRun(c, ''));
 
   async function listen(port = 3000): Promise<void> {
     return lifecycle.listen(port);

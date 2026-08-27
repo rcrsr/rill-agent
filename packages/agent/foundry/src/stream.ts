@@ -1,4 +1,4 @@
-import type { IdGenerator } from './id.js';
+import { routerErrorToStatus } from '@rcrsr/rill-agent';
 
 // ============================================================
 // TYPES
@@ -6,8 +6,6 @@ import type { IdGenerator } from './id.js';
 
 interface StreamOptions {
   readonly onError?: ((err: unknown) => void) | undefined;
-  /** IdGenerator scoped to the request for correlated message IDs. */
-  readonly idGenerator?: IdGenerator | undefined;
   /** Session ID echoed back in x-agent-session-id response header. */
   readonly sessionId?: string | undefined;
   /** Invocation ID echoed back in x-agent-invocation-id response header. */
@@ -134,6 +132,7 @@ export function createFoundryStreamResponse(
     controller: ReadableStreamDefaultController<Uint8Array>,
     fullText: string
   ): void {
+    if (closed) return;
     controller.enqueue(
       ev('response.output_text.done', {
         type: 'response.output_text.done',
@@ -162,9 +161,12 @@ export function createFoundryStreamResponse(
   ): void {
     clearKeepAlive();
     options.onError?.(err);
+    if (closed) return;
     const rawMessage = err instanceof Error ? err.message : String(err);
     const message =
       options.debugErrors === true ? rawMessage : REDACTED_ERROR_MESSAGE;
+    const code =
+      routerErrorToStatus(err) === 404 ? 'NOT_FOUND' : 'SERVER_ERROR';
     controller.enqueue(
       encoder.encode(
         sseChunk(
@@ -172,7 +174,7 @@ export function createFoundryStreamResponse(
           JSON.stringify({
             type: 'error',
             sequence_number: seq++,
-            code: 'SERVER_ERROR',
+            code,
             message,
             param: '',
           })
@@ -234,41 +236,5 @@ export function createFoundryStreamResponse(
   return new Response(body, {
     status: 200,
     headers: sseHeaders(options),
-  });
-}
-
-// ============================================================
-// LEGACY EXPORTS (kept for test compatibility)
-// ============================================================
-
-/**
- * Stream a Foundry Responses lifecycle via SSE.
- * Delegates to createFoundryStreamResponse for all paths.
- */
-export function streamFoundryResponse(
-  _c: unknown,
-  responseId: string,
-  resultStream: AsyncIterable<{ value?: unknown }>,
-  options: StreamOptions & { resultPromise?: Promise<string> }
-): Response {
-  // Convert resultStream to a promise if resultPromise not provided
-  const resultPromise =
-    options.resultPromise ??
-    (async () => {
-      let text = '';
-      for await (const chunk of resultStream) {
-        if (chunk.value !== null && chunk.value !== undefined) {
-          text +=
-            typeof chunk.value === 'string'
-              ? chunk.value
-              : JSON.stringify(chunk.value);
-        }
-      }
-      return text;
-    })();
-
-  return createFoundryStreamResponse(responseId, {
-    ...options,
-    resultPromise,
   });
 }

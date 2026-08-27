@@ -236,6 +236,67 @@ describe('AHI error mapping', () => {
   });
 
   // ============================================================
+  // #41: malformed 2xx response bodies map to a structured RuntimeError
+  // ============================================================
+
+  describe('#41: malformed 2xx response body', () => {
+    it('maps a non-JSON 2xx body to a structured RuntimeError, not a raw SyntaxError', async () => {
+      const mockResponse = new Response('not json at all', { status: 200 });
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockResponse));
+
+      const ext = makeExt();
+
+      await expect(callDownstream(ext)).rejects.toMatchObject({
+        name: 'RuntimeError',
+        errorId: 'RILL-R034',
+      });
+    });
+
+    it('maps a 2xx body of {} (no result field) to a structured error', async () => {
+      const mockResponse = new Response(JSON.stringify({}), { status: 200 });
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockResponse));
+
+      const ext = makeExt();
+
+      await expect(callDownstream(ext)).rejects.toMatchObject({
+        name: 'RuntimeError',
+        errorId: 'RILL-R034',
+      });
+    });
+
+    it('resolves the result value for a well-formed 2xx body', async () => {
+      const mockResponse = new Response(JSON.stringify({ result: 'ok' }), {
+        status: 200,
+      });
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockResponse));
+
+      const ext = makeExt();
+
+      await expect(callDownstream(ext)).resolves.toBe('ok');
+    });
+  });
+
+  // ============================================================
+  // #41: non-200 responses consume/cancel their bodies
+  // ============================================================
+
+  describe('#41: non-200 responses cancel their response body', () => {
+    it.each([404, 429, 500])(
+      'cancels the response body for HTTP %d',
+      async (status) => {
+        const mockResponse = new Response('irrelevant body', { status });
+        const cancelSpy = vi.spyOn(mockResponse.body!, 'cancel');
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockResponse));
+
+        const ext = makeExt();
+
+        await expect(callDownstream(ext)).rejects.toThrow();
+        expect(cancelSpy).toHaveBeenCalled();
+      }
+    );
+  });
+
+  // ============================================================
   // AC-11 part 1: call after dispose → RILL-R033
   // ============================================================
 
@@ -278,7 +339,7 @@ describe('AHI error mapping', () => {
       vi.useRealTimers();
     });
 
-    it('in-flight call rejects with RILL-R030 after dispose triggers abort', async () => {
+    it('in-flight call rejects with RILL-R033 after dispose triggers abort', async () => {
       let rejectFetch!: (err: unknown) => void;
 
       // fetch that hangs until we manually reject it (simulating abort signal fire)
@@ -305,6 +366,7 @@ describe('AHI error mapping', () => {
       const callPromise = fn.fn([], makeCtx());
 
       // dispose() marks as disposed and aborts all in-flight controllers
+      // with the module-level dispose sentinel reason.
       await ext.dispose!();
 
       // Simulate the fetch network layer firing the AbortError
@@ -312,6 +374,51 @@ describe('AHI error mapping', () => {
         name: 'AbortError',
       });
       rejectFetch(abortErr);
+
+      await expect(callPromise).rejects.toMatchObject({
+        name: 'RuntimeError',
+        errorId: 'RILL-R033',
+      });
+
+      await expect(callPromise).rejects.toThrow('disposed');
+    });
+
+    it('a real timeout (not dispose) still maps to RILL-R030', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockImplementation(
+          (_url: unknown, init: { signal?: AbortSignal }) =>
+            new Promise<never>((_, reject) => {
+              init.signal?.addEventListener('abort', () => {
+                const abortErr = Object.assign(new Error('aborted'), {
+                  name: 'AbortError',
+                });
+                reject(abortErr);
+              });
+            })
+        )
+      );
+
+      const ext = createAhiExtension({
+        agents: { downstream: { url: 'http://downstream:8080' } },
+        timeout: 5,
+      });
+
+      const fn = (ext as Record<string, unknown>)['downstream'] as {
+        fn: (
+          args: unknown,
+          ctx: { metadata: Record<string, string> }
+        ) => Promise<RillValue>;
+      };
+
+      const callPromise = fn.fn([], makeCtx());
+      // Suppress the transient unhandled-rejection window before the
+      // assertions below attach their own handlers.
+      callPromise.catch(() => undefined);
+
+      // Advance the fake timer past the configured timeout to fire the
+      // internal setTimeout()-driven abort (not dispose()).
+      await vi.advanceTimersByTimeAsync(10);
 
       await expect(callPromise).rejects.toMatchObject({
         name: 'RuntimeError',

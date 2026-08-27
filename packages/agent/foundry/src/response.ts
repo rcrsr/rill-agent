@@ -19,7 +19,7 @@ import type {
  * - object (non-null) → JSON.stringify()
  * - null | undefined → empty string
  */
-function coerceResult(result: unknown): string {
+export function coerceResult(result: unknown): string {
   if (result === null || result === undefined) {
     return '';
   }
@@ -41,14 +41,24 @@ function coerceResult(result: unknown): string {
  *
  * State mapping: 'completed' → 'completed', 'error' → 'failed'.
  * Result is coerced to string; errors are encoded in the response body.
+ *
+ * When `debugErrors` is false (default), a failed-state error message is
+ * redacted with the same generic message `buildErrorResponse` uses for
+ * SERVER_ERROR, so internal detail does not leak through the sync response
+ * path when it is suppressed everywhere else. When true, the raw message is
+ * passed through verbatim.
  */
 export function buildSyncResponse(
   result: RunResponse,
-  responseId: string
+  responseId: string,
+  debugErrors = false
 ): FoundryResponse {
   const status = result.state === 'completed' ? 'completed' : 'failed';
   const text = coerceResult(result.result);
   const msgId = generateId('msg_');
+  const errorMessage = debugErrors
+    ? text
+    : (GENERIC_MESSAGES['SERVER_ERROR'] ?? FALLBACK_MESSAGE);
 
   return {
     id: responseId,
@@ -70,7 +80,10 @@ export function buildSyncResponse(
         ],
       },
     ],
-    error: status === 'failed' ? { code: 'SERVER_ERROR', message: text } : null,
+    error:
+      status === 'failed'
+        ? { code: 'SERVER_ERROR', message: errorMessage }
+        : null,
     metadata: {},
     temperature: 0,
     top_p: 0,

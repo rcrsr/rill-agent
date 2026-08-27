@@ -15,7 +15,12 @@ export function validateParams(
     }
     if (value !== undefined && value !== null && param.type !== 'any') {
       const actual = typeof value;
-      const expected = param.type === 'dict' ? 'object' : param.type;
+      const expected =
+        param.type === 'dict'
+          ? 'object'
+          : param.type === 'bool'
+            ? 'boolean'
+            : param.type;
       if (expected === 'list') {
         if (!Array.isArray(value)) {
           return `Parameter "${param.name}" must be a list, got ${actual}`;

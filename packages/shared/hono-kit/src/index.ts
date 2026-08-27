@@ -48,19 +48,34 @@ export function createHarnessLifecycle(options?: {
     if (server !== undefined) {
       throw new Error('Server is already listening');
     }
-    return new Promise((resolve) => {
-      server = serve({ fetch: app.fetch, port }, () => {
-        options?.serverTweaks?.(server);
+    return new Promise((resolve, reject) => {
+      const started = serve({ fetch: app.fetch, port }, () => {
+        started.off('error', onError);
+        options?.serverTweaks?.(started);
         resolve();
       });
+      function onError(err: Error): void {
+        server = undefined;
+        reject(err);
+      }
+      started.once('error', onError);
+      server = started;
     });
   }
 
   async function close(): Promise<void> {
-    if (server !== undefined) {
-      server.close();
-      server = undefined;
+    if (server === undefined) return;
+    const current = server;
+    server = undefined;
+    if ('closeAllConnections' in current) {
+      (current as { closeAllConnections(): void }).closeAllConnections();
     }
+    await new Promise<void>((resolve, reject) => {
+      current.close((err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
   }
 
   return { app, listen, close };

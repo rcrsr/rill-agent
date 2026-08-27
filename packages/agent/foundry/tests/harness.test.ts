@@ -9,7 +9,9 @@ import {
 } from 'vitest';
 import type { AgentRouter, RunContext, RunRequest } from '@rcrsr/rill-agent';
 import { trace, type Span } from '@opentelemetry/api';
+import { DefaultAzureCredential } from '@azure/identity';
 import { createFoundryHarness } from '../src/harness.js';
+import { CredentialError } from '../src/errors.js';
 
 // ============================================================
 // AZURE IDENTITY MOCK
@@ -398,10 +400,10 @@ describe('createFoundryHarness', () => {
   });
 
   // AC-33, EC-1: handler not found → 404
-  it('returns 404 when router.run throws with "not found" message', async () => {
+  it("returns 404 when router.run throws the router's structured not-found error", async () => {
     const notFoundRouter = makeMockRouter({
       run: async () => {
-        throw new Error('agent not found');
+        throw new Error('Agent "default" not found. Available: other');
       },
     });
     const harness = createFoundryHarness(notFoundRouter);
@@ -592,5 +594,85 @@ describe('createFoundryHarness', () => {
     expect(entry.span.end).toHaveBeenCalled();
 
     getTracerSpy.mockRestore();
+  });
+
+  // Malformed metadata.response_id / conversation.id → 400, no session leak
+  it('rejects a non-string metadata.response_id with 400 and releases the session slot', async () => {
+    const harness = createFoundryHarness(makeMockRouter());
+
+    const res = await harness.app.request(
+      '/responses',
+      jsonRequest({ input: 'hi', metadata: { response_id: 42 } })
+    );
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe('INVALID_REQUEST');
+
+    const metricsRes = await harness.app.request('/metrics');
+    const metrics = (await metricsRes.json()) as { activeSessions: number };
+    expect(metrics.activeSessions).toBe(0);
+  });
+
+  it('treats metadata: null as absent metadata and succeeds', async () => {
+    const harness = createFoundryHarness(makeMockRouter());
+
+    const res = await harness.app.request(
+      '/responses',
+      jsonRequest({ input: 'hi', metadata: null })
+    );
+
+    expect(res.status).toBe(200);
+  });
+
+  it('rejects a non-string conversation.id with 400 and does not leak a session', async () => {
+    const harness = createFoundryHarness(makeMockRouter());
+
+    const res = await harness.app.request(
+      '/responses',
+      jsonRequest({ input: 'hi', conversation: { id: 7 } })
+    );
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe('INVALID_REQUEST');
+
+    const metricsRes = await harness.app.request('/metrics');
+    const metrics = (await metricsRes.json()) as { activeSessions: number };
+    expect(metrics.activeSessions).toBe(0);
+  });
+
+  it('never returns 429 for repeated malformed requests, since no slot is ever acquired', async () => {
+    const harness = createFoundryHarness(makeMockRouter(), {
+      maxConcurrentSessions: 1,
+    });
+
+    for (let i = 0; i < 5; i++) {
+      const res = await harness.app.request(
+        '/responses',
+        jsonRequest({ input: 'hi', conversation: { id: 7 } })
+      );
+      expect(res.status).toBe(400);
+    }
+  });
+
+  // Startup credential check — process.exit must never be invoked
+  it('rejects listen() with CredentialError when the credential returns a null token, without exiting the process', async () => {
+    process.env['FOUNDRY_PROJECT_ENDPOINT'] =
+      'https://example.foundry.azure.com';
+
+    vi.spyOn(DefaultAzureCredential.prototype, 'getToken').mockResolvedValue(
+      null
+    );
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((_code?: string | number | null | undefined) => {
+        throw new Error('process.exit called — library code must not exit');
+      });
+
+    const harness = createFoundryHarness(makeMockRouter());
+
+    await expect(harness.listen()).rejects.toThrow(CredentialError);
+    expect(exitSpy).not.toHaveBeenCalled();
   });
 });

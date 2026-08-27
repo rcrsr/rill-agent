@@ -52,6 +52,65 @@ function findLastUserText(items: InputItem[]): string | undefined {
 }
 
 /**
+ * Shape-guard a single ContentPart element within a message's content array.
+ */
+function isContentPart(value: unknown): value is ContentPart {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as { type?: unknown }).type === 'input_text' &&
+    typeof (value as { text?: unknown }).text === 'string'
+  );
+}
+
+/**
+ * Shape-guard a message's content field: either a string or an array of
+ * well-formed ContentPart entries.
+ */
+function isValidContent(content: unknown): content is string | ContentPart[] {
+  if (typeof content === 'string') {
+    return true;
+  }
+  return Array.isArray(content) && content.every(isContentPart);
+}
+
+/**
+ * Shape-guard a single input array element against the InputItem
+ * discriminated union before it is trusted as one. `input` arrives as
+ * unvalidated JSON, so an element can be `null`, `{}`, or carry a field of
+ * the wrong runtime type (e.g. `content: 42`) — reject anything that does
+ * not match a known variant instead of letting a downstream `.type`/`.filter`
+ * access throw a raw TypeError.
+ */
+function isInputItem(item: unknown): item is InputItem {
+  if (typeof item !== 'object' || item === null) {
+    return false;
+  }
+  const type = (item as { type?: unknown }).type;
+  if (type === 'message') {
+    const role = (item as { role?: unknown }).role;
+    const content = (item as { content?: unknown }).content;
+    return typeof role === 'string' && isValidContent(content);
+  }
+  if (type === 'function_call_output') {
+    const callId = (item as { call_id?: unknown }).call_id;
+    const output = (item as { output?: unknown }).output;
+    return typeof callId === 'string' && typeof output === 'string';
+  }
+  if (type === 'function_call') {
+    const callId = (item as { call_id?: unknown }).call_id;
+    const name = (item as { name?: unknown }).name;
+    const args = (item as { arguments?: unknown }).arguments;
+    return (
+      typeof callId === 'string' &&
+      typeof name === 'string' &&
+      typeof args === 'string'
+    );
+  }
+  return false;
+}
+
+/**
  * Find all function_call_output items paired with their function_call.
  * Returns extracted params and target agent name.
  * Throws InputError when a function_call_output has no paired function_call.
@@ -123,6 +182,11 @@ export function extractInput(input: unknown): ExtractedInput {
     throw new InputError('Missing required field: input');
   }
 
+  for (const item of input) {
+    if (!isInputItem(item)) {
+      throw new InputError('Invalid input item shape');
+    }
+  }
   const items = input as InputItem[];
 
   // Check for function_call_output items first.
