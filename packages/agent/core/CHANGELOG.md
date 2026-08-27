@@ -5,6 +5,12 @@ All notable changes to `@rcrsr/rill-agent` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Core validation and error classification:** Fixed boolean validation, agent-not-found error classification, router cleanup on failure, and manifest validation for empty agents maps. ([#62](https://github.com/rcrsr/rill-agent/pull/62))
+
 ## [0.20.0] - 2026-08-06
 
 ### Added

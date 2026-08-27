@@ -5,6 +5,12 @@ All notable changes to `@rcrsr/rill-agent-ext-ahi` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Response, URL, and config validation:** Response bodies, extension config, and agent URLs are now validated to catch errors early. ([#62](https://github.com/rcrsr/rill-agent/pull/62))
+
 ## [0.20.0] - 2026-08-06
 
 ### Changed
