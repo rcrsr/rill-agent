@@ -15,8 +15,8 @@ importers:
         specifier: ^0.2.2
         version: 0.2.2
       '@types/node':
-        specifier: ^26.2.0
-        version: 26.3.0
+        specifier: ^26.4.0
+        version: 26.4.0
       knip:
         specifier: ^6.32.2
         version: 6.32.3
@@ -34,7 +34,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^4.1.11
-        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@26.3.0)(vite@7.3.1(@types/node@26.3.0)(jiti@2.7.0)(tsx@4.23.7)(yaml@2.9.0))
+        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@26.4.0)(vite@7.3.1(@types/node@26.4.0)(jiti@2.7.0)(tsx@4.23.7)(yaml@2.9.0))
 
   demo/ahi-caller:
     dependencies:
@@ -1416,11 +1416,11 @@ packages:
   '@types/estree@1.0.8':
     resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
 
-  '@types/node@26.1.2':
-    resolution: {integrity: sha512-Vu4a5UFA9rIIFJ7rB/Vaafh9lrCQszopTCx6KjFboXTGQbPNasehVR5TEiithSDGyd1DEiUByggTZsg8jukeIg==}
-
   '@types/node@26.3.0':
     resolution: {integrity: sha512-L3fgrnchriRC2ExBflb8j4uZZURHZfQsmQeyVzhjcHW4kkwVyo8/0h1B2MVzMTrYUJYu6G7EWs14hW/L9putqw==}
+
+  '@types/node@26.4.0':
+    resolution: {integrity: sha512-faiGnoIrLH/V8cibOMEAZ8pMw6oXqSukl29ra4mN8GdaB2ZewzeaLj+INpV5N+Z1eKWzY+IzaIZH2EIR6YZRNQ==}
 
   '@typescript/typescript-aix-ppc64@7.0.2':
     resolution: {integrity: sha512-MTKKkWB7p/0E9xi1d1tHtZ5PiLkGEMIq88pK2CubZjOsLtYTLqhgIgi6zepFa+9GHZ6h05NMCkQxGKiPXMxXtQ==}
@@ -3153,11 +3153,11 @@ snapshots:
 
   '@types/estree@1.0.8': {}
 
-  '@types/node@26.1.2':
+  '@types/node@26.3.0':
     dependencies:
       undici-types: 8.3.0
 
-  '@types/node@26.3.0':
+  '@types/node@26.4.0':
     dependencies:
       undici-types: 8.3.0
 
@@ -3238,13 +3238,13 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.1.0
 
-  '@vitest/mocker@4.1.11(vite@7.3.1(@types/node@26.3.0)(jiti@2.7.0)(tsx@4.23.7)(yaml@2.9.0))':
+  '@vitest/mocker@4.1.11(vite@7.3.1(@types/node@26.4.0)(jiti@2.7.0)(tsx@4.23.7)(yaml@2.9.0))':
     dependencies:
       '@vitest/spy': 4.1.11
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 7.3.1(@types/node@26.3.0)(jiti@2.7.0)(tsx@4.23.7)(yaml@2.9.0)
+      vite: 7.3.1(@types/node@26.4.0)(jiti@2.7.0)(tsx@4.23.7)(yaml@2.9.0)
 
   '@vitest/pretty-format@4.1.11':
     dependencies:
@@ -3756,7 +3756,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.2
-      '@types/node': 26.1.2
+      '@types/node': 26.3.0
       long: 5.3.2
 
   readdirp@4.1.2: {}
@@ -3947,7 +3947,7 @@ snapshots:
 
   uuid@8.3.2: {}
 
-  vite@7.3.1(@types/node@26.3.0)(jiti@2.7.0)(tsx@4.23.7)(yaml@2.9.0):
+  vite@7.3.1(@types/node@26.4.0)(jiti@2.7.0)(tsx@4.23.7)(yaml@2.9.0):
     dependencies:
       esbuild: 0.27.7
       fdir: 6.5.0(picomatch@4.0.5)
@@ -3956,16 +3956,16 @@ snapshots:
       rollup: 4.60.1
       tinyglobby: 0.2.17
     optionalDependencies:
-      '@types/node': 26.3.0
+      '@types/node': 26.4.0
       fsevents: 2.3.3
       jiti: 2.7.0
       tsx: 4.23.7
       yaml: 2.9.0
 
-  vitest@4.1.11(@opentelemetry/api@1.9.1)(@types/node@26.3.0)(vite@7.3.1(@types/node@26.3.0)(jiti@2.7.0)(tsx@4.23.7)(yaml@2.9.0)):
+  vitest@4.1.11(@opentelemetry/api@1.9.1)(@types/node@26.4.0)(vite@7.3.1(@types/node@26.4.0)(jiti@2.7.0)(tsx@4.23.7)(yaml@2.9.0)):
     dependencies:
       '@vitest/expect': 4.1.11
-      '@vitest/mocker': 4.1.11(vite@7.3.1(@types/node@26.3.0)(jiti@2.7.0)(tsx@4.23.7)(yaml@2.9.0))
+      '@vitest/mocker': 4.1.11(vite@7.3.1(@types/node@26.4.0)(jiti@2.7.0)(tsx@4.23.7)(yaml@2.9.0))
       '@vitest/pretty-format': 4.1.11
       '@vitest/runner': 4.1.11
       '@vitest/snapshot': 4.1.11
@@ -3982,11 +3982,11 @@ snapshots:
       tinyexec: 1.0.4
       tinyglobby: 0.2.17
       tinyrainbow: 3.1.0
-      vite: 7.3.1(@types/node@26.3.0)(jiti@2.7.0)(tsx@4.23.7)(yaml@2.9.0)
+      vite: 7.3.1(@types/node@26.4.0)(jiti@2.7.0)(tsx@4.23.7)(yaml@2.9.0)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
-      '@types/node': 26.3.0
+      '@types/node': 26.4.0
     transitivePeerDependencies:
       - msw
 
