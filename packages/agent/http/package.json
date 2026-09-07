@@ -24,7 +24,7 @@
   "dependencies": {
     "@rcrsr/rill-agent": "workspace:~",
     "@hono/node-server": "^2.1.1",
-    "hono": "^4.13.5"
+    "hono": "^4.13.7"
   },
   "devDependencies": {
     "@rcrsr/rill-agent-hono-kit": "workspace:^",
