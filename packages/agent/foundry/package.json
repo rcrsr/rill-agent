@@ -32,7 +32,7 @@
     "@azure/identity": "^4.10.0",
     "@hono/node-server": "^2.1.1",
     "@opentelemetry/exporter-trace-otlp-http": "^0.221.0",
-    "@opentelemetry/resources": "^2.10.0",
+    "@opentelemetry/resources": "^2.11.0",
     "@opentelemetry/sdk-node": "^0.221.0",
     "@rcrsr/rill-agent": "workspace:~",
     "hono": "^4.13.5"
