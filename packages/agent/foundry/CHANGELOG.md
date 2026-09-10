@@ -9,10 +9,12 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Dependencies:** hono to 4.13.7, tsup to 8.5.1, @azure/identity to 4.13.2, OpenTelemetry SDK to 0.222.0 / resources to 2.11.0. ([#75](https://github.com/rcrsr/rill-agent/pull/75))
 - **Dependencies:** Bump hono to ^4.13.5 and @hono/node-server to ^2.1.1. ([#63](https://github.com/rcrsr/rill-agent/pull/63))
 
 ### Fixed
 
+- **Declaration build:** `tsconfig.dts.json` adds `DOM` to `lib` so dts-bundle-generator's declaration-check pass tolerates `@azure/msal-common` 16.13+'s WebCrypto `JsonWebKey` reference; the emitted `dist/index.d.ts` is unchanged. ([#75](https://github.com/rcrsr/rill-agent/pull/75))
 - **Session and error handling:** Fixed session slot leakage with malformed response IDs and properly enforced maxConcurrentSessions limits. Malformed input now returns 400 instead of 500, streaming emits correct error codes, and SSE emission is guarded on stream cancellation. ([#62](https://github.com/rcrsr/rill-agent/pull/62))
 
 ## [0.20.0] - 2026-08-06

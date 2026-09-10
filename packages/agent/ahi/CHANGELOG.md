@@ -7,6 +7,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **rill 0.21:** `@rcrsr/rill` peer and dev dependency bumped to `~0.21.0` per the minor-version compatibility rule. ([#75](https://github.com/rcrsr/rill-agent/pull/75))
+
 ### Fixed
 
 - **Response, URL, and config validation:** Response bodies, extension config, and agent URLs are now validated to catch errors early. ([#62](https://github.com/rcrsr/rill-agent/pull/62))

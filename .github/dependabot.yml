@@ -15,7 +15,10 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 10
+    # Version-update PRs are disabled (STD-SUP-8): upgrades are swept by hand
+    # under the repository's upgrade policy. Security updates are a separate
+    # host feature and keep filing PRs for advisories.
+    open-pull-requests-limit: 0
     labels:
       - 'area:dx'
     groups:
@@ -58,6 +61,9 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    # Version-update PRs are disabled here too (STD-SUP-8), same rationale as
+    # the npm block above.
+    open-pull-requests-limit: 0
     labels:
       - 'area:dx'
     groups:

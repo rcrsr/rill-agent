@@ -1,7 +1,15 @@
 {
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "./dist"
+    "outDir": "./dist",
+    // dts-bundle-generator re-checks the emitted bundle with skipLibCheck off,
+    // so it walks every transitive .d.ts. @azure/msal-common >= 16.13 (pulled by
+    // @azure/identity) types JoseHeader.jwk as the WebCrypto global `JsonWebKey`,
+    // which only lib.dom declares; @types/node keeps it under
+    // crypto.webcrypto. DOM is added here only, for the declaration pass. The
+    // source typecheck (tsconfig.json) stays on ES2022 + node, and the emitted
+    // dist/index.d.ts is byte-identical with or without this entry.
+    "lib": ["ES2022", "DOM"]
   },
   "references": [
     {

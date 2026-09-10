@@ -9,6 +9,7 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Dependencies:** Version bumped to align with framework-wide dependency sweep (pnpm 12, hono 4.13.7, tsup 8.5.1; no source changes). ([#75](https://github.com/rcrsr/rill-agent/pull/75))
 - **Dependencies:** Bump hono to ^4.13.5 and @hono/node-server to ^2.1.1. ([#63](https://github.com/rcrsr/rill-agent/pull/63))
 
 ### Fixed

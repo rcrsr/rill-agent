@@ -7,8 +7,8 @@
     "start": "node server.js"
   },
   "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
     "@rcrsr/rill-agent": "workspace:*",
-    "@rcrsr/rill-agent-foundry": "workspace:*",
-    "@opentelemetry/api": "^1.9.0"
+    "@rcrsr/rill-agent-foundry": "workspace:*"
   }
 }
