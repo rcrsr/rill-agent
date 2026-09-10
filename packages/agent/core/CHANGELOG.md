@@ -7,6 +7,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Dependencies:** Version bumped to align with framework-wide dependency sweep (pnpm 12, rill 0.21; no source changes). ([#75](https://github.com/rcrsr/rill-agent/pull/75))
+
 ### Fixed
 
 - **Core validation and error classification:** Fixed boolean validation, agent-not-found error classification, router cleanup on failure, and manifest validation for empty agents maps. ([#62](https://github.com/rcrsr/rill-agent/pull/62))
