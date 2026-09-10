@@ -9,6 +9,11 @@ pre-commit:
   commands:
     format:
       glob: '*.{ts,tsx,js,mjs,cjs,json,yaml,yml}'
+      # The lockfile is in .oxfmtrc.json ignorePatterns. Without this exclude a
+      # lockfile-only commit hands oxfmt an all-ignored list, which exits
+      # non-zero and halts the piped chain (STD-HOOK-5).
+      exclude:
+        - pnpm-lock.yaml
       run: pnpm exec oxfmt {staged_files}
       stage_fixed: true
     lint:

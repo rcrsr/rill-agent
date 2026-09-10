@@ -1,6 +1,6 @@
 {
   "name": "@rcrsr/rill-agent-hono-kit",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",
-    "hono": "^4.13.5"
+    "hono": "^4.13.7"
   },
   "files": [
     "dist"

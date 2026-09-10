@@ -1,6 +1,6 @@
 {
   "name": "@rcrsr/rill-agent-chat",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "description": "rill agent chat harness — Hono-based chat endpoint wrapping AgentRouter",
   "license": "MIT",
   "author": "Andre Bremer",
@@ -22,14 +22,14 @@
     "check": "pnpm run build && pnpm run test && pnpm run lint"
   },
   "dependencies": {
-    "@rcrsr/rill-agent": "workspace:~",
     "@hono/node-server": "^2.1.1",
-    "hono": "^4.13.5"
+    "@rcrsr/rill-agent": "workspace:~",
+    "hono": "^4.13.7"
   },
   "devDependencies": {
     "@rcrsr/rill-agent-hono-kit": "workspace:^",
     "dts-bundle-generator": "^9.5.1",
-    "tsup": "^8.5.0"
+    "tsup": "^8.5.1"
   },
   "files": [
     "dist"
