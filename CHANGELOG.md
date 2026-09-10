@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **rill 0.21 alignment:** `@rcrsr/rill-agent-ext-ahi` now matches `@rcrsr/rill` at `~0.21.0` (peer and dev); every package and the root move to `0.21.0` per the minor-version compatibility rule.
 - **pnpm 12:** `packageManager` pinned to `pnpm@12.3.4`, `engines.pnpm` raised to `>=12`. pnpm 12 records the pin in the lockfile and rejects unrecognized `pnpm-workspace.yaml` keys on install.
 - **Dependency sweep:** `@rcrsr/rill-dev` 0.2.5, vitest 5, `@types/node` 26.5, knip 6.35, lefthook 2.1.12, oxfmt 0.67, oxlint 1.82, tsup 8.5.1, hono 4.13.7, `@azure/identity` 4.13.2, OpenTelemetry SDK 0.222 / resources 2.11.
+- **GitHub Actions:** `github/codeql-action` 4.37.6 -> 4.37.9. Every other pinned action is already at its latest release.
 - **Standards (rill-dev 0.2.5):** dependabot version-update PRs disabled (`open-pull-requests-limit: 0`, STD-SUP-8); the pre-commit format hook excludes `pnpm-lock.yaml` so lockfile-only commits no longer halt the piped chain (STD-HOOK-5).
 - **Dependency baseline:** Refreshed dependencies and shared tooling. ([#63](https://github.com/rcrsr/rill-agent/pull/63))
 
