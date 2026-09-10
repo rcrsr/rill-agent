@@ -7,6 +7,8 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-09-09
+
 ### Changed
 
 - **Dependencies:** hono to 4.13.7, tsup to 8.5.1, @azure/identity to 4.13.2, OpenTelemetry SDK to 0.222.0 / resources to 2.11.0. ([#75](https://github.com/rcrsr/rill-agent/pull/75))

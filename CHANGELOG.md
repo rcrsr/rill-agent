@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-09-09
+
 ### Changed
 
 - **rill 0.21 alignment:** `@rcrsr/rill-agent-ext-ahi` now matches `@rcrsr/rill` at `~0.21.0` (peer and dev); every package and the root move to `0.21.0` per the minor-version compatibility rule. ([#75](https://github.com/rcrsr/rill-agent/pull/75))
