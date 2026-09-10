@@ -7,6 +7,8 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-09-09
+
 ### Changed
 
 - **rill 0.21:** `@rcrsr/rill` peer and dev dependency bumped to `~0.21.0` per the minor-version compatibility rule. ([#75](https://github.com/rcrsr/rill-agent/pull/75))

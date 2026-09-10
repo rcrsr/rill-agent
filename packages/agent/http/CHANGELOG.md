@@ -7,6 +7,8 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-09-09
+
 ### Changed
 
 - **Dependencies:** Version bumped to align with framework-wide dependency sweep (pnpm 12, hono 4.13.7, tsup 8.5.1; no source changes). ([#75](https://github.com/rcrsr/rill-agent/pull/75))
