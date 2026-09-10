@@ -61,6 +61,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    # Version-update PRs are disabled here too (STD-SUP-8), same rationale as
+    # the npm block above.
     open-pull-requests-limit: 0
     labels:
       - 'area:dx'
