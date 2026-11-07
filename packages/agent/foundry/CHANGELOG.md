@@ -7,6 +7,12 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-11-06
+
+### Changed
+
+- **Dependencies:** hono 4.13.16, `@hono/node-server` 2.1.6, `@azure/identity` 4.14.1, OpenTelemetry SDK 0.301 / resources 3.1 / api 1.10. ([#81](https://github.com/rcrsr/rill-agent/pull/81))
+
 ## [0.21.0] - 2026-09-09
 
 ### Changed

@@ -1,6 +1,6 @@
 {
   "name": "@rcrsr/rill-agent-foundry",
-  "version": "0.21.0",
+  "version": "0.23.0",
   "description": "rill agent foundry — Azure-hosted harness factory",
   "license": "MIT",
   "author": "Andre Bremer",
