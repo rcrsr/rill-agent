@@ -1,0 +1,17 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,
+    "rootDir": ".."
+  },
+  "references": [
+    {
+      "path": "../../core"
+    },
+    {
+      "path": "../../../shared/hono-kit"
+    }
+  ],
+  "include": ["**/*.ts"]
+}

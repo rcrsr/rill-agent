@@ -27,7 +27,7 @@ pnpm install                # install dependencies (also wires git hooks via pre
 pnpm check                  # full validation aggregate (see below)
 pnpm build                  # build the publishable packages (packages/**)
 pnpm test                   # run all tests (vitest run)
-pnpm check:types            # type validation across every package (tsc --noEmit)
+pnpm check:types            # type validation of src/ and tests/ in every package (tsc --noEmit && tsc -p tests)
 pnpm check:lint             # lint (oxlint)
 pnpm check:format           # formatting check (oxfmt)
 pnpm check:deps             # unused dependencies and exports (knip)
@@ -102,7 +102,7 @@ The `ahi` extension registers `ahi::<agentName>` functions in the rill runtime c
 
 - TypeScript strict mode with `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`
 - ESM only (`"type": "module"` in all packages)
-- Tests in `packages/agent/*/tests/` using vitest (not in `src/`)
+- Tests in `packages/agent/*/tests/` using vitest (not in `src/`); each `tests/` directory has a `tsconfig.json` extending the package config so tests are type-checked
 - Each vitest.config.ts aliases workspace packages to source for test-time resolution
 - TypeScript project references via `tsconfig.base.json` with composite builds
 - Lint with **oxlint** (`.oxlintrc.json`), format with **oxfmt** (`.oxfmtrc.json`); no eslint or prettier

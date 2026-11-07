@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { AgentRouter } from '@rcrsr/rill-agent';
+import type { AgentHandler, AgentRouter } from '@rcrsr/rill-agent';
+import type { TokenCredential } from '@azure/identity';
 import { DefaultAzureCredential } from '@azure/identity';
 import { createFoundryHarness } from '../src/harness.js';
 import {
@@ -50,6 +51,10 @@ afterEach(() => {
 // ============================================================
 
 const mockRouter: AgentRouter = {
+  manifest: {
+    defaultAgent: 'default',
+    agents: new Map<string, AgentHandler>(),
+  },
   defaultAgent: () => 'default',
   agents: () => ['default'],
   describe: () => ({ name: 'handler', description: 'Test', params: [] }),
@@ -314,9 +319,8 @@ describe('createFoundryHarness — startup credential check', () => {
       'https://example.foundry.azure.com';
 
     // Override the mocked DefaultAzureCredential prototype to return null
-    vi.spyOn(DefaultAzureCredential.prototype, 'getToken').mockResolvedValue(
-      null
-    );
+    const credential: TokenCredential = DefaultAzureCredential.prototype;
+    vi.spyOn(credential, 'getToken').mockResolvedValue(null);
 
     const exitSpy = vi
       .spyOn(process, 'exit')
