@@ -1,6 +1,6 @@
 {
   "name": "@rcrsr/rill-agent-chat",
-  "version": "0.21.0",
+  "version": "0.23.0",
   "description": "rill agent chat harness — Hono-based chat endpoint wrapping AgentRouter",
   "license": "MIT",
   "author": "Andre Bremer",

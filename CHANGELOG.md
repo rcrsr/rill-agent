@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-11-06
+
+### Changed
+
+- **rill 0.23 alignment:** `@rcrsr/rill-agent-ext-ahi` now matches `@rcrsr/rill` at `~0.23.0` (peer and dev); every package and the root move to `0.23.0` per the minor-version compatibility rule. ([#81](https://github.com/rcrsr/rill-agent/pull/81))
+- **pnpm 12.18 and rill-dev 0.3.0:** `packageManager` pinned to `pnpm@12.18.0`; `@rcrsr/rill-dev` 0.3.0 adopted as the standards baseline. ([#81](https://github.com/rcrsr/rill-agent/pull/81))
+- **Dependency sweep:** `@types/node` 26.6.6, knip 6.44.1, oxfmt 0.76.0, oxlint 1.91.0, vitest 5.1.0, tsup 9, hono 4.13.16, `@hono/node-server` 2.1.6, `@azure/identity` 4.14.1, OpenTelemetry SDK 0.301 / resources 3.1 / api 1.10. lefthook stays locked at 2.2.1 because 2.2.2 ships without provenance. ([#81](https://github.com/rcrsr/rill-agent/pull/81))
+- **Lint baseline (rill-dev 0.3.0):** `max-lines` at error (max 1000), `--type-aware` on every package lint script, and all baseline rules at error; 16 rules with current findings run at warn until [#80](https://github.com/rcrsr/rill-agent/issues/80) clears them. ([#81](https://github.com/rcrsr/rill-agent/pull/81))
+
 ## [0.21.0] - 2026-09-09
 
 ### Changed
