@@ -8,7 +8,7 @@ This repository is one piece of the broader rill ecosystem. See the ecosystem ma
 
 ## Monorepo Structure
 
-pnpm workspace monorepo containing the agent framework for the [rill](https://github.com/rcrsr/rill) language runtime. Five published packages under `packages/agent/` plus one private shared package under `packages/shared/`. Every publishable package sits at the same `major.minor` as the root manifest (see Versioning and Release).
+pnpm workspace monorepo containing the agent framework for the [rill](https://github.com/rcrsr/rill) language runtime. Published packages under `packages/agent/` (`core`, `http`, `foundry`, `ahi`, `chat`) plus the private shared `hono-kit` under `packages/shared/`. Every publishable package sits at the same `major.minor` as the root manifest (see Versioning and Release).
 
 | Package | NPM Name | Role |
 |---------|----------|------|
@@ -69,13 +69,13 @@ cd packages/agent/core && npx vitest run tests/router.test.ts
 core  ← http     (dep)
 core  ← foundry  (dep)
 core  ← chat     (dep)
-hono-kit ← http     (dep)
-hono-kit ← foundry  (dep)
-hono-kit ← chat     (dep)
+hono-kit ← http     (devDep, inlined at build)
+hono-kit ← foundry  (devDep, inlined at build)
+hono-kit ← chat     (devDep, inlined at build)
 ahi
 ```
 
-`core` (`@rcrsr/rill-agent`) is transport-agnostic and has no runtime dependency on `hono`. `http` (`@rcrsr/rill-agent-http`), `foundry` (`@rcrsr/rill-agent-foundry`), and `chat` (`@rcrsr/rill-agent-chat`) each depend on `@rcrsr/rill-agent` and the private `@rcrsr/rill-agent-hono-kit`, and they carry the `hono` / `@hono/node-server` runtime dependencies. `ahi` uses `@rcrsr/rill` as a peer dependency and has no other workspace dependencies. `foundry` and `chat` do not import `@rcrsr/rill` directly.
+`core` (`@rcrsr/rill-agent`) is transport-agnostic and has no runtime dependency on `hono`. `http` (`@rcrsr/rill-agent-http`), `foundry` (`@rcrsr/rill-agent-foundry`), and `chat` (`@rcrsr/rill-agent-chat`) each depend on `@rcrsr/rill-agent` and consume the private `@rcrsr/rill-agent-hono-kit` only as a `devDependency` inlined at build time, and they carry the `hono` / `@hono/node-server` runtime dependencies. `ahi` uses `@rcrsr/rill` as a peer dependency and has no other workspace dependencies. `foundry` and `chat` do not import `@rcrsr/rill` directly.
 
 ### Runtime Pipeline
 
@@ -108,6 +108,12 @@ The `ahi` extension registers `ahi::<agentName>` functions in the rill runtime c
 - Lint with **oxlint** (`.oxlintrc.json`), format with **oxfmt** (`.oxfmtrc.json`); no eslint or prettier
 - Unused function parameters prefixed with `_` (oxlint `argsIgnorePattern: '^_'`)
 - Lint scope covers `src/` and `tests/` in every package
+- No `enum` (use `as const`), `any` (use `unknown`), `export *`, or default exports; use named exports, except each harness's `src/index.ts` keeps `export default harness`
+- Exported functions declare explicit return types (`Promise<T>` for async)
+- Public APIs are `create*` factory functions returning a named exported interface, not classes
+- An external peer dependency (e.g. `@rcrsr/rill`) is also listed in `devDependencies` at the identical specifier, never in `dependencies`; `@rcrsr/rill-agent` is a plain `workspace:~` dependency
+- No `src/utils/` or `src/helpers/` directories (keep helpers private to the using module) and no `bin` field in library packages
+- New error conditions are named `*Error` classes extending `Error` in the package's `src/errors.ts`, with explicit `this.name` and a literal `readonly statusCode` when HTTP-mapped
 
 ## Versioning and Release
 
@@ -155,8 +161,8 @@ flag to any workflow.
   not leak into shipped source.
 - `rill/no-duplicate-error-id` is **on at `error` for `src/`** as well: the `ahi`
   and `foundry` harnesses construct `RuntimeError` with `RILL-R*` ids, so the
-  rule guards against a duplicate id (zero today).
-- Four vitest/promise rules are **off**, matching the reference config
+  rule guards against a duplicate id.
+- The disabled vitest/promise rules match the reference config
   (STD-LINT-9), each with its measured finding count recorded inline
   (STD-LINT-6).
 

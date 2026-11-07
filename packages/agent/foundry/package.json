@@ -22,26 +22,26 @@
     "build": "tsup && dts-bundle-generator --config dts-bundle-generator.config.cjs && node -e \"const fs=require('fs');const walk=(d)=>fs.readdirSync(d,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(d+'/'+e.name):[d+'/'+e.name]);const hits=walk('dist').filter(f=>fs.readFileSync(f,'utf8').includes('@rcrsr/rill-agent-hono-kit'));if(hits.length){console.error('hono-kit leak in dist:',hits);process.exit(1);}\"",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "lint": "oxlint --config ../../../.oxlintrc.json src/ tests/",
+    "lint": "oxlint --type-aware --config ../../../.oxlintrc.json src/ tests/",
     "check": "pnpm run build && pnpm run test && pnpm run lint"
   },
   "peerDependencies": {
     "@opentelemetry/api": "^1.9.0"
   },
   "dependencies": {
-    "@azure/identity": "^4.13.2",
-    "@hono/node-server": "^2.1.1",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
-    "@opentelemetry/resources": "^2.11.0",
-    "@opentelemetry/sdk-node": "^0.222.0",
+    "@azure/identity": "^4.14.1",
+    "@hono/node-server": "^2.1.6",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.301.0",
+    "@opentelemetry/resources": "^3.1.0",
+    "@opentelemetry/sdk-node": "^0.301.0",
     "@rcrsr/rill-agent": "workspace:~",
-    "hono": "^4.13.7"
+    "hono": "^4.13.16"
   },
   "devDependencies": {
-    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/api": "^1.10.0",
     "@rcrsr/rill-agent-hono-kit": "workspace:^",
     "dts-bundle-generator": "^9.5.1",
-    "tsup": "^8.5.1"
+    "tsup": "^9.0.0"
   },
   "files": [
     "dist"
