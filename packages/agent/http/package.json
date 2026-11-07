@@ -22,14 +22,14 @@
     "check": "pnpm run build && pnpm run test && pnpm run lint"
   },
   "dependencies": {
-    "@hono/node-server": "^2.1.1",
+    "@hono/node-server": "^2.1.6",
     "@rcrsr/rill-agent": "workspace:~",
-    "hono": "^4.13.7"
+    "hono": "^4.13.16"
   },
   "devDependencies": {
     "@rcrsr/rill-agent-hono-kit": "workspace:^",
     "dts-bundle-generator": "^9.5.1",
-    "tsup": "^8.5.1"
+    "tsup": "^9.0.0"
   },
   "files": [
     "dist"
