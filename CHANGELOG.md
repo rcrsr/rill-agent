@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Lint stopgap removed:** the 16 baseline rules that ran at warn now run at error, with 0 warnings and 0 errors across all six packages. This supersedes the 0.23.0 stopgap note. Closes [#77](https://github.com/rcrsr/rill-agent/issues/77) (async and promise handling), [#78](https://github.com/rcrsr/rill-agent/issues/78) (type safety), [#79](https://github.com/rcrsr/rill-agent/issues/79) (idioms), and [#80](https://github.com/rcrsr/rill-agent/issues/80) (stopgap removal).
+- **Lint stopgap removed:** all baseline lint rules now run at error with zero findings, including type-aware checks. ([#84](https://github.com/rcrsr/rill-agent/pull/84))
 
 ## [0.23.0] - 2026-11-06
 
