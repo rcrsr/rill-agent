@@ -34,7 +34,7 @@ const VALID_BODY = jsonPost({
 
 describe('POST /agents/:name/chat — valid agent streams chunks', () => {
   it('returns 200 text/event-stream with chunk frames and [DONE]', async () => {
-    const invoked = vi.fn();
+    const invoked = vi.fn(() => {});
     const handler = makeChatHandler({ name: 'alpha', onInvoke: invoked });
     const router = await makeRouter({
       agents: new Map<string, AgentHandler>([['alpha', handler]]),
@@ -54,7 +54,7 @@ describe('POST /agents/:name/chat — valid agent streams chunks', () => {
       f.startsWith('data: ')
     );
     expect(dataFrames.length).toBeGreaterThanOrEqual(1);
-    expect(dataFrames[dataFrames.length - 1]).toBe('data: [DONE]');
+    expect(dataFrames.at(-1)).toBe('data: [DONE]');
     expect(invoked).toHaveBeenCalledOnce();
   });
 });
@@ -112,8 +112,8 @@ describe('GET /agents — filters out non-chat handlers', () => {
 
 describe('POST /v1/chat/completions — unknown model routes to default agent', () => {
   it('invokes the default agent when model does not match any known agent', async () => {
-    const alphaInvoked = vi.fn();
-    const betaInvoked = vi.fn();
+    const alphaInvoked = vi.fn(() => {});
+    const betaInvoked = vi.fn(() => {});
     const router = await makeRouter({
       agents: new Map<string, AgentHandler>([
         ['alpha', makeChatHandler({ name: 'alpha', onInvoke: alphaInvoked })],
@@ -144,7 +144,7 @@ describe('POST /v1/chat/completions — unknown model routes to default agent', 
 
 describe('POST /v1/chat/completions — missing model routes to default agent', () => {
   it('invokes the default agent when model field is absent', async () => {
-    const alphaInvoked = vi.fn();
+    const alphaInvoked = vi.fn(() => {});
     const router = await makeRouter({
       agents: new Map<string, AgentHandler>([
         ['alpha', makeChatHandler({ name: 'alpha', onInvoke: alphaInvoked })],
@@ -170,7 +170,7 @@ describe('POST /v1/chat/completions — missing model routes to default agent', 
 
 describe('POST /chat — invokes default agent and streams', () => {
   it('returns 200 SSE and invokes the default agent handler', async () => {
-    const invoked = vi.fn();
+    const invoked = vi.fn(() => {});
     const router = await makeRouter({
       agents: new Map<string, AgentHandler>([
         ['alpha', makeChatHandler({ name: 'alpha', onInvoke: invoked })],
@@ -191,7 +191,7 @@ describe('POST /chat — invokes default agent and streams', () => {
       f.startsWith('data: ')
     );
     expect(dataFrames.length).toBeGreaterThanOrEqual(1);
-    expect(dataFrames[dataFrames.length - 1]).toBe('data: [DONE]');
+    expect(dataFrames.at(-1)).toBe('data: [DONE]');
     expect(invoked).toHaveBeenCalledOnce();
   });
 });

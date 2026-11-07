@@ -39,15 +39,15 @@ function stubFetch(result: RillValue = 'mocked-result'): Array<CapturedCall> {
 
   vi.stubGlobal(
     'fetch',
-    vi.fn().mockImplementation(async (url: string, init: FetchInit) => {
+    vi.fn().mockImplementation((url: string, init: FetchInit) => {
       const parsedBody = JSON.parse(
         init.body as string
       ) as CapturedCall['parsedBody'];
       calls.push({ url, init, parsedBody });
-      return {
+      return Promise.resolve({
         ok: true,
-        json: async () => ({ result }),
-      };
+        json: () => Promise.resolve({ result }),
+      });
     })
   );
 
@@ -69,14 +69,16 @@ function makeCtx(overrides?: Partial<Record<string, string>>): {
 }
 
 /** Invoke a named ahi:: function from an ExtensionResult */
-async function callAhi(
+function callAhi(
   ext: ExtensionResult,
   agentName: string,
   args: RillValue[],
   metadata: Record<string, string>
 ): Promise<RillValue> {
   const fnDef = (ext as Record<string, ApplicationCallable>)[agentName]!;
-  return fnDef.fn(args as unknown as Record<string, RillValue>, { metadata });
+  return Promise.resolve().then(() =>
+    fnDef.fn(args as unknown as Record<string, RillValue>, { metadata })
+  );
 }
 
 // ============================================================
@@ -321,7 +323,7 @@ describe('AHI static success path', () => {
 
     it('returns a dict value from json.result', async () => {
       const returnedDict = { score: 42, label: 'positive' };
-      stubFetch(returnedDict as unknown as RillValue);
+      stubFetch(returnedDict);
       const ext = createAhiExtension({
         agents: { parser: { url: 'http://parser:8080' } },
       });

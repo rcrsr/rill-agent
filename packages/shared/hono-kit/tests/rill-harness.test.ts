@@ -19,8 +19,8 @@ import type {
 } from '../src/index.js';
 
 /** Ask the OS for an unused TCP port by binding then releasing it. */
-async function getFreePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
+function getFreePort(): Promise<number> {
+  return new Promise<number>((resolve, reject) => {
     const probe = createServer();
     probe.once('error', reject);
     probe.listen(0, () => {
@@ -46,7 +46,7 @@ async function makeTmpDir(): Promise<string> {
 
 afterEach(async () => {
   for (const dir of tmpDirs.splice(0)) {
-    await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
   }
 });
 
@@ -59,9 +59,9 @@ function pkg(mount: string, outputPath: string): RillCompiledPackage {
 }
 
 const noopLogger = {
-  info: () => undefined,
-  warn: () => undefined,
-  error: () => undefined,
+  info: () => {},
+  warn: () => {},
+  error: () => {},
 };
 
 function makeServeContext(
@@ -88,7 +88,7 @@ function makeServeContext(
       shutdownHandlers.push(h);
       resolveRegistered();
     },
-    onSourceChange: () => undefined,
+    onSourceChange: () => {},
   };
   return {
     ctx,
@@ -181,7 +181,7 @@ describe('createHarnessLifecycle listen/close', () => {
 
   afterEach(async () => {
     for (const lc of lifecycles.splice(0)) {
-      await lc.close().catch(() => undefined);
+      await lc.close().catch(() => {});
     }
   });
 
@@ -231,8 +231,9 @@ describe('runRillServe', () => {
   it('starts the server and registers close on shutdown', async () => {
     let closed = false;
     const handle: ServerHandle = {
-      close: async () => {
+      close: () => {
         closed = true;
+        return Promise.resolve();
       },
     };
     let startedWith: ReadonlyArray<{ name: string; dir: string }> | undefined;
@@ -241,9 +242,9 @@ describe('runRillServe', () => {
       pkg('alpha', '/build/alpha'),
     ]);
 
-    const servePromise = runRillServe(ctx, async (entries) => {
+    const servePromise = runRillServe(ctx, (entries) => {
       startedWith = entries;
-      return handle;
+      return Promise.resolve(handle);
     });
 
     // Wait deterministically for runRillServe to register its shutdown

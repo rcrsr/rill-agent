@@ -9,6 +9,10 @@ import type {
   RunResponse,
 } from './types.js';
 
+// ============================================================
+// DISPOSAL
+// ============================================================
+
 /**
  * Dispose every handler, even if some fail. Uses `Promise.allSettled` so a
  * single failing `dispose()` cannot prevent the rest from being attempted.
@@ -28,6 +32,10 @@ async function disposeAll(handlers: Iterable<AgentHandler>): Promise<void> {
     );
   }
 }
+
+// ============================================================
+// ROUTER FACTORY
+// ============================================================
 
 /**
  * Create a router from a loaded manifest.
@@ -51,12 +59,10 @@ export async function createRouter(
   // Step 2: Create AHI resolver (references the router's own run function)
   // Note: AHI calls are agent-to-agent and do not carry the caller's session
   // variables, so context is intentionally not forwarded here.
-  const ahiResolver = async (
+  const ahiResolver = (
     agentName: string,
     request: RunRequest
-  ): Promise<RunResponse> => {
-    return run(agentName, request);
-  };
+  ): Promise<RunResponse> => run(agentName, request);
 
   // Step 3: Initialize all agents concurrently. On any rejection, dispose
   // the handlers whose init() already succeeded before rethrowing, so a
@@ -80,7 +86,8 @@ export async function createRouter(
     }
   });
   if (initFailures.length > 0) {
-    await disposeAll(initSucceeded).catch(() => undefined);
+    // The init failure thrown below takes precedence over any dispose failure.
+    await disposeAll(initSucceeded).catch(() => {});
     throw initFailures.length === 1
       ? initFailures[0]
       : new AggregateError(
@@ -90,24 +97,26 @@ export async function createRouter(
   }
 
   // Step 4: Build router
-  async function run(
+  function run(
     agentName: string,
     request: RunRequest,
     context?: RunContext
   ): Promise<RunResponse> {
-    const resolvedName = agentName === '' ? manifest.defaultAgent : agentName;
-    const handler = manifest.agents.get(resolvedName);
-    if (handler === undefined) {
-      const available = Array.from(manifest.agents.keys()).join(', ');
-      throw new AgentNotFoundError(
-        `Agent "${resolvedName}" not found. Available: ${available}`
-      );
-    }
-    const normalized: RunRequest = {
-      ...request,
-      params: request.params ?? {},
-    };
-    return handler.execute(normalized, context);
+    return new Promise<RunResponse>((resolve) => {
+      const resolvedName = agentName === '' ? manifest.defaultAgent : agentName;
+      const handler = manifest.agents.get(resolvedName);
+      if (handler === undefined) {
+        const available = Array.from(manifest.agents.keys()).join(', ');
+        throw new AgentNotFoundError(
+          `Agent "${resolvedName}" not found. Available: ${available}`
+        );
+      }
+      const normalized: RunRequest = {
+        ...request,
+        params: request.params ?? {},
+      };
+      resolve(handler.execute(normalized, context));
+    });
   }
 
   function describe(agentName: string): HandlerDescription | null {

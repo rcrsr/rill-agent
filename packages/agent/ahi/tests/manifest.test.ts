@@ -32,7 +32,7 @@ function makeCtx(): {
  * Extract the named ApplicationCallable from a factory value object and
  * invoke its fn. Uses the same cast pattern as static-success.test.ts.
  */
-async function callFn(value: unknown, agentName: string): Promise<unknown> {
+function callFn(value: unknown, agentName: string): Promise<unknown> {
   const fn = (
     value as Record<
       string,
@@ -44,7 +44,9 @@ async function callFn(value: unknown, agentName: string): Promise<unknown> {
       }
     >
   )[agentName]!;
-  return fn.fn([] as unknown as Record<string, RillValue>, {});
+  return Promise.resolve().then(() =>
+    fn.fn([] as unknown as Record<string, RillValue>, {})
+  );
 }
 
 // ============================================================
@@ -213,7 +215,7 @@ describe('extensionManifest', () => {
     const { ctx, controller } = makeCtx();
     const factoryResult = await extensionManifest.factory(VALID_CONFIG, ctx);
 
-    factoryResult.dispose?.();
+    expect(factoryResult.dispose?.()).toBeUndefined();
     expect(() => controller.abort()).not.toThrow();
   });
 

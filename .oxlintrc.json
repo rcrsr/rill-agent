@@ -118,47 +118,6 @@
   "ignorePatterns": ["dist", "node_modules", "*.d.ts", "generated"],
   "overrides": [
     {
-      // STOPGAP, remove with #80. These rules report findings on the current
-      // tree, so they are relaxed to warn here until the fixes land; every
-      // other baseline rule stays at error and blocks new violations. Counts
-      // measured with oxlint 1.91.0 + oxlint-tsgolint 7.0.2006 over src/ and
-      // tests/ (STD-LINT-6):
-      //
-      // #77 async and promise handling:
-      //   require-await (56), typescript/strict-void-return (14),
-      //   typescript/no-floating-promises (4), typescript/await-thenable (1),
-      //   no-promise-executor-return (1)
-      // #78 type safety:
-      //   typescript/no-unsafe-assignment (9),
-      //   typescript/no-unnecessary-type-assertion (7),
-      //   typescript/unbound-method (4), typescript/no-unsafe-argument (4),
-      //   typescript/no-unsafe-call (4),
-      //   typescript/no-duplicate-type-constituents (4),
-      //   typescript/strict-boolean-expressions (4),
-      //   typescript/no-unsafe-return (3), typescript/no-base-to-string (1)
-      // #79 idioms:
-      //   unicorn/no-useless-undefined (44), unicorn/prefer-at (8)
-      "files": ["packages/**/*.{ts,tsx}"],
-      "rules": {
-        "require-await": "warn",
-        "typescript/strict-void-return": "warn",
-        "typescript/no-floating-promises": "warn",
-        "typescript/await-thenable": "warn",
-        "no-promise-executor-return": "warn",
-        "typescript/no-unsafe-assignment": "warn",
-        "typescript/no-unnecessary-type-assertion": "warn",
-        "typescript/unbound-method": "warn",
-        "typescript/no-unsafe-argument": "warn",
-        "typescript/no-unsafe-call": "warn",
-        "typescript/no-duplicate-type-constituents": "warn",
-        "typescript/strict-boolean-expressions": "warn",
-        "typescript/no-unsafe-return": "warn",
-        "typescript/no-base-to-string": "warn",
-        "unicorn/no-useless-undefined": "warn",
-        "unicorn/prefer-at": "warn"
-      }
-    },
-    {
       // STD-LINT-3: bans internal planning-artifact identifiers in shipped
       // source, at error, scoped to src/. no-duplicate-error-id is enabled the
       // same way; the ahi and foundry harnesses construct RuntimeError with

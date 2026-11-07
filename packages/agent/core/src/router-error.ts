@@ -8,7 +8,7 @@ function hasNotFoundCode(err: unknown): boolean {
     typeof err === 'object' &&
     err !== null &&
     'code' in err &&
-    (err as { code: unknown }).code === 'AGENT_NOT_FOUND'
+    err.code === 'AGENT_NOT_FOUND'
   );
 }
 

@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createSessionManager } from '../src/session.js';
 import { CapacityError } from '../src/errors.js';
 
+const noConversationId: string | undefined = undefined;
+
 // ============================================================
 // ENV SAVE/RESTORE
 // ============================================================
@@ -30,20 +32,20 @@ describe('createSessionManager', () => {
     process.env['MAX_CONCURRENT_SESSIONS'] = '10';
     const manager = createSessionManager({ maxConcurrentSessions: 2 });
 
-    manager.acquire(undefined);
-    manager.acquire(undefined);
+    manager.acquire(noConversationId);
+    manager.acquire(noConversationId);
     expect(manager.activeCount()).toBe(2);
-    expect(() => manager.acquire(undefined)).toThrow(CapacityError);
+    expect(() => manager.acquire(noConversationId)).toThrow(CapacityError);
   });
 
   it('honors the MAX_CONCURRENT_SESSIONS env var when no option is passed', () => {
     process.env['MAX_CONCURRENT_SESSIONS'] = '2';
     const manager = createSessionManager();
 
-    manager.acquire(undefined);
-    manager.acquire(undefined);
+    manager.acquire(noConversationId);
+    manager.acquire(noConversationId);
     expect(manager.activeCount()).toBe(2);
-    expect(() => manager.acquire(undefined)).toThrow(CapacityError);
+    expect(() => manager.acquire(noConversationId)).toThrow(CapacityError);
   });
 
   it('acquiring twice with the same conversationId occupies two independent slots', () => {

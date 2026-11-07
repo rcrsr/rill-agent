@@ -19,11 +19,11 @@ import { CredentialError } from '../src/errors.js';
 
 vi.mock('@azure/identity', () => ({
   DefaultAzureCredential: class {
-    async getToken(): Promise<{ token: string; expiresOnTimestamp: number }> {
-      return {
+    getToken(): Promise<{ token: string; expiresOnTimestamp: number }> {
+      return Promise.resolve({
         token: 'mock-token',
         expiresOnTimestamp: Date.now() + 3_600_000,
-      };
+      });
     }
   },
 }));
@@ -58,7 +58,7 @@ function makeMockRouter(
             ],
           }
         : null,
-    run: async (
+    run: (
       _name: string,
       request: RunRequest,
       context?: RunContext
@@ -66,12 +66,13 @@ function makeMockRouter(
       if (capture !== undefined) {
         capture.sessionVars = context?.sessionVars;
       }
-      return {
+      const input = request.params?.['input'];
+      return Promise.resolve({
         state: 'completed' as const,
-        result: String(request.params?.['input'] ?? ''),
-      };
+        result: typeof input === 'string' ? input : '',
+      });
     },
-    dispose: async () => undefined,
+    dispose: () => Promise.resolve(),
     ...overrides,
   };
 }
@@ -402,9 +403,10 @@ describe('createFoundryHarness', () => {
   // AC-33, EC-1: handler not found → 404
   it("returns 404 when router.run throws the router's structured not-found error", async () => {
     const notFoundRouter = makeMockRouter({
-      run: async () => {
-        throw new Error('Agent "default" not found. Available: other');
-      },
+      run: () =>
+        Promise.reject(
+          new Error('Agent "default" not found. Available: other')
+        ),
     });
     const harness = createFoundryHarness(notFoundRouter);
     const res = await harness.app.request(
@@ -539,6 +541,7 @@ describe('createFoundryHarness', () => {
       attributes: Record<string, unknown>;
       span: Span;
     }> = [];
+    const end = vi.fn(() => {});
     const mockTracer = {
       startSpan: (
         name: string,
@@ -555,14 +558,14 @@ describe('createFoundryHarness', () => {
             return span;
           }),
           setStatus: vi.fn().mockReturnThis(),
-          end: vi.fn(),
+          end,
           spanContext: () => ({
             traceId: '0'.repeat(32),
             spanId: '0'.repeat(16),
             traceFlags: 0,
           }),
           isRecording: () => true,
-          recordException: vi.fn(),
+          recordException: vi.fn(() => {}),
           updateName: vi.fn().mockReturnThis(),
           addEvent: vi.fn().mockReturnThis(),
           addLink: vi.fn().mockReturnThis(),
@@ -578,9 +581,7 @@ describe('createFoundryHarness', () => {
 
     const getTracerSpy = vi
       .spyOn(trace, 'getTracer')
-      .mockReturnValue(
-        mockTracer as unknown as ReturnType<typeof trace.getTracer>
-      );
+      .mockReturnValue(mockTracer);
 
     const harness = createFoundryHarness(makeMockRouter());
     await harness.app.request('/responses', jsonRequest({ input: 'hello' }));
@@ -591,7 +592,7 @@ describe('createFoundryHarness', () => {
     expect(entry.name).toBe('foundry.agent.run');
     expect(entry.attributes['foundry.agent.name']).toBe('default');
     expect(entry.attributes['foundry.agent.state']).toBe('completed');
-    expect(entry.span.end).toHaveBeenCalled();
+    expect(end).toHaveBeenCalled();
 
     getTracerSpy.mockRestore();
   });
@@ -666,7 +667,7 @@ describe('createFoundryHarness', () => {
     );
     const exitSpy = vi
       .spyOn(process, 'exit')
-      .mockImplementation((_code?: string | number | null | undefined) => {
+      .mockImplementation((_code?: string | number | null) => {
         throw new Error('process.exit called — library code must not exit');
       });
 

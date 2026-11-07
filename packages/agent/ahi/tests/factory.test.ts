@@ -101,14 +101,15 @@ describe('createAhiExtension', () => {
         });
 
         const fn = result['parser']!;
+        const noCallerCtx: Parameters<typeof fn.fn>[2] = undefined;
         // fn returns a Promise (async function)
         const returnValue = fn.fn(
           [] as unknown as Record<string, import('@rcrsr/rill').RillValue>,
           {} as never,
-          undefined
+          noCallerCtx
         );
         expect(returnValue).toBeInstanceOf(Promise);
-        await (returnValue as Promise<unknown>).catch(() => undefined);
+        await (returnValue as Promise<unknown>).catch((e: unknown) => e);
       } finally {
         vi.unstubAllGlobals();
       }
@@ -231,7 +232,7 @@ describe('createAhiExtension', () => {
       };
       await fn
         .fn([], { metadata: { agentName: 'a', sessionId: 's' } })
-        .catch(() => undefined);
+        .catch((e: unknown) => e);
     }
 
     it('hits .../run without a double slash when the base URL has no trailing slash', async () => {

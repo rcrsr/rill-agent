@@ -58,7 +58,7 @@ describe('createHarnessLifecycle', () => {
 
   afterEach(async () => {
     for (const lc of lifecycles.splice(0)) {
-      await lc.close().catch(() => undefined);
+      await lc.close().catch(() => {});
     }
   });
 

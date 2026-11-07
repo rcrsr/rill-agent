@@ -122,9 +122,8 @@ export function buildErrorResponse(
   message: string,
   debug?: boolean
 ): ErrorResponse {
-  const safeMessage = debug
-    ? message
-    : (GENERIC_MESSAGES[code] ?? FALLBACK_MESSAGE);
+  const safeMessage =
+    debug === true ? message : (GENERIC_MESSAGES[code] ?? FALLBACK_MESSAGE);
   return {
     error: { code, message: safeMessage },
   };

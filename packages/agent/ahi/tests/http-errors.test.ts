@@ -28,7 +28,7 @@ function makeCtx(overrides?: Partial<Record<string, string>>): {
 }
 
 /** Invoke ahi::downstream from an extension instance */
-async function callDownstream(
+function callDownstream(
   ext: ReturnType<typeof createAhiExtension>,
   args: RillValue[] = []
 ): Promise<RillValue> {
@@ -39,7 +39,7 @@ async function callDownstream(
     ) => Promise<RillValue>;
   };
   // Untyped callable: runtime passes RillValue[] directly; cast required for types
-  return fn.fn(args, makeCtx());
+  return Promise.resolve().then(() => fn.fn(args, makeCtx()));
 }
 
 // ============================================================
@@ -414,7 +414,7 @@ describe('AHI error mapping', () => {
       const callPromise = fn.fn([], makeCtx());
       // Suppress the transient unhandled-rejection window before the
       // assertions below attach their own handlers.
-      callPromise.catch(() => undefined);
+      callPromise.catch((e: unknown) => e);
 
       // Advance the fake timer past the configured timeout to fire the
       // internal setTimeout()-driven abort (not dispose()).

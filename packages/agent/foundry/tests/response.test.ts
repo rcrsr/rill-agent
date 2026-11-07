@@ -69,6 +69,7 @@ describe('coerceResult', () => {
   });
 
   it('converts an undefined result to an empty string', () => {
-    expect(coerceResult(undefined)).toBe('');
+    const missingResult: unknown = undefined;
+    expect(coerceResult(missingResult)).toBe('');
   });
 });

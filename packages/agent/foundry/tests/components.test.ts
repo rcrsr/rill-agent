@@ -34,14 +34,17 @@ const mockRouter = {
       },
     ],
   }),
-  run: async (
+  run: (
     _name: string,
     _request: RunRequest,
     _context?: RunContext
-  ): Promise<RunResponse> => ({ state: 'completed' as const, result: 'ok' }),
+  ): Promise<RunResponse> =>
+    Promise.resolve({ state: 'completed' as const, result: 'ok' }),
   agents: () => ['test-agent'],
-  dispose: async () => undefined,
+  dispose: () => Promise.resolve(),
 } satisfies AgentRouter;
+
+const noConversationId: string | undefined = undefined;
 
 // ============================================================
 // SESSION MANAGER TESTS
@@ -67,7 +70,7 @@ describe('createSessionManager', () => {
   it('acquire returns a session ID and activeCount increments', () => {
     const manager = createSessionManager();
     expect(manager.activeCount()).toBe(0);
-    const id = manager.acquire(undefined);
+    const id = manager.acquire(noConversationId);
     expect(typeof id).toBe('string');
     expect(id.length).toBeGreaterThan(0);
     expect(manager.activeCount()).toBe(1);
@@ -81,7 +84,7 @@ describe('createSessionManager', () => {
 
   it('release frees the session slot', () => {
     const manager = createSessionManager();
-    const id = manager.acquire(undefined);
+    const id = manager.acquire(noConversationId);
     expect(manager.activeCount()).toBe(1);
     manager.release(id);
     expect(manager.activeCount()).toBe(0);
@@ -97,20 +100,20 @@ describe('createSessionManager', () => {
   it('throws CapacityError when max concurrent sessions (10) is exceeded', () => {
     const manager = createSessionManager();
     for (let i = 0; i < 10; i++) {
-      manager.acquire(undefined);
+      manager.acquire(noConversationId);
     }
     expect(manager.activeCount()).toBe(10);
-    expect(() => manager.acquire(undefined)).toThrow(CapacityError);
+    expect(() => manager.acquire(noConversationId)).toThrow(CapacityError);
   });
 
   // AC-25: MAX_CONCURRENT_SESSIONS override
   it('respects MAX_CONCURRENT_SESSIONS env var override', () => {
     process.env['MAX_CONCURRENT_SESSIONS'] = '3';
     const manager = createSessionManager();
-    manager.acquire(undefined);
-    manager.acquire(undefined);
-    manager.acquire(undefined);
-    expect(() => manager.acquire(undefined)).toThrow(CapacityError);
+    manager.acquire(noConversationId);
+    manager.acquire(noConversationId);
+    manager.acquire(noConversationId);
+    expect(() => manager.acquire(noConversationId)).toThrow(CapacityError);
   });
 });
 

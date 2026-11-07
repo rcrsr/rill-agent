@@ -277,7 +277,7 @@ describe('post-first-chunk handler error', () => {
     expect(errorChunk.error?.message).not.toContain('mid-stream failure');
     expect(errorChunk.error?.message).toBe('Internal server error');
 
-    expect(frames[frames.length - 1]).toBe('data: [DONE]');
+    expect(frames.at(-1)).toBe('data: [DONE]');
   });
 
   it('increments the errors metric for a genuine post-first-chunk handler failure', async () => {
@@ -368,7 +368,8 @@ describe('client disconnect mid-stream', () => {
     );
     expect(res.status).toBe(200);
 
-    const reader = res.body!.getReader();
+    const reader: ReadableStreamDefaultReader<Uint8Array> =
+      res.body!.getReader();
     // Read past the first chunk, then cancel — simulating a client
     // disconnect mid-stream while the handler is still awaiting `hang`.
     await reader.read();
@@ -377,7 +378,9 @@ describe('client disconnect mid-stream', () => {
 
     // Yield to the event loop so the harness's async pump and stream catch
     // handler complete, without depending on a fixed wall-clock delay.
-    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
 
     const after = (
       (await (await harness.app.request('/metrics')).json()) as {
@@ -405,7 +408,8 @@ describe('request-to-first-chunk overhead', () => {
     );
     expect(res.status).toBe(200);
 
-    const reader = res.body!.getReader();
+    const reader: ReadableStreamDefaultReader<Uint8Array> =
+      res.body!.getReader();
     const decoder = new TextDecoder();
     let buf = '';
     let firstFrame: string | undefined;
@@ -419,7 +423,7 @@ describe('request-to-first-chunk overhead', () => {
     }
 
     const elapsed = performance.now() - start;
-    reader.cancel();
+    await reader.cancel();
 
     expect(firstFrame).toBeDefined();
     expect(elapsed).toBeLessThan(50);
@@ -438,14 +442,19 @@ describe('concurrent connections — no harness-imposed cap', () => {
     });
 
     const requests = Array.from({ length: CONCURRENCY }, () =>
-      harness.app.request('/v1/chat/completions', defaultBody({ stream: true }))
+      Promise.resolve(
+        harness.app.request(
+          '/v1/chat/completions',
+          defaultBody({ stream: true })
+        )
+      )
     );
     const responses = await Promise.all(requests);
     for (const res of responses) expect(res.status).toBe(200);
 
     const allFrames = await Promise.all(responses.map((res) => readSse(res)));
     for (const frames of allFrames) {
-      expect(frames[frames.length - 1]).toBe('data: [DONE]');
+      expect(frames.at(-1)).toBe('data: [DONE]');
       expect(frames.length).toBe(3);
     }
   });
@@ -471,7 +480,8 @@ describe('throughput stability across message array sizes', () => {
     );
     expect(res.status).toBe(200);
 
-    const reader = res.body!.getReader();
+    const reader: ReadableStreamDefaultReader<Uint8Array> =
+      res.body!.getReader();
     const decoder = new TextDecoder();
     let buf = '';
     while (true) {
@@ -480,8 +490,9 @@ describe('throughput stability across message array sizes', () => {
       buf += decoder.decode(value, { stream: true });
       if (buf.indexOf('\n\n') !== -1) break;
     }
-    reader.cancel();
-    return performance.now() - start;
+    const elapsed = performance.now() - start;
+    await reader.cancel();
+    return elapsed;
   }
 
   it('first-chunk time at N=10000 messages stays within 4x of N=1', async () => {
@@ -575,7 +586,7 @@ describe('wire format compatibility — simulated client parsers', () => {
 
   it('openai SDK parser: each frame is "data: <json>" and terminal is "data: [DONE]"', async () => {
     const frames = await captureFrames();
-    expect(frames[frames.length - 1]).toBe('data: [DONE]');
+    expect(frames.at(-1)).toBe('data: [DONE]');
 
     for (const frame of frames.slice(0, -1)) {
       expect(frame).toMatch(/^data: /);
@@ -586,10 +597,12 @@ describe('wire format compatibility — simulated client parsers', () => {
 
   it('LiteLLM parser: same format as openai SDK (proxied SSE)', async () => {
     const frames = await captureFrames();
-    expect(frames[frames.length - 1]).toBe('data: [DONE]');
+    expect(frames.at(-1)).toBe('data: [DONE]');
     for (const frame of frames.slice(0, -1)) {
       expect(frame.startsWith('data: ')).toBe(true);
-      expect(() => JSON.parse(parseDataLine(frame))).not.toThrow();
+      expect(() => {
+        JSON.parse(parseDataLine(frame));
+      }).not.toThrow();
     }
   });
 
@@ -610,9 +623,11 @@ describe('wire format compatibility — simulated client parsers', () => {
     const jsonFrames = rawFrames.filter((f) => f !== 'data: [DONE]');
     expect(jsonFrames.length).toBeGreaterThan(0);
     for (const frame of jsonFrames) {
-      expect(() => JSON.parse(parseDataLine(frame))).not.toThrow();
+      expect(() => {
+        JSON.parse(parseDataLine(frame));
+      }).not.toThrow();
     }
-    expect(rawFrames[rawFrames.length - 1]).toBe('data: [DONE]');
+    expect(rawFrames.at(-1)).toBe('data: [DONE]');
   });
 
   it('curl frame parser: SSE compliance — "data: " prefix and \\n\\n terminators', async () => {
@@ -620,9 +635,11 @@ describe('wire format compatibility — simulated client parsers', () => {
     for (const frame of frames) {
       expect(frame.startsWith('data: ')).toBe(true);
     }
-    expect(frames[frames.length - 1]).toBe('data: [DONE]');
+    expect(frames.at(-1)).toBe('data: [DONE]');
     for (const frame of frames.slice(0, -1)) {
-      expect(() => JSON.parse(parseDataLine(frame))).not.toThrow();
+      expect(() => {
+        JSON.parse(parseDataLine(frame));
+      }).not.toThrow();
     }
   });
 });
@@ -673,7 +690,8 @@ describe('client disconnect — stream cancellation', () => {
     expect(res.status).toBe(200);
     expect(res.body).not.toBeNull();
 
-    const reader = res.body!.getReader();
+    const reader: ReadableStreamDefaultReader<Uint8Array> =
+      res.body!.getReader();
     const decoder = new TextDecoder();
     let buf = '';
 
