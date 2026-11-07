@@ -21,7 +21,7 @@ async function makeTmpDir(): Promise<string> {
 
 afterEach(async () => {
   for (const dir of tmpDirs.splice(0)) {
-    await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
   }
 });
 
@@ -40,7 +40,7 @@ async function trackedRouter(dir: string): Promise<AgentRouter> {
 
 afterEach(async () => {
   for (const router of routers.splice(0)) {
-    await router.dispose().catch(() => undefined);
+    await router.dispose().catch(() => {});
   }
 });
 

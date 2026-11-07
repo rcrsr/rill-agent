@@ -70,8 +70,8 @@ function buildId(prefix: string, partitionKey: string): string {
  * If responseId is not provided, one is generated with prefix `resp`.
  */
 export function createIdGenerator(
-  responseId?: string | undefined,
-  conversationId?: string | undefined
+  responseId?: string,
+  conversationId?: string
 ): IdGenerator {
   const partitionKey =
     (conversationId !== undefined

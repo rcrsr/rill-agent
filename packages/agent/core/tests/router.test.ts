@@ -20,14 +20,18 @@ function makeHandler(
 ): AgentHandler {
   return {
     describe: () => ({ name, params: [] }),
-    init: async () => {
-      if (opts?.initError !== undefined) {
-        throw opts.initError;
+    init: () =>
+      opts?.initError !== undefined
+        ? Promise.reject(opts.initError)
+        : Promise.resolve(),
+    execute: () => Promise.resolve({ state: 'completed', result: name }),
+    dispose: () => {
+      try {
+        opts?.onDispose?.();
+      } catch (err) {
+        return Promise.reject(err);
       }
-    },
-    execute: async () => ({ state: 'completed', result: name }),
-    dispose: async () => {
-      opts?.onDispose?.();
+      return Promise.resolve();
     },
   };
 }
@@ -46,7 +50,7 @@ async function makeTmpDir(): Promise<string> {
 
 afterEach(async () => {
   for (const dir of tmpDirs.splice(0)) {
-    await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
   }
 });
 
@@ -462,8 +466,22 @@ export async function dispose() {}
     const manifest: AgentManifest = {
       defaultAgent: 'a',
       agents: new Map([
-        ['a', makeHandler('a', { onDispose: () => disposeCalls.push('a') })],
-        ['b', makeHandler('b', { onDispose: () => disposeCalls.push('b') })],
+        [
+          'a',
+          makeHandler('a', {
+            onDispose: () => {
+              disposeCalls.push('a');
+            },
+          }),
+        ],
+        [
+          'b',
+          makeHandler('b', {
+            onDispose: () => {
+              disposeCalls.push('b');
+            },
+          }),
+        ],
         ['c', makeHandler('c', { initError: new Error('boom') })],
       ]),
     };

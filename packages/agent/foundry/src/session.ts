@@ -91,7 +91,7 @@ export function createSessionManager(
         return;
       }
       const iterResult = tokens.values().next();
-      if (iterResult.done) {
+      if (iterResult.done === true) {
         return;
       }
       const token = iterResult.value;

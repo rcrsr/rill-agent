@@ -143,7 +143,9 @@ describe('createFoundryStreamResponse', () => {
     const errors: unknown[] = [];
     const res = createFoundryStreamResponse('resp_err', {
       resultPromise: Promise.reject(new Error('agent failure')),
-      onError: (err) => errors.push(err),
+      onError: (err) => {
+        errors.push(err);
+      },
       debugErrors: true,
     });
 
@@ -171,7 +173,9 @@ describe('createFoundryStreamResponse', () => {
       resultPromise: Promise.reject(
         new Error('agent failure with secret token=abc123')
       ),
-      onError: (err) => errors.push(err),
+      onError: (err) => {
+        errors.push(err);
+      },
     });
 
     const text = await res.text();
@@ -195,7 +199,9 @@ describe('createFoundryStreamResponse', () => {
     const errors: unknown[] = [];
     const res = createFoundryStreamResponse('resp_cerr', {
       chunks: failingChunks(),
-      onError: (err) => errors.push(err),
+      onError: (err) => {
+        errors.push(err);
+      },
       debugErrors: true,
     });
 
@@ -247,12 +253,11 @@ function makeUnknownAgentRouter(): AgentRouter {
     defaultAgent: () => 'default',
     agents: () => ['default'],
     describe: () => ({ name: 'handler', description: 'Test', params: [] }),
-    run: async () => {
-      throw new AgentNotFoundError(
-        'Agent "default" not found. Available: other'
-      );
-    },
-    dispose: async () => undefined,
+    run: () =>
+      Promise.reject(
+        new AgentNotFoundError('Agent "default" not found. Available: other')
+      ),
+    dispose: () => Promise.resolve(),
   };
 }
 

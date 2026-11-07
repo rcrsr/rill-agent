@@ -68,7 +68,8 @@ describe('extractInput', () => {
 
   // AC-30, EC-3: missing input field → InputError
   it('throws InputError when input is undefined', () => {
-    expect(() => extractInput(undefined)).toThrow(InputError);
+    const missingInput: unknown = undefined;
+    expect(() => extractInput(missingInput)).toThrow(InputError);
   });
 
   it('throws InputError when input is null', () => {

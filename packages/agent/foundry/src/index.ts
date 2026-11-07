@@ -106,9 +106,11 @@ const HARNESS_NAME = '@rcrsr/rill-agent-foundry';
  */
 const harness: RillHarness = {
   name: HARNESS_NAME,
-  postBuild: async (ctx) => {
-    assertCompiledHandlers(ctx);
-  },
+  postBuild: (ctx) =>
+    new Promise<void>((resolve) => {
+      assertCompiledHandlers(ctx);
+      resolve();
+    }),
   serve: (ctx) =>
     runRillServe(ctx, async (entries) => {
       const router = await createRouter(await assembleManifest(entries));

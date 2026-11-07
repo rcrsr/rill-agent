@@ -276,7 +276,7 @@ async function invokeAgent(
       );
     }
 
-    return responseDict['result'] as RillValue;
+    return responseDict['result'];
   } catch (err) {
     // Re-throw structured errors immediately
     if (err instanceof RuntimeError) {
@@ -330,6 +330,20 @@ async function invokeAgent(
 export function createAhiExtension(
   config: AhiExtensionConfig
 ): ExtensionResult {
+  const { functions, dispose } = buildAhiExtension(config);
+  const result: ExtensionResult = { ...functions };
+  result.dispose = dispose;
+  return result;
+}
+
+/**
+ * Validate config and build the per-agent callables plus a synchronous
+ * dispose. Shared by createAhiExtension and extensionManifest.factory.
+ */
+function buildAhiExtension(config: AhiExtensionConfig): {
+  functions: Record<string, ApplicationCallable>;
+  dispose: () => void;
+} {
   // Boundary validation (R4): config arrives from bundle-config JSON and must
   // not be trusted before Object.entries()/setTimeout() consume it.
   const agentsRaw: unknown = (config as { agents?: unknown } | null)?.agents;
@@ -409,14 +423,7 @@ export function createAhiExtension(
     inFlight.clear();
   };
 
-  // ============================================================
-  // EXTENSION RESULT
-  // ============================================================
-
-  const result: ExtensionResult = { ...functions };
-  result.dispose = dispose;
-
-  return result;
+  return { functions, dispose };
 }
 
 // ============================================================
@@ -556,31 +563,28 @@ export function createInProcessFunction(
  * callable dict as the mounted RillValue.
  */
 export const extensionManifest: ExtensionManifest = {
-  factory: async (config: unknown, ctx: ExtensionFactoryCtx) => {
-    ctx.registerErrorCode('RILL-R027', 'validation');
-    ctx.registerErrorCode('RILL-R028', 'transport');
-    ctx.registerErrorCode('RILL-R029', 'downstream');
-    ctx.registerErrorCode('RILL-R030', 'timeout');
-    ctx.registerErrorCode('RILL-R031', 'transport');
-    ctx.registerErrorCode('RILL-R032', 'capacity');
-    ctx.registerErrorCode('RILL-R033', 'lifecycle');
-    ctx.registerErrorCode('RILL-R034', 'downstream');
+  factory: (config: unknown, ctx: ExtensionFactoryCtx) =>
+    new Promise<{ value: RillValue; dispose: () => void }>((resolve) => {
+      ctx.registerErrorCode('RILL-R027', 'validation');
+      ctx.registerErrorCode('RILL-R028', 'transport');
+      ctx.registerErrorCode('RILL-R029', 'downstream');
+      ctx.registerErrorCode('RILL-R030', 'timeout');
+      ctx.registerErrorCode('RILL-R031', 'transport');
+      ctx.registerErrorCode('RILL-R032', 'capacity');
+      ctx.registerErrorCode('RILL-R033', 'lifecycle');
+      ctx.registerErrorCode('RILL-R034', 'downstream');
 
-    const result = createAhiExtension(config as AhiExtensionConfig);
-    const { dispose, ...value } = result;
+      const { functions, dispose } = buildAhiExtension(
+        config as AhiExtensionConfig
+      );
 
-    if (dispose !== undefined) {
       if (ctx.signal.aborted) {
         dispose();
       } else {
         ctx.signal.addEventListener('abort', dispose, { once: true });
       }
-    }
 
-    return {
-      value: value as unknown as RillValue,
-      ...(dispose !== undefined ? { dispose } : {}),
-    };
-  },
+      resolve({ value: functions as unknown as RillValue, dispose });
+    }),
   configSchema,
 };

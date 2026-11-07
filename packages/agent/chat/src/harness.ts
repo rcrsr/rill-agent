@@ -48,7 +48,7 @@ function isValidChatChunkShape(
   if (typeof value !== 'object' || value === null) return false;
   const choices = (value as Record<string, unknown>)['choices'];
   if (!Array.isArray(choices) || choices.length === 0) return false;
-  const first = choices[0];
+  const first: unknown = choices[0];
   if (typeof first !== 'object' || first === null) return false;
   const delta = (first as Record<string, unknown>)['delta'];
   return typeof delta === 'object' && delta !== null;
@@ -73,19 +73,25 @@ function invokeHandlerAsStream(
             { params: { messages } },
             {
               signal: abortController.signal,
-              onChunk: async (chunk: unknown) => {
-                if (abortController.signal.aborted) return;
-                if (!isValidChatChunkShape(chunk)) {
-                  controller.error(
-                    new ChatChunkError(
-                      'Malformed chunk from handler: choices must be a ' +
-                        'non-empty array whose first entry has a delta object'
-                    )
-                  );
-                  return;
-                }
-                controller.enqueue(chunk as ChatChunk);
-              },
+              onChunk: (chunk: unknown) =>
+                new Promise<void>((resolve) => {
+                  if (abortController.signal.aborted) {
+                    resolve();
+                    return;
+                  }
+                  if (!isValidChatChunkShape(chunk)) {
+                    controller.error(
+                      new ChatChunkError(
+                        'Malformed chunk from handler: choices must be a ' +
+                          'non-empty array whose first entry has a delta object'
+                      )
+                    );
+                    resolve();
+                    return;
+                  }
+                  controller.enqueue(chunk);
+                  resolve();
+                }),
             }
           );
           controller.close();
@@ -398,12 +404,12 @@ export function createChatHarness(
    * reason-bearing 403 for a name the router knows but that failed chat
    * eligibility inspection.
    */
-  async function handleChatRequest(
+  function handleChatRequest(
     c: Context,
     body: Record<string, unknown>,
     agentName: string,
     defaultFallback: boolean
-  ): Promise<Response> {
+  ): Response | Promise<Response> {
     // Validate messages
     const validation = validateMessages(body['messages']);
     if (!validation.valid) {
@@ -572,6 +578,6 @@ export function createChatHarness(
   return {
     app,
     listen: (port?: number) => lifecycle.listen(port ?? options?.port ?? 3000),
-    close: lifecycle.close,
+    close: () => lifecycle.close(),
   };
 }

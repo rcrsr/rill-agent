@@ -34,12 +34,15 @@ function stubFetch(result: RillValue = 'ok'): Array<CapturedCall> {
   const calls: Array<CapturedCall> = [];
   vi.stubGlobal(
     'fetch',
-    vi.fn().mockImplementation(async (url: string, init: FetchInit) => {
+    vi.fn().mockImplementation((url: string, init: FetchInit) => {
       const parsedBody = JSON.parse(
         init.body as string
       ) as CapturedCall['parsedBody'];
       calls.push({ url, init, parsedBody });
-      return { ok: true, json: async () => ({ result }) };
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ result }),
+      });
     })
   );
   return calls;
@@ -60,16 +63,18 @@ function makeCtx(overrides?: Partial<Record<string, string>>): {
 }
 
 /** Invoke a named ahi:: function from an ExtensionResult */
-async function callAhi(
+function callAhi(
   ext: ExtensionResult,
   agentName: string,
   args: RillValue[],
   metadata?: Record<string, string>
 ): Promise<RillValue> {
   const fnDef = (ext as Record<string, ApplicationCallable>)[agentName]!;
-  return fnDef.fn(args as unknown as Record<string, RillValue>, {
-    metadata: metadata ?? makeCtx().metadata,
-  });
+  return Promise.resolve().then(() =>
+    fnDef.fn(args as unknown as Record<string, RillValue>, {
+      metadata: metadata ?? makeCtx().metadata,
+    })
+  );
 }
 
 // ============================================================
@@ -206,12 +211,15 @@ describe('AHI static mode — boundary and registration', () => {
       let callCount = 0;
       vi.stubGlobal(
         'fetch',
-        vi.fn().mockImplementation(async (url: string) => {
+        vi.fn().mockImplementation((url: string) => {
           callCount++;
           const result = url.includes('parser')
             ? 'parser-result'
             : 'formatter-result';
-          return { ok: true, json: async () => ({ result }) };
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ result }),
+          });
         })
       );
 

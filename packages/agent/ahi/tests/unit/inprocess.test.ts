@@ -56,9 +56,9 @@ function makeRunner(response: {
     input: Parameters<InProcessRunner['runForAgent']>[1];
   }> = [];
   const runner: InProcessRunner = {
-    runForAgent: vi.fn(async (agentName, input) => {
+    runForAgent: vi.fn<InProcessRunner['runForAgent']>((agentName, input) => {
       calls.push({ agentName, input });
-      return response;
+      return Promise.resolve(response);
     }),
   };
   return { runner, calls };
@@ -154,8 +154,8 @@ describe('createInProcessFunction', () => {
     const def = createInProcessFunction(runner, 'classifier', 30000);
 
     // Act + Assert
-    const thrown = await def
-      .fn([] as unknown as Record<string, RillValue>, makeCtx())
+    const thrown = await Promise.resolve()
+      .then(() => def.fn([] as unknown as Record<string, RillValue>, makeCtx()))
       .catch((e: unknown) => e);
     expect(thrown).toBeInstanceOf(RuntimeError);
     expect((thrown as RuntimeError).errorId).toBe('RILL-R032');
@@ -168,8 +168,8 @@ describe('createInProcessFunction', () => {
     const def = createInProcessFunction(runner, 'classifier', 30000);
 
     // Act + Assert
-    const thrown = await def
-      .fn([] as unknown as Record<string, RillValue>, makeCtx())
+    const thrown = await Promise.resolve()
+      .then(() => def.fn([] as unknown as Record<string, RillValue>, makeCtx()))
       .catch((e: unknown) => e);
     expect(thrown).toBeInstanceOf(RuntimeError);
     expect((thrown as RuntimeError).errorId).toBe('RILL-R032');
@@ -181,8 +181,8 @@ describe('createInProcessFunction', () => {
     const def = createInProcessFunction(runner, 'classifier', 30000);
 
     // Act + Assert
-    const thrown = await def
-      .fn([] as unknown as Record<string, RillValue>, makeCtx())
+    const thrown = await Promise.resolve()
+      .then(() => def.fn([] as unknown as Record<string, RillValue>, makeCtx()))
       .catch((e: unknown) => e);
     expect(thrown).toBeInstanceOf(RuntimeError);
     expect((thrown as RuntimeError).errorId).toBe('RILL-R029');
@@ -271,7 +271,7 @@ describe('bindHost', () => {
           extensions: {},
           modules: {},
           ast: {},
-          dispose: async () => undefined,
+          dispose: () => Promise.resolve(),
         },
       ],
     ]);
@@ -291,15 +291,14 @@ describe('bindHost', () => {
           }
         }
       },
-      dispose: async () => undefined,
+      dispose: () => Promise.resolve(),
     };
 
-    const mockHost: InProcessRunner = {
-      runForAgent: vi.fn().mockResolvedValue({ state: 'completed' }),
-    };
+    const runForAgent = vi.fn().mockResolvedValue({ state: 'completed' });
+    const mockHost: InProcessRunner = { runForAgent };
 
     // Act + Assert — must not throw, and runForAgent must not be called
     expect(() => harness.bindHost(mockHost)).not.toThrow();
-    expect(mockHost.runForAgent).not.toHaveBeenCalled();
+    expect(runForAgent).not.toHaveBeenCalled();
   });
 });

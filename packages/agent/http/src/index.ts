@@ -120,11 +120,11 @@ export function httpHarness(router: AgentRouter): HttpHarness {
   // Run default agent
   app.post('/run', (c) => handleRun(c, ''));
 
-  async function listen(port = 3000): Promise<void> {
+  function listen(port = 3000): Promise<void> {
     return lifecycle.listen(port);
   }
 
-  return { listen, close: lifecycle.close, app };
+  return { listen, close: () => lifecycle.close(), app };
 }
 
 // ============================================================
@@ -139,9 +139,11 @@ export function httpHarness(router: AgentRouter): HttpHarness {
  */
 const harness: RillHarness = {
   name: HARNESS_NAME,
-  postBuild: async (ctx) => {
-    assertCompiledHandlers(ctx);
-  },
+  postBuild: (ctx) =>
+    new Promise<void>((resolve) => {
+      assertCompiledHandlers(ctx);
+      resolve();
+    }),
   serve: (ctx) =>
     runRillServe(ctx, async (entries) => {
       const router = await createRouter(await assembleManifest(entries));

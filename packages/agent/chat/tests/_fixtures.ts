@@ -148,11 +148,15 @@ export function makeRpcHandler(name = 'rpc-only'): AgentHandler {
     describe(): HandlerDescription | null {
       return { name, params: [] };
     },
-    async init() {},
-    async execute(): Promise<RunResponse> {
-      return { state: 'completed', result: null };
+    init(): Promise<void> {
+      return Promise.resolve();
     },
-    async dispose() {},
+    execute(): Promise<RunResponse> {
+      return Promise.resolve({ state: 'completed', result: null });
+    },
+    dispose(): Promise<void> {
+      return Promise.resolve();
+    },
   };
 }
 
@@ -171,7 +175,7 @@ export interface RouterSpec {
  * defaultAgent(), router.manifest). Empty-agent specs are supported and
  * still produce a valid router with `defaultAgent` set to the empty string.
  */
-export async function makeRouter(spec: RouterSpec): Promise<AgentRouter> {
+export function makeRouter(spec: RouterSpec): Promise<AgentRouter> {
   const manifest: AgentManifest = {
     defaultAgent: spec.defaultAgent,
     agents: spec.agents,
@@ -250,7 +254,7 @@ export async function harnessFor(opts: {
  */
 export async function readBody(res: Response): Promise<string> {
   if (res.body === null) return '';
-  const reader = res.body.getReader();
+  const reader: ReadableStreamDefaultReader<Uint8Array> = res.body.getReader();
   const decoder = new TextDecoder();
   let out = '';
   let r = await reader.read();

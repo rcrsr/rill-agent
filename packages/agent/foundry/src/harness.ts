@@ -90,9 +90,9 @@ function resolveConversationId(
   if (
     typeof conversation === 'object' &&
     conversation !== null &&
-    typeof (conversation as { id: unknown }).id === 'string'
+    typeof conversation.id === 'string'
   ) {
-    return (conversation as { id: string }).id;
+    return conversation.id;
   }
   throw new InputError('conversation.id must be a string');
 }
@@ -400,7 +400,7 @@ export function createFoundryHarness(
         if (waiting !== undefined) {
           const resolve = waiting;
           waiting = undefined;
-          resolve({ value: undefined as unknown as string, done: true });
+          resolve({ value: undefined, done: true });
         }
       };
 
@@ -448,9 +448,11 @@ export function createFoundryHarness(
 
       // The onChunk callback converts handler chunks to strings and
       // pushes them into the async iterable consumed by the SSE stream.
-      const onChunk = async (chunk: unknown): Promise<void> => {
-        pushChunk(coerceResult(chunk));
-      };
+      const onChunk = (chunk: unknown): Promise<void> =>
+        new Promise<void>((resolve) => {
+          pushChunk(coerceResult(chunk));
+          resolve();
+        });
 
       const streamContext: RunContext = { ...runContext, onChunk };
 
@@ -465,7 +467,7 @@ export function createFoundryHarness(
 
           // If the handler did not stream (no onChunk support), emit
           // the flat result as a single chunk.
-          if (!result.streamed) {
+          if (result.streamed !== true) {
             const text = coerceResult(result.result);
             if (text !== '') pushChunk(text);
           }

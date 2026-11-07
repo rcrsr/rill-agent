@@ -526,16 +526,18 @@ describe('createChatHarness — buffered path aborts on client disconnect', () =
     const harness = createChatHarness(router);
 
     const controller = new AbortController();
-    const resPromise = harness.app.request('/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 't',
-        messages: VALID_MESSAGES,
-        stream: false,
-      }),
-      signal: controller.signal,
-    });
+    const resPromise = Promise.resolve(
+      harness.app.request('/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 't',
+          messages: VALID_MESSAGES,
+          stream: false,
+        }),
+        signal: controller.signal,
+      })
+    );
 
     await started;
     expect(captured?.signal?.aborted).toBe(false);

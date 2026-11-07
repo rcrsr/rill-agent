@@ -3,6 +3,10 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { AgentHandler, AgentManifest } from './types.js';
 
+// ============================================================
+// PUBLIC API
+// ============================================================
+
 /**
  * Load an agent manifest from a directory.
  *
@@ -10,32 +14,37 @@ import type { AgentHandler, AgentManifest } from './types.js';
  * If no manifest.json but handler.js exists in the directory, treats it as
  * a single-agent deployment (auto-detect).
  */
-export async function loadManifest(dir: string): Promise<AgentManifest> {
-  const absDir = path.resolve(dir);
-  const manifestPath = path.join(absDir, 'manifest.json');
+export function loadManifest(dir: string): Promise<AgentManifest> {
+  return new Promise<AgentManifest>((resolve) => {
+    const absDir = path.resolve(dir);
+    const manifestPath = path.join(absDir, 'manifest.json');
 
-  if (existsSync(manifestPath)) {
-    return loadMultiAgent(absDir, manifestPath);
-  }
+    if (existsSync(manifestPath)) {
+      resolve(loadMultiAgent(absDir, manifestPath));
+      return;
+    }
 
-  // Auto-detect single agent: look for handler.js directly
-  const handlerPath = path.join(absDir, 'handler.js');
-  if (existsSync(handlerPath)) {
-    return loadSingleAgent(absDir, handlerPath);
-  }
+    // Auto-detect single agent: look for handler.js directly
+    const handlerPath = path.join(absDir, 'handler.js');
+    if (existsSync(handlerPath)) {
+      resolve(loadSingleAgent(absDir, handlerPath));
+      return;
+    }
 
-  // Check one level deep (build/[name]/ pattern)
-  const entries = readdirSync(absDir, { withFileTypes: true });
-  for (const entry of entries) {
-    if (entry.isDirectory()) {
-      const nested = path.join(absDir, entry.name, 'handler.js');
-      if (existsSync(nested)) {
-        return loadSingleAgent(path.join(absDir, entry.name), nested);
+    // Check one level deep (build/[name]/ pattern)
+    const entries = readdirSync(absDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const nested = path.join(absDir, entry.name, 'handler.js');
+        if (existsSync(nested)) {
+          resolve(loadSingleAgent(path.join(absDir, entry.name), nested));
+          return;
+        }
       }
     }
-  }
 
-  throw new Error(`No manifest.json or handler.js found in ${absDir}`);
+    throw new Error(`No manifest.json or handler.js found in ${absDir}`);
+  });
 }
 
 /**
@@ -73,6 +82,10 @@ export async function assembleManifest(
 
   return { defaultAgent: defaultAgent ?? first.name, agents };
 }
+
+// ============================================================
+// INTERNAL LOADERS
+// ============================================================
 
 async function loadMultiAgent(
   dir: string,

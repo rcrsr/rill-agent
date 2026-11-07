@@ -7,6 +7,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Lint cleanup:** Type-aware lint findings cleared in the Foundry harness; behavior is unchanged. ([#84](https://github.com/rcrsr/rill-agent/pull/84))
+
 ## [0.23.0] - 2026-11-06
 
 ### Changed

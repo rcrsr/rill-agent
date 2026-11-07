@@ -44,11 +44,12 @@ export function createHarnessLifecycle(options?: {
   const app = new Hono();
   let server: ServerType | undefined;
 
-  async function listen(port: number): Promise<void> {
-    if (server !== undefined) {
-      throw new Error('Server is already listening');
-    }
-    return new Promise((resolve, reject) => {
+  function listen(port: number): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      if (server !== undefined) {
+        reject(new Error('Server is already listening'));
+        return;
+      }
       const started = serve({ fetch: app.fetch, port }, () => {
         started.off('error', onError);
         options?.serverTweaks?.(started);

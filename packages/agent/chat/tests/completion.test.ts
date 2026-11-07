@@ -64,9 +64,11 @@ describe('createChatCompletionResponse — empty source', () => {
 // ============================================================
 
 describe('createChatCompletionResponse — content concatenation', () => {
+  const noContent: string | undefined = undefined;
+
   it('concatenates delta.content across chunks, skipping undefined deltas', async () => {
     const res = await createChatCompletionResponse(
-      chunksOf([chunk('Hello, '), chunk(undefined), chunk('world', 'stop')]),
+      chunksOf([chunk('Hello, '), chunk(noContent), chunk('world', 'stop')]),
       { model: 't' }
     );
 

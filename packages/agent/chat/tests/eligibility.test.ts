@@ -12,9 +12,10 @@ function handlerWithDescribe(
 ): AgentHandler {
   return {
     describe: () => description,
-    init: async () => undefined,
-    execute: async () => ({ state: 'completed' as const, result: null }),
-    dispose: async () => undefined,
+    init: () => Promise.resolve(),
+    execute: () =>
+      Promise.resolve({ state: 'completed' as const, result: null }),
+    dispose: () => Promise.resolve(),
   };
 }
 
@@ -199,7 +200,7 @@ describe('inspectChatHandler — return type rejections', () => {
 });
 
 describe('inspectChatHandler — purity', () => {
-  it('does not invoke execute() during inspection', async () => {
+  it('does not invoke execute() during inspection', () => {
     let called = false;
     const handler = makeChatHandler({
       onInvoke: () => {

@@ -27,7 +27,8 @@ let sdk: NodeSDK | undefined;
  * No-op when the env var is absent. Safe to call multiple times.
  */
 export function initTelemetry(options?: TelemetryOptions): void {
-  if (!process.env['OTEL_EXPORTER_OTLP_ENDPOINT']) return;
+  const endpoint = process.env['OTEL_EXPORTER_OTLP_ENDPOINT'];
+  if (endpoint === undefined || endpoint === '') return;
   if (sdk !== undefined) return;
 
   const resource = resourceFromAttributes({

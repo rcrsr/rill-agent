@@ -14,11 +14,11 @@ import { CredentialError } from '../src/errors.js';
 
 vi.mock('@azure/identity', () => ({
   DefaultAzureCredential: class {
-    async getToken() {
-      return {
+    getToken() {
+      return Promise.resolve({
         token: 'mock-token',
         expiresOnTimestamp: Date.now() + 3_600_000,
-      };
+      });
     }
   },
 }));
@@ -53,8 +53,8 @@ const mockRouter: AgentRouter = {
   defaultAgent: () => 'default',
   agents: () => ['default'],
   describe: () => ({ name: 'handler', description: 'Test', params: [] }),
-  run: async () => ({ state: 'completed' as const, result: 'ok' }),
-  dispose: async () => undefined,
+  run: () => Promise.resolve({ state: 'completed' as const, result: 'ok' }),
+  dispose: () => Promise.resolve(),
 };
 
 // ============================================================
@@ -103,10 +103,11 @@ describe('createConversationsClient — API failure', () => {
       .mockResolvedValue(new Response(null, { status: 500 }));
 
     const mockCredential = {
-      getToken: async () => ({
-        token: 'mock-token',
-        expiresOnTimestamp: Date.now() + 3_600_000,
-      }),
+      getToken: () =>
+        Promise.resolve({
+          token: 'mock-token',
+          expiresOnTimestamp: Date.now() + 3_600_000,
+        }),
     };
 
     const client = createConversationsClient(
@@ -130,10 +131,11 @@ describe('createConversationsClient — API failure', () => {
       .mockResolvedValue(new Response(null, { status: 403 }));
 
     const mockCredential = {
-      getToken: async () => ({
-        token: 'mock-token',
-        expiresOnTimestamp: Date.now() + 3_600_000,
-      }),
+      getToken: () =>
+        Promise.resolve({
+          token: 'mock-token',
+          expiresOnTimestamp: Date.now() + 3_600_000,
+        }),
     };
 
     const client = createConversationsClient(
@@ -156,9 +158,7 @@ describe('createConversationsClient — API failure', () => {
 describe('createConversationsClient — managed identity failure', () => {
   it('throws CredentialError when credential.getToken() throws [AC-40, EC-6]', async () => {
     const failingCredential = {
-      getToken: async () => {
-        throw new Error('Managed identity unavailable');
-      },
+      getToken: () => Promise.reject(new Error('Managed identity unavailable')),
     };
 
     const client = createConversationsClient(
@@ -176,7 +176,7 @@ describe('createConversationsClient — managed identity failure', () => {
 
   it('throws CredentialError when credential.getToken() returns null [AC-40]', async () => {
     const nullCredential = {
-      getToken: async () => null,
+      getToken: () => Promise.resolve(null),
     };
 
     const client = createConversationsClient(
@@ -198,9 +198,7 @@ describe('createFoundryHarness — handler execution failure', () => {
   it('returns 500 with SERVER_ERROR body when router.run() throws [AC-34]', async () => {
     const throwingRouter: AgentRouter = {
       ...mockRouter,
-      run: async () => {
-        throw new Error('unexpected handler failure');
-      },
+      run: () => Promise.reject(new Error('unexpected handler failure')),
     };
 
     const harness = createFoundryHarness(throwingRouter, {
@@ -227,9 +225,7 @@ describe('createFoundryHarness — handler execution failure', () => {
   it('returns generic message when debugErrors is false [AC-34]', async () => {
     const throwingRouter: AgentRouter = {
       ...mockRouter,
-      run: async () => {
-        throw new Error('sensitive internal detail');
-      },
+      run: () => Promise.reject(new Error('sensitive internal detail')),
     };
 
     const harness = createFoundryHarness(throwingRouter, {
@@ -257,9 +253,7 @@ describe('createFoundryHarness — handler execution failure', () => {
   it('emits event: error over SSE when router.run() throws with stream: true [AC-34]', async () => {
     const throwingRouter: AgentRouter = {
       ...mockRouter,
-      run: async () => {
-        throw new Error('streaming handler failure');
-      },
+      run: () => Promise.reject(new Error('streaming handler failure')),
     };
 
     const harness = createFoundryHarness(throwingRouter, {
@@ -285,9 +279,7 @@ describe('createFoundryHarness — handler execution failure', () => {
   it('redacts SSE error message when debugErrors is false and router.run() throws with stream: true', async () => {
     const throwingRouter: AgentRouter = {
       ...mockRouter,
-      run: async () => {
-        throw new Error('sensitive internal stream detail');
-      },
+      run: () => Promise.reject(new Error('sensitive internal stream detail')),
     };
 
     const harness = createFoundryHarness(throwingRouter, {
@@ -328,7 +320,7 @@ describe('createFoundryHarness — startup credential check', () => {
 
     const exitSpy = vi
       .spyOn(process, 'exit')
-      .mockImplementation((_code?: string | number | null | undefined) => {
+      .mockImplementation((_code?: string | number | null) => {
         throw new Error('process.exit called — library code must not exit');
       });
 
