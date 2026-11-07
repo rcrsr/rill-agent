@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
+import type { Mock } from 'vitest';
 import { extensionManifest, type AhiExtensionConfig } from '../src/index.js';
 import { RuntimeError } from '@rcrsr/rill';
-import type { RillValue } from '@rcrsr/rill';
+import type { RillValue, ExtensionFactoryCtx } from '@rcrsr/rill';
 
 // ============================================================
 // HELPERS
@@ -15,14 +16,14 @@ const VALID_CONFIG: AhiExtensionConfig = {
 /** Build a mock ExtensionFactoryCtx with a controllable AbortSignal */
 function makeCtx(): {
   ctx: {
-    registerErrorCode: ReturnType<typeof vi.fn>;
+    registerErrorCode: Mock<ExtensionFactoryCtx['registerErrorCode']>;
     readonly signal: AbortSignal;
   };
   controller: AbortController;
 } {
   const controller = new AbortController();
   const ctx = {
-    registerErrorCode: vi.fn<[string, string], void>(),
+    registerErrorCode: vi.fn<ExtensionFactoryCtx['registerErrorCode']>(),
     signal: controller.signal,
   };
   return { ctx, controller };

@@ -7,8 +7,14 @@ import {
   vi,
   type MockInstance,
 } from 'vitest';
-import type { AgentRouter, RunContext, RunRequest } from '@rcrsr/rill-agent';
+import type {
+  AgentHandler,
+  AgentRouter,
+  RunContext,
+  RunRequest,
+} from '@rcrsr/rill-agent';
 import { trace, type Span } from '@opentelemetry/api';
+import type { TokenCredential } from '@azure/identity';
 import { DefaultAzureCredential } from '@azure/identity';
 import { createFoundryHarness } from '../src/harness.js';
 import { CredentialError } from '../src/errors.js';
@@ -41,6 +47,10 @@ function makeMockRouter(
   capture?: CapturedContext
 ): AgentRouter {
   return {
+    manifest: {
+      defaultAgent: 'default',
+      agents: new Map<string, AgentHandler>(),
+    },
     defaultAgent: () => 'default',
     agents: () => ['default'],
     describe: (name: string) =>
@@ -662,9 +672,8 @@ describe('createFoundryHarness', () => {
     process.env['FOUNDRY_PROJECT_ENDPOINT'] =
       'https://example.foundry.azure.com';
 
-    vi.spyOn(DefaultAzureCredential.prototype, 'getToken').mockResolvedValue(
-      null
-    );
+    const credential: TokenCredential = DefaultAzureCredential.prototype;
+    vi.spyOn(credential, 'getToken').mockResolvedValue(null);
     const exitSpy = vi
       .spyOn(process, 'exit')
       .mockImplementation((_code?: string | number | null) => {

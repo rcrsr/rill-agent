@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentRouter } from '@rcrsr/rill-agent';
+import type { AgentHandler, AgentRouter } from '@rcrsr/rill-agent';
 import { AgentNotFoundError } from '@rcrsr/rill-agent';
 import { createFoundryStreamResponse } from '../src/stream.js';
 import { createFoundryHarness } from '../src/harness.js';
@@ -250,6 +250,10 @@ describe('createFoundryStreamResponse', () => {
 
 function makeUnknownAgentRouter(): AgentRouter {
   return {
+    manifest: {
+      defaultAgent: 'default',
+      agents: new Map<string, AgentHandler>(),
+    },
     defaultAgent: () => 'default',
     agents: () => ['default'],
     describe: () => ({ name: 'handler', description: 'Test', params: [] }),

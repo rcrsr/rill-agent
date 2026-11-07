@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createAhiExtension } from '../src/index.js';
 import type { ExtensionResult } from '../src/index.js';
+import { createRuntimeContext } from '@rcrsr/rill';
 import type { RillValue, ApplicationCallable } from '@rcrsr/rill';
 
 // ============================================================
@@ -77,7 +78,10 @@ function callAhi(
 ): Promise<RillValue> {
   const fnDef = (ext as Record<string, ApplicationCallable>)[agentName]!;
   return Promise.resolve().then(() =>
-    fnDef.fn(args as unknown as Record<string, RillValue>, { metadata })
+    fnDef.fn(
+      args as unknown as Record<string, RillValue>,
+      createRuntimeContext({ metadata })
+    )
   );
 }
 

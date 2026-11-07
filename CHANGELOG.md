@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Test type-checking:** each package `tests/` directory now has a `tsconfig.json` extending the package config, and every package `typecheck` script runs `tsc --noEmit && tsc -p tests`, so `pnpm check:types` covers `src/` and `tests/`. Existing type errors in the `ahi` and `foundry` tests are fixed.
 - **Lint stopgap removed:** all baseline lint rules now run at error with zero findings, including type-aware checks. ([#84](https://github.com/rcrsr/rill-agent/pull/84))
 
 ## [0.23.0] - 2026-11-06

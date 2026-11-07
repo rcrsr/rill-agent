@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { AgentRouter, RunContext, RunRequest } from '@rcrsr/rill-agent';
+import type {
+  AgentHandler,
+  AgentRouter,
+  RunContext,
+  RunRequest,
+} from '@rcrsr/rill-agent';
 import { createSessionManager } from '../src/session.js';
 import { CapacityError } from '../src/errors.js';
 import {
@@ -14,6 +19,10 @@ import type { RunResponse } from '@rcrsr/rill-agent';
 // ============================================================
 
 const mockRouter = {
+  manifest: {
+    defaultAgent: 'test-agent',
+    agents: new Map<string, AgentHandler>(),
+  },
   defaultAgent: () => 'test-agent',
   describe: (_name: string) => ({
     name: 'test-handler',

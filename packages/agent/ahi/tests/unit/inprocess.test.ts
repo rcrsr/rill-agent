@@ -16,25 +16,23 @@ import {
   createInProcessFunction,
   type InProcessRunner,
 } from '../../src/index.js';
-import { RuntimeError } from '@rcrsr/rill';
-import type { RillValue } from '@rcrsr/rill';
+import { RuntimeError, createRuntimeContext } from '@rcrsr/rill';
+import type { RillValue, RuntimeContext } from '@rcrsr/rill';
 
 // ============================================================
 // HELPERS
 // ============================================================
 
 /** Minimal call context with caller metadata */
-function makeCtx(overrides?: Partial<Record<string, string>>): {
-  readonly metadata?: Record<string, string> | undefined;
-} {
-  return {
+function makeCtx(overrides?: Partial<Record<string, string>>): RuntimeContext {
+  return createRuntimeContext({
     metadata: {
       correlationId: 'caller-corr-1',
       agentName: 'caller-agent',
       sessionId: 'caller-sess-1',
       ...overrides,
     },
-  };
+  });
 }
 
 /**
