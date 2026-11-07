@@ -48,5 +48,5 @@ demo/**/data/
 .claude/
 .codanna/
 .fastembed_cache
-conduct/
+conduct
 doc/
